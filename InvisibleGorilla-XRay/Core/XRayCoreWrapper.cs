@@ -61,10 +61,20 @@ namespace InvisibleGorillaXRay.Core
 
         public static void StartServer(string config, int port, LogLevel logLevel, string logPath, bool isSocks, bool isUdpEnabled)
         {
+            DiagnosticLog.Write("XRayWrapper", $"StartServer: port={port}, logLevel={logLevel}, logPath={logPath}, isSocks={isSocks}, isUdpEnabled={isUdpEnabled}");
+            DiagnosticLog.Write("XRayWrapper", $"Config size: {config?.Length ?? 0} bytes");
+
             IntPtr logPathPtr = StringToUtf8Ptr(logPath);
             try
             {
+                DiagnosticLog.Write("XRayWrapper", "Calling native StartServer...");
                 StartServerNative(config, port, logLevel.ToString(), logPathPtr, isSocks, isUdpEnabled);
+                DiagnosticLog.Write("XRayWrapper", "Native StartServer returned normally");
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("XRayWrapper.StartServer", ex);
+                throw;
             }
             finally
             {

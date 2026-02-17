@@ -1,4 +1,7 @@
-﻿using System;
+using System;
+using System.Diagnostics;
+using System.Net.Sockets;
+using System.Threading;
 
 namespace InvisibleGorillaXRay.Core
 {
@@ -95,11 +98,22 @@ namespace InvisibleGorillaXRay.Core
         public Status EnableMode()
         {
             Mode mode = getMode.Invoke();
-            
+
             if (mode == Mode.PROXY)
-                return EnableProxy();
+            {
+                // For PROXY mode, defer proxy activation until xray-core is listening.
+                // This prevents the browser from hitting a dead port before xray starts.
+                // The actual proxy enable/disable is handled in Run().
+                return new Status(
+                    code: Code.SUCCESS,
+                    subCode: SubCode.SUCCESS,
+                    content: null
+                );
+            }
             else
+            {
                 return EnableTunnel();
+            }
         }
 
         public void DisableMode()
@@ -110,15 +124,77 @@ namespace InvisibleGorillaXRay.Core
 
         public void Run(string config)
         {
+            DiagnosticLog.Clear();
             Mode mode = getMode.Invoke();
             int port = mode == Mode.PROXY ? getProxyPort.Invoke() : getTunPort.Invoke();
             LogLevel logLevel = getLogLevel.Invoke();
             string logPath = System.IO.Path.GetFullPath($"{getLogPath.Invoke()}/{getConfig.Invoke().Name}");
             bool isSocks = getProtocol.Invoke() == Protocol.SOCKS || mode == Mode.TUN;
             bool isUdpEnabled = getUdpEnabled.Invoke();
+            bool systemProxy = getSystemProxyUsed.Invoke();
+
+            DiagnosticLog.Write("Run", $"mode={mode}, port={port}, logLevel={logLevel}, isSocks={isSocks}, isUdpEnabled={isUdpEnabled}, systemProxy={systemProxy}");
+            DiagnosticLog.Write("Run", $"logPath={logPath}");
+            DiagnosticLog.Write("Run", $"config length={config?.Length ?? 0}, first 200 chars: {(config?.Length > 200 ? config.Substring(0, 200) : config)}");
 
             SendServerStartEvent();
-            XRayCoreWrapper.StartServer(config, port, logLevel, logPath, isSocks, isUdpEnabled);
+
+            bool serverStarted = false;
+            Exception serverException = null;
+
+            Thread serverThread = new Thread(() =>
+            {
+                try
+                {
+                    DiagnosticLog.Write("ServerThread", "Calling XRayCoreWrapper.StartServer...");
+                    XRayCoreWrapper.StartServer(config, port, logLevel, logPath, isSocks, isUdpEnabled);
+                    DiagnosticLog.Write("ServerThread", "StartServer returned (server stopped)");
+                }
+                catch (Exception ex)
+                {
+                    serverException = ex;
+                    DiagnosticLog.WriteException("ServerThread", ex);
+                }
+            });
+            serverThread.IsBackground = true;
+            serverThread.Start();
+
+            DiagnosticLog.Write("Run", $"Server thread started (ID={serverThread.ManagedThreadId}), waiting for port {port}...");
+
+            bool portActive = WaitForPortActive(port, maxWaitMs: 5000);
+
+            DiagnosticLog.Write("Run", $"WaitForPortActive result: portActive={portActive}");
+
+            if (serverException != null)
+            {
+                DiagnosticLog.Write("Run", $"Server thread threw exception, aborting: {serverException.Message}");
+                return;
+            }
+
+            if (!serverThread.IsAlive)
+            {
+                DiagnosticLog.Write("Run", "WARNING: Server thread is no longer alive! xray-core likely failed to start.");
+                DiagnosticLog.Write("Run", "Skipping proxy enable since server is not running.");
+                return;
+            }
+
+            if (mode == Mode.PROXY)
+            {
+                DiagnosticLog.Write("Run", "Enabling proxy...");
+                Status proxyStatus = EnableProxy();
+                DiagnosticLog.Write("Run", $"EnableProxy result: code={proxyStatus.Code}, subCode={proxyStatus.SubCode}");
+            }
+
+            DiagnosticLog.Write("Run", "Waiting for server thread to complete (Join)...");
+            serverThread.Join();
+            DiagnosticLog.Write("Run", "Server thread completed.");
+
+            if (mode == Mode.PROXY)
+            {
+                DiagnosticLog.Write("Run", "Disabling proxy...");
+                DisableProxy();
+                DiagnosticLog.Write("Run", "Proxy disabled.");
+            }
 
             void SendServerStartEvent()
             {
@@ -127,6 +203,33 @@ namespace InvisibleGorillaXRay.Core
                 else
                     AnalyticsService.SendEvent(new TunStartedEvent());
             }
+        }
+
+        private static bool WaitForPortActive(int port, int maxWaitMs)
+        {
+            int elapsed = 0;
+            const int interval = 100;
+
+            while (elapsed < maxWaitMs)
+            {
+                try
+                {
+                    using (var client = new TcpClient())
+                    {
+                        client.Connect("127.0.0.1", port);
+                        DiagnosticLog.Write("WaitForPort", $"Port {port} is active after {elapsed}ms");
+                        return true;
+                    }
+                }
+                catch
+                {
+                    Thread.Sleep(interval);
+                    elapsed += interval;
+                }
+            }
+
+            DiagnosticLog.Write("WaitForPort", $"TIMEOUT: Port {port} not active after {maxWaitMs}ms");
+            return false;
         }
 
         public void Stop()

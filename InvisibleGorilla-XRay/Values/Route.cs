@@ -4,7 +4,7 @@ namespace InvisibleGorillaXRay.Values
     {
         public const string WEBSITE = "https://invisiblegorilla.github.io";
         public const string EMAIL = "mailto:invisiblegorilla@gmail.com";
-        public const string REPOSITORY = "https://github.com/InvisibleGorilla/InvisibleGorilla-XRayClient";
+        public const string REPOSITORY = "https://github.com/hvkeyn/InvisibleGorilla-XRayClient";
         public const string ISSUES = $"{REPOSITORY}/issues";
         public const string LATEST_RELEASE = $"{REPOSITORY}/releases/latest";
         public const string BROADCAST = $"{WEBSITE}/data/Broadcast.dat";

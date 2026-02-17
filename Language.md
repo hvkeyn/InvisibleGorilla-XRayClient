@@ -8,7 +8,7 @@ By doing these steps you can add your language to the app:
 
 - Clone a copy of the repository:
     ```
-    git clone "https://github.com/InvisibleGorilla/InvisibleGorilla-XRayClient.git"
+    git clone "https://github.com/hvkeyn/InvisibleGorilla-XRayClient.git"
     ```
 - Switch to the `develop` branch:
     ```

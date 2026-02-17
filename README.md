@@ -41,12 +41,12 @@ InvisibleGorilla-XRayClient/
 
 ### Option 1: Download release
 
-Download the latest build from [Releases](https://github.com/InvisibleGorilla/InvisibleGorilla-XRayClient/releases/latest).
+Download the latest build from [Releases](https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/latest).
 
 ### Option 2: Build from source
 
 ```powershell
-git clone "https://github.com/InvisibleGorilla/InvisibleGorilla-XRayClient.git"
+git clone "https://github.com/hvkeyn/InvisibleGorilla-XRayClient.git"
 cd InvisibleGorilla-XRayClient
 .\build.ps1
 ```
@@ -115,7 +115,7 @@ The build script automatically:
 
 We welcome contributions! Here's how you can help:
 
-- **Report bugs** — open an [issue](https://github.com/InvisibleGorilla/InvisibleGorilla-XRayClient/issues)
+- **Report bugs** — open an [issue](https://github.com/hvkeyn/InvisibleGorilla-XRayClient/issues)
 - **Add a language** — see [Language.md](./Language.md) for instructions
 - **Submit code** — fork, branch, and send a pull request
 

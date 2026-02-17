@@ -61,6 +61,7 @@ namespace InvisibleGorillaXRay
                 sessionEndedHandler = (sender, args) => CleanupBeforeExit();
 
                 AppDomain.CurrentDomain.ProcessExit += processExitHandler;
+                AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
                 SystemEvents.SessionEnded += sessionEndedHandler;
             }
 
@@ -69,15 +70,33 @@ namespace InvisibleGorillaXRay
 
         protected override void OnExit(ExitEventArgs e)
         {
+            CleanupBeforeExit();
+
             AppDomain.CurrentDomain.ProcessExit -= processExitHandler;
+            AppDomain.CurrentDomain.UnhandledException -= OnUnhandledException;
             SystemEvents.SessionEnded -= sessionEndedHandler;
 
             base.OnExit(e);
         }
 
-        void CleanupBeforeExit()
+        private void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
         {
-            appManager?.Core?.DisableMode();
+            CleanupBeforeExit();
+        }
+
+        private void CleanupBeforeExit()
+        {
+            try
+            {
+                appManager?.Core?.Stop();
+            }
+            catch { }
+
+            try
+            {
+                appManager?.Core?.DisableMode();
+            }
+            catch { }
         }
     }
 }
