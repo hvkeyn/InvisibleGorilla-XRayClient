@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows;
 using System.ComponentModel;
 
@@ -295,8 +295,8 @@ namespace InvisibleGorillaXRay
         {
             if (!runWorker.IsBusy)
                 return;
-            
-            onDisableMode.Invoke();
+
+            System.Threading.Tasks.Task.Run(() => onDisableMode.Invoke());
             onStopServer.Invoke();
             isRerunRequest = true;
         }
@@ -319,7 +319,9 @@ namespace InvisibleGorillaXRay
         private void OnStopButtonClick(object sender, RoutedEventArgs e)
         {
             onStopServer.Invoke();
-            onDisableMode.Invoke();
+            // DisableMode is handled by Run() after server thread completes,
+            // so we don't block the UI thread here.
+            System.Threading.Tasks.Task.Run(() => onDisableMode.Invoke());
             isRerunRequest = false;
             AnalyticsService.SendEvent(new StopButtonClickedEvent());
         }

@@ -2,28 +2,49 @@
 
 > A modern, open-source GUI client for [Xray-core](https://github.com/XTLS/Xray-core) on Windows
 
+[![GitHub release](https://img.shields.io/github/v/release/hvkeyn/InvisibleGorilla-XRayClient?style=flat-square)](https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](./LICENSE.md)
+
 Invisible Gorilla XRay is a free, open-source desktop application that wraps the powerful Xray-core proxy engine with an intuitive WPF interface. Easily configure, manage, and switch between multiple proxy servers with support for VLESS, VMess, Trojan, and Shadowsocks protocols.
+
+**Fork of [InvisibleMan-XRay](https://github.com/InvisibleManVPN/InvisibleMan-XRay)** with critical proxy fixes, improved reliability, and gorilla branding.
+
+## What's Fixed in This Fork
+
+| Issue | Root Cause | Fix |
+|---|---|---|
+| **VPN shows "Running" but IP doesn't change** | Windows `DefaultConnectionSettings` blob not updated — browsers ignore registry-only proxy changes | Use `INTERNET_OPTION_PER_CONNECTION_OPTION` API to update both registry and binary blob |
+| **Browser needs restart after proxy toggle** | Missing `WM_SETTINGCHANGE` broadcast to running applications | Non-blocking `SendNotifyMessage(HWND_BROADCAST)` notifies all browsers instantly |
+| **App hangs on disconnect** | `SendMessageTimeout` blocks UI thread waiting for all windows | Replaced with async `SendNotifyMessage` + background thread for proxy cleanup |
+| **Proxy stays enabled after crash** | No cleanup on unhandled exceptions or forced exit | Added `UnhandledException`, `ProcessExit`, `OnExit` handlers |
+| **Race condition on startup** | System proxy enabled before xray-core starts listening | Start xray in background thread, poll port, enable proxy only when ready |
 
 ## Features
 
 - **Multi-protocol support** — VLESS, VMess, Trojan, Shadowsocks
 - **Proxy & TUN modes** — system-wide proxy or TUN-based tunneling
+- **Instant browser integration** — proxy changes apply to Chrome, Edge, Yandex Browser without restart
+- **Crash-safe proxy** — system proxy is always cleaned up on exit, crash, or session end
 - **Subscription management** — import and auto-update server lists from subscription links
 - **Connection testing** — one-click latency check for each server
 - **Deep link support** — import configs via `invisiblegorilla://` URI scheme
 - **Multi-language UI** — English, Russian, Persian (easily extensible)
 - **System tray integration** — runs quietly in background with quick-access menu
-- **QR code sharing** — generate QR codes for sharing server configs
+- **Diagnostic logging** — detailed `diagnostic.log` for troubleshooting proxy issues
 - **Auto-update** — check and install new versions from within the app
-- **Single-instance** — prevents duplicate app launches with IPC pipe forwarding
+
+## Screenshots
+
+*Coming soon — the app features a clean dark interface with gorilla branding*
 
 ## Architecture
 
 ```
 InvisibleGorilla-XRayClient/
 ├── InvisibleGorilla-XRay/       # C# WPF application (.NET 7)
-│   ├── Core/                    # XRay core wrapper & P/Invoke bridge
+│   ├── Core/                    # XRay core wrapper, P/Invoke bridge, diagnostic logging
 │   ├── Handlers/                # Business logic (proxy, tunnel, config, settings)
+│   │   └── Proxies/            # Windows proxy management (per-connection API)
 │   ├── Factories/               # Window creation via factory pattern
 │   ├── Managers/                # App lifecycle, IPC pipes, services
 │   ├── Models/                  # Data models & protocol templates
@@ -111,6 +132,15 @@ The build script automatically:
 | TUN service | [InvisibleMan-TUN](https://github.com/InvisibleManVPN/InvisibleMan-TUN) |
 | Geo routing | [v2fly geoip](https://github.com/v2fly/geoip) + [domain-list](https://github.com/v2fly/domain-list-community) |
 
+## Troubleshooting
+
+If the VPN shows "Running" but your IP doesn't change:
+
+1. Check `diagnostic.log` in the app directory for detailed proxy status
+2. Verify in Windows Settings > Network > Proxy that manual proxy is enabled
+3. Try opening a new incognito window in your browser
+4. Make sure your VPN config file is valid (test connection via "Manage server configuration")
+
 ## Contributing
 
 We welcome contributions! Here's how you can help:
@@ -122,3 +152,8 @@ We welcome contributions! Here's how you can help:
 ## License
 
 [MIT](./LICENSE.md)
+
+## Acknowledgments
+
+- [InvisibleMan-XRay](https://github.com/InvisibleManVPN/InvisibleMan-XRay) — original project this fork is based on
+- [Xray-core](https://github.com/XTLS/Xray-core) — the proxy engine powering this app

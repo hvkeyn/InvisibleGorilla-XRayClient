@@ -31,19 +31,16 @@ namespace InvisibleGorillaXRay.Handlers.Proxies
 
         private const string PROXY_BYPASS = "<local>;localhost;127.*;10.*;192.168.*";
 
-        // WM_SETTINGCHANGE broadcast to notify all applications (including Yandex Browser)
         private static readonly IntPtr HWND_BROADCAST = new IntPtr(0xFFFF);
         private const int WM_SETTINGCHANGE = 0x001A;
-        private const int SMTO_ABORTIFHUNG = 0x0002;
 
         [DllImport("wininet.dll", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern bool InternetSetOption(
             IntPtr hInternet, int dwOption, IntPtr lpBuffer, int dwBufferLength);
 
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-        private static extern IntPtr SendMessageTimeout(
-            IntPtr hWnd, int Msg, IntPtr wParam, string lParam,
-            int fuFlags, int uTimeout, out IntPtr lpdwResult);
+        private static extern bool SendNotifyMessage(
+            IntPtr hWnd, int Msg, IntPtr wParam, string lParam);
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
         private struct INTERNET_PER_CONN_OPTION_LIST
@@ -264,10 +261,9 @@ namespace InvisibleGorillaXRay.Handlers.Proxies
             bool r1 = InternetSetOption(IntPtr.Zero, INTERNET_OPTION_SETTINGS_CHANGED, IntPtr.Zero, 0);
             bool r2 = InternetSetOption(IntPtr.Zero, INTERNET_OPTION_REFRESH, IntPtr.Zero, 0);
 
-            // Broadcast WM_SETTINGCHANGE so all browsers (Chrome, Edge, Yandex) pick up immediately
-            SendMessageTimeout(
-                HWND_BROADCAST, WM_SETTINGCHANGE, IntPtr.Zero, "internet",
-                SMTO_ABORTIFHUNG, 1000, out _);
+            // Non-blocking broadcast: SendNotifyMessage returns immediately without waiting
+            // for each window to process the message (prevents UI hang)
+            SendNotifyMessage(HWND_BROADCAST, WM_SETTINGCHANGE, IntPtr.Zero, "internet");
 
             DiagnosticLog.Write("WindowsProxy", $"NotifyProxyChanged: SETTINGS_CHANGED={r1}, REFRESH={r2}, WM_SETTINGCHANGE sent");
         }
