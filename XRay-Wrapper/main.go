@@ -3,13 +3,13 @@ package main
 import (
 	"fmt"
 
-	_ "github.com/invisiblemanvpn/xray-wrapper/xray"
+	_ "github.com/invisiblegorilla/xray-wrapper/xray"
 )
 
 func main() {
 	fmt.Println("xray-core wrapper")
-	fmt.Println("created by: invisiblemanvpn")
-	fmt.Println("https://github.com/invisiblemanvpn")
+	fmt.Println("created by: InvisibleGorilla")
+	fmt.Println("https://github.com/InvisibleGorilla")
 
 	// for testing, you can use xray.RunTest(path, port, logLevel, logPath isSocks, isUdpEnabled) function.
 	// uncomment these lines and replace the "path" variable with your config path,
