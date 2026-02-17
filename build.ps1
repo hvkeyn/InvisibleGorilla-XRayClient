@@ -6,7 +6,7 @@
 
 .DESCRIPTION
     Автоматизирует полный цикл сборки проекта:
-    1. Проверка и автоустановка зависимостей (Go, .NET SDK) напрямую
+    1. Проверка и автоустановка зависимостей (Go, GCC/MinGW, .NET SDK) напрямую
     2. Сборка Go-обёртки XRayCore.dll
     3. Скачивание geoip.dat и geosite.dat
     4. Скачивание InvisibleMan-TUN (опционально)
@@ -81,6 +81,11 @@ $LibrariesDir = Join-Path $AppDir "Libraries"
 $TunDir       = Join-Path $AppDir "TUN"
 $SolutionFile = Join-Path $RootDir "InvisibleGorilla-XRay.sln"
 
+# w64devkit: GCC 14.2.0 — совместим с Go cgo
+# GCC 15+ генерирует объектные файлы, которые Go cgo не может распарсить
+$W64DevkitVersion = "v2.0.0"
+$W64DevkitFile    = "w64devkit-x64-2.0.0.exe"
+
 $GeoIpUrl     = "https://github.com/v2fly/geoip/releases/latest/download/geoip.dat"
 $GeoSiteUrl   = "https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat"
 $TunRelease   = "https://api.github.com/repos/InvisibleManVPN/InvisibleMan-TUN/releases/latest"
@@ -123,6 +128,204 @@ function Update-SessionPath {
     $env:Path    = "$machinePath;$userPath"
 }
 
+# ─── Визуализация загрузки и установки ────────────────────────────────────────
+
+function Format-FileSize {
+    param([long]$Bytes)
+    if ($Bytes -ge 1GB) { return "{0:N1} GB" -f ($Bytes / 1GB) }
+    if ($Bytes -ge 1MB) { return "{0:N1} MB" -f ($Bytes / 1MB) }
+    if ($Bytes -ge 1KB) { return "{0:N1} KB" -f ($Bytes / 1KB) }
+    return "$Bytes B"
+}
+
+function Invoke-Download {
+    param(
+        [Parameter(Mandatory)][string]$Uri,
+        [Parameter(Mandatory)][string]$OutFile,
+        [string]$Label,
+        [long]$MinimumSize = 0
+    )
+
+    if ($Label) { Write-Info $Label }
+
+    [System.Net.ServicePointManager]::SecurityProtocol =
+        [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls11
+
+    $barWidth   = 30
+    $blockFull  = [string][char]0x2588
+    $blockLight = [string][char]0x2591
+    $spinChars  = @(
+        [string][char]0x280B, [string][char]0x2819, [string][char]0x2839, [string][char]0x2838,
+        [string][char]0x283C, [string][char]0x2834, [string][char]0x2826, [string][char]0x2827,
+        [string][char]0x2807, [string][char]0x280F
+    )
+
+    $maxRetries = 3
+    for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
+        $wc = New-Object System.Net.WebClient
+        $wc.Headers.Add("User-Agent", "InvisibleGorilla-BuildScript/1.0")
+
+        $dlState = @{ Received = [long]0; Total = [long]0; Error = $null }
+        $srcIdProgress = "DlProg_$([guid]::NewGuid().ToString('N').Substring(0,8))"
+        $srcIdComplete = "DlDone_$([guid]::NewGuid().ToString('N').Substring(0,8))"
+
+        Register-ObjectEvent $wc DownloadProgressChanged -SourceIdentifier $srcIdProgress -MessageData $dlState -Action {
+            $Event.MessageData.Received = $EventArgs.BytesReceived
+            $Event.MessageData.Total    = $EventArgs.TotalBytesToReceive
+        } | Out-Null
+        Register-ObjectEvent $wc DownloadFileCompleted -SourceIdentifier $srcIdComplete -MessageData $dlState -Action {
+            if ($EventArgs.Error) { $Event.MessageData.Error = $EventArgs.Error }
+        } | Out-Null
+
+        $startTime = [System.Diagnostics.Stopwatch]::StartNew()
+
+        try {
+            $wc.DownloadFileAsync([Uri]$Uri, $OutFile)
+
+            while ($wc.IsBusy) {
+                Start-Sleep -Milliseconds 200
+
+                $elapsedSec = $startTime.Elapsed.TotalSeconds
+                $speed = if ($elapsedSec -gt 0.1 -and $dlState.Received -gt 0) { $dlState.Received / $elapsedSec } else { 0 }
+                $speedStr = "$(Format-FileSize ([long]$speed))/s"
+
+                if ($dlState.Total -gt 0) {
+                    $pct = [math]::Min(100, [int]($dlState.Received * 100 / $dlState.Total))
+                    $filled = [math]::Floor($barWidth * $pct / 100)
+                    $empty = $barWidth - $filled
+                    $bar = ($blockFull * $filled) + ($blockLight * $empty)
+                    $dlSize = Format-FileSize $dlState.Received
+                    $totalSize = Format-FileSize $dlState.Total
+
+                    $etaStr = ""
+                    if ($speed -gt 0) {
+                        $remainSec = [int][math]::Ceiling(($dlState.Total - $dlState.Received) / $speed)
+                        if ($remainSec -ge 0 -and $remainSec -lt 3600) {
+                            $etaMins = [int][math]::Floor($remainSec / 60)
+                            $etaSecs = $remainSec % 60
+                            $etaStr = "  ETA {0}:{1:00}" -f $etaMins, $etaSecs
+                        }
+                    }
+                    $line = "     [$bar] {0,3}%  {1} / {2}  {3}{4}" -f $pct, $dlSize, $totalSize, $speedStr, $etaStr
+                }
+                elseif ($dlState.Received -gt 0) {
+                    $spinIdx = [int]($startTime.Elapsed.TotalMilliseconds / 120) % $spinChars.Length
+                    $dlSize = Format-FileSize $dlState.Received
+                    $line = "     $($spinChars[$spinIdx]) $dlSize  $speedStr"
+                }
+                else {
+                    $spinIdx = [int]($startTime.Elapsed.TotalMilliseconds / 120) % $spinChars.Length
+                    $line = "     $($spinChars[$spinIdx]) connecting..."
+                }
+
+                Write-Host "`r$($line.PadRight(90))" -NoNewline -ForegroundColor DarkGray
+            }
+
+            Start-Sleep -Milliseconds 100
+            if ($dlState.Error) { throw $dlState.Error }
+
+            if ($dlState.Total -eq 0 -and (Test-Path $OutFile)) {
+                $dlState.Received = (Get-Item $OutFile).Length
+                $dlState.Total = $dlState.Received
+            }
+
+            $dlSize = Format-FileSize $dlState.Received
+            $elapsedSec = $startTime.Elapsed.TotalSeconds
+            $avgSpeed = if ($elapsedSec -gt 0.1 -and $dlState.Received -gt 0) {
+                "$(Format-FileSize ([long]($dlState.Received / $elapsedSec)))/s"
+            } else { "- " }
+
+            if ($dlState.Total -gt 0) {
+                $bar = $blockFull * $barWidth
+                $line = "     [$bar] 100%  $dlSize  avg $avgSpeed"
+            }
+            else {
+                $line = "     $dlSize  avg $avgSpeed"
+            }
+            Write-Host "`r$($line.PadRight(90))" -ForegroundColor DarkGray
+
+            $actualSize = if (Test-Path $OutFile) { (Get-Item $OutFile).Length } else { 0 }
+            $minRequired = if ($MinimumSize -gt 0) { $MinimumSize } else { 1MB }
+            if ($actualSize -lt $minRequired) {
+                throw "Download incomplete: $(Format-FileSize $actualSize) received, minimum $(Format-FileSize $minRequired)"
+            }
+            break
+        }
+        catch {
+            Write-Host ""
+            if (Test-Path $OutFile) { Remove-Item $OutFile -Force -ErrorAction SilentlyContinue }
+
+            if ($attempt -lt $maxRetries) {
+                Write-Info "Ошибка загрузки, повтор ($attempt/$maxRetries)..."
+                Start-Sleep -Seconds ($attempt * 2)
+            }
+            elseif ($attempt -eq $maxRetries) {
+                Write-Info "Fallback: Invoke-WebRequest..."
+                try {
+                    $prevPref = $ProgressPreference
+                    $ProgressPreference = 'SilentlyContinue'
+                    Invoke-WebRequest -Uri $Uri -OutFile $OutFile -UseBasicParsing
+                    $ProgressPreference = $prevPref
+                    $fbMinRequired = if ($MinimumSize -gt 0) { $MinimumSize } else { 1MB }
+                    if ((Test-Path $OutFile) -and (Get-Item $OutFile).Length -ge $fbMinRequired) {
+                        $fbSize = Format-FileSize (Get-Item $OutFile).Length
+                        Write-Host "     $fbSize" -ForegroundColor DarkGray
+                        break
+                    }
+                    if (Test-Path $OutFile) { Remove-Item $OutFile -Force -ErrorAction SilentlyContinue }
+                }
+                catch {
+                    $ProgressPreference = $prevPref
+                }
+                throw
+            }
+        }
+        finally {
+            Unregister-Event -SourceIdentifier $srcIdProgress -ErrorAction SilentlyContinue
+            Unregister-Event -SourceIdentifier $srcIdComplete -ErrorAction SilentlyContinue
+            Get-Job -Name $srcIdProgress -ErrorAction SilentlyContinue | Remove-Job -Force -ErrorAction SilentlyContinue
+            Get-Job -Name $srcIdComplete -ErrorAction SilentlyContinue | Remove-Job -Force -ErrorAction SilentlyContinue
+            $wc.Dispose()
+        }
+    }
+}
+
+function Start-ProcessWithSpinner {
+    param(
+        [Parameter(Mandatory)][string]$FilePath,
+        [Parameter(Mandatory)][string]$Message,
+        [string]$ArgumentList,
+        [switch]$NoNewWindow
+    )
+
+    $pArgs = @{ FilePath = $FilePath; PassThru = $true }
+    if ($ArgumentList) { $pArgs['ArgumentList'] = $ArgumentList }
+    if ($NoNewWindow)  { $pArgs['NoNewWindow'] = $true }
+
+    $proc = Start-Process @pArgs
+    if ($null -eq $proc) { throw "Failed to start process: $FilePath" }
+
+    $spinChars = @(
+        [string][char]0x280B, [string][char]0x2819, [string][char]0x2839, [string][char]0x2838,
+        [string][char]0x283C, [string][char]0x2834, [string][char]0x2826, [string][char]0x2827,
+        [string][char]0x2807, [string][char]0x280F
+    )
+    $i = 0
+
+    while (-not $proc.HasExited) {
+        $char = $spinChars[$i % $spinChars.Length]
+        Write-Host "`r     $char $($Message.PadRight(55))" -NoNewline -ForegroundColor DarkGray
+        Start-Sleep -Milliseconds 100
+        $i++
+    }
+
+    $proc.WaitForExit()
+    Write-Host "`r$(' ' * 70)`r" -NoNewline
+    $exitCode = $proc.ExitCode
+    if ($null -eq $exitCode) { $exitCode = -1 }
+    return $exitCode
+}
+
 # ─── Установка Go напрямую с go.dev ──────────────────────────────────────────
 
 function Install-Go {
@@ -153,18 +356,17 @@ function Install-Go {
 
     $msiPath = Join-Path $env:TEMP "$goVersion.windows-amd64.msi"
 
-    Write-Info "Скачивание $goVersion..."
-    Invoke-WebRequest -Uri $downloadUrl -OutFile $msiPath -UseBasicParsing
+    Invoke-Download -Uri $downloadUrl -OutFile $msiPath -MinimumSize 20MB `
+        -Label "Скачивание $goVersion..."
 
-    Write-Info "Установка $goVersion (msiexec, может потребоваться UAC)..."
-    $proc = Start-Process -FilePath "msiexec.exe" `
+    $exitCode = Start-ProcessWithSpinner -FilePath "msiexec.exe" `
         -ArgumentList "/i `"$msiPath`" /quiet /norestart" `
-        -Wait -PassThru
+        -Message "Установка $goVersion..."
 
     Remove-Item $msiPath -Force -ErrorAction SilentlyContinue
 
-    if ($proc.ExitCode -ne 0) {
-        Write-Err "msiexec завершился с кодом $($proc.ExitCode)"
+    if ($exitCode -ne 0) {
+        Write-Err "msiexec завершился с кодом $exitCode"
         Write-Err "Попробуйте запустить скрипт от имени администратора"
         exit 1
     }
@@ -181,6 +383,51 @@ function Install-Go {
     Write-Success "$goVersion установлен"
 }
 
+# ─── Установка GCC (w64devkit) ────────────────────────────────────────────────
+
+function Install-GCC {
+    $installDir   = Join-Path $env:LOCALAPPDATA "w64devkit"
+    $downloadUrl  = "https://github.com/skeeto/w64devkit/releases/download/$W64DevkitVersion/$W64DevkitFile"
+    $downloadPath = Join-Path $env:TEMP $W64DevkitFile
+
+    Invoke-Download -Uri $downloadUrl -OutFile $downloadPath -MinimumSize 10MB `
+        -Label "Скачивание w64devkit $W64DevkitVersion ($W64DevkitFile)..."
+
+    if (Test-Path $installDir) {
+        Remove-Item $installDir -Recurse -Force
+    }
+
+    if ($W64DevkitFile -match "\.zip$") {
+        Write-Info "Распаковка w64devkit..."
+        Expand-Archive -Path $downloadPath -DestinationPath $env:LOCALAPPDATA -Force
+    }
+    elseif ($W64DevkitFile -match "\.exe$") {
+        $exitCode = Start-ProcessWithSpinner -FilePath $downloadPath `
+            -ArgumentList "-o`"$env:LOCALAPPDATA`" -y" `
+            -Message "Распаковка w64devkit..." `
+            -NoNewWindow
+        if ($exitCode -ne 0) {
+            Write-Err "Распаковка 7z завершилась с ошибкой (код: $exitCode)"
+            exit 1
+        }
+    }
+
+    Remove-Item $downloadPath -Force -ErrorAction SilentlyContinue
+
+    $binDir = Join-Path $installDir "bin"
+    if (Test-Path $binDir) {
+        $env:Path = "$binDir;$env:Path"
+
+        $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+        if ($userPath -notlike "*$binDir*") {
+            [Environment]::SetEnvironmentVariable("Path", "$binDir;$userPath", "User")
+            Write-Info "w64devkit добавлен в PATH пользователя"
+        }
+    }
+
+    Write-Success "w64devkit $W64DevkitVersion установлен (GCC)"
+}
+
 # ─── Установка .NET SDK через официальный скрипт Microsoft ───────────────────
 
 function Install-DotNetSdk {
@@ -188,8 +435,7 @@ function Install-DotNetSdk {
 
     $installScript = Join-Path $env:TEMP "dotnet-install.ps1"
 
-    Write-Info "Скачивание dotnet-install.ps1..."
-    Invoke-WebRequest -Uri "https://dot.net/v1/dotnet-install.ps1" -OutFile $installScript -UseBasicParsing
+    Invoke-Download -Uri "https://dot.net/v1/dotnet-install.ps1" -OutFile $installScript -Label "Скачивание dotnet-install.ps1..."
 
     Write-Info "Установка .NET SDK $Channel..."
     & $installScript -Channel $Channel -InstallDir "$env:LOCALAPPDATA\Microsoft\dotnet"
@@ -234,6 +480,63 @@ function Ensure-Go {
     Write-Success "Go $goVer (установлен)"
 }
 
+function Test-GccCompatible {
+    if (-not (Test-Command "gcc")) { return $false }
+    $ver = (& gcc -dumpfullversion 2>&1).Trim()
+    $major = [int]($ver.Split('.')[0])
+    return ($major -lt 15)
+}
+
+function Ensure-GCC {
+    if (Test-Command "gcc") {
+        $gccVer = (& gcc -dumpfullversion 2>&1).Trim()
+        $gccMajor = [int]($gccVer.Split('.')[0])
+        if ($gccMajor -lt 15) {
+            Write-Success "GCC $gccVer"
+            return
+        }
+        Write-Info "GCC $gccVer несовместим с Go cgo (GCC 15+), переустановка..."
+    }
+    else {
+        $commonPaths = @(
+            "$env:LOCALAPPDATA\w64devkit\bin",
+            "C:\mingw64\bin",
+            "C:\msys64\mingw64\bin",
+            "C:\TDM-GCC-64\bin"
+        )
+
+        foreach ($p in $commonPaths) {
+            $gccExe = Join-Path $p "gcc.exe"
+            if (Test-Path $gccExe) {
+                $env:Path = "$p;$env:Path"
+                $gccVer = (& gcc -dumpfullversion 2>&1).Trim()
+                $gccMajor = [int]($gccVer.Split('.')[0])
+                if ($gccMajor -lt 15) {
+                    Write-Success "GCC $gccVer (найден в $p)"
+                    return
+                }
+                Write-Info "GCC $gccVer (в $p) несовместим с Go cgo (GCC 15+), переустановка..."
+                break
+            }
+        }
+
+        if (-not (Test-Command "gcc")) {
+            Write-Info "GCC (C компилятор) не найден, начинаю установку..."
+        }
+    }
+
+    Install-GCC
+
+    if (-not (Test-Command "gcc")) {
+        Write-Err "GCC установлен, но не найден в PATH."
+        Write-Err "Перезапустите терминал и запустите скрипт снова."
+        exit 1
+    }
+
+    $gccVer = (& gcc -dumpfullversion 2>&1).Trim()
+    Write-Success "GCC $gccVer (установлен)"
+}
+
 function Ensure-DotNet {
     if (Test-Command "dotnet") {
         $sdkList = & dotnet --list-sdks 2>&1
@@ -271,6 +574,7 @@ function Test-Prerequisites {
 
     if ($needGo) {
         Ensure-Go
+        Ensure-GCC
     }
 
     if ($needDotNet) {
@@ -327,22 +631,18 @@ function Get-GeoFiles {
     $geoIpPath   = Join-Path $AppDir "geoip.dat"
     $geoSitePath = Join-Path $AppDir "geosite.dat"
 
-    Write-Info "Скачивание geoip.dat..."
     try {
-        Invoke-WebRequest -Uri $GeoIpUrl -OutFile $geoIpPath -UseBasicParsing
-        $sizeMB = [math]::Round((Get-Item $geoIpPath).Length / 1MB, 1)
-        Write-Success "geoip.dat ($sizeMB MB)"
+        Invoke-Download -Uri $GeoIpUrl -OutFile $geoIpPath -Label "Скачивание geoip.dat..."
+        Write-Success "geoip.dat ($(Format-FileSize (Get-Item $geoIpPath).Length))"
     }
     catch {
         Write-Err "Не удалось скачать geoip.dat: $_"
         exit 1
     }
 
-    Write-Info "Скачивание geosite.dat..."
     try {
-        Invoke-WebRequest -Uri $GeoSiteUrl -OutFile $geoSitePath -UseBasicParsing
-        $sizeMB = [math]::Round((Get-Item $geoSitePath).Length / 1MB, 1)
-        Write-Success "geosite.dat ($sizeMB MB)"
+        Invoke-Download -Uri $GeoSiteUrl -OutFile $geoSitePath -Label "Скачивание geosite.dat..."
+        Write-Success "geosite.dat ($(Format-FileSize (Get-Item $geoSitePath).Length))"
     }
     catch {
         Write-Err "Не удалось скачать geosite.dat: $_"
@@ -384,10 +684,8 @@ function Get-TunService {
             return
         }
 
-        Write-Info "Скачивание $($asset.name)..."
         $tempFile = Join-Path $env:TEMP $asset.name
-
-        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tempFile -UseBasicParsing
+        Invoke-Download -Uri $asset.browser_download_url -OutFile $tempFile -Label "Скачивание $($asset.name)..."
 
         if ($asset.name -match "\.zip$") {
             Write-Info "Распаковка архива..."
