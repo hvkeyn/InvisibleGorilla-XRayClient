@@ -1,6 +1,6 @@
 # Invisible Gorilla - XRay Client
 
-> A modern, open-source GUI client for [Xray-core](https://github.com/XTLS/Xray-core) on Windows
+> A modern, open-source GUI client for [Xray-core](https://github.com/XTLS/Xray-core) on Windows & macOS
 
 [![GitHub release](https://img.shields.io/github/v/release/hvkeyn/InvisibleGorilla-XRayClient?style=flat-square)](https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](./LICENSE.md)
@@ -51,11 +51,12 @@ InvisibleGorilla-XRayClient/
 │   ├── Services/                # Localization, analytics
 │   ├── Windows/                 # WPF windows (Main, Server, Settings, About, etc.)
 │   └── Assets/                  # Icons, localization XAML resources
-├── XRay-Wrapper/                # Go wrapper — compiles Xray-core into XRayCore.dll
+├── XRay-Wrapper/                # Go wrapper — compiles Xray-core into native library
 │   ├── xray/                    # Server start/stop, config parsing, connection test
 │   ├── main.go                  # Entry point
 │   └── go.mod                   # Go 1.23, xray-core v25.1.30
-└── build.ps1                    # One-command build script (auto-installs deps)
+├── build.ps1                    # Windows build script (auto-installs deps)
+└── build-macos.sh               # macOS build script (Sequoia 15.7+, auto-installs deps)
 ```
 
 ## Quick Start
@@ -64,7 +65,7 @@ InvisibleGorilla-XRayClient/
 
 Download the latest build from [Releases](https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/latest).
 
-### Option 2: Build from source
+### Option 2: Build from source (Windows)
 
 ```powershell
 git clone "https://github.com/hvkeyn/InvisibleGorilla-XRayClient.git"
@@ -74,13 +75,14 @@ cd InvisibleGorilla-XRayClient
 
 The build script automatically:
 1. Checks and installs **Go** (via MSI from go.dev) if missing
-2. Checks and installs **.NET 7 SDK** (via official Microsoft script) if missing
-3. Builds **XRayCore.dll** from the Go wrapper
-4. Downloads **geoip.dat** and **geosite.dat** routing databases
-5. Downloads **InvisibleMan-TUN** service for TUN mode
-6. Builds the .NET application
+2. Checks and installs **GCC** (w64devkit, compatible with cgo) if missing
+3. Checks and installs **.NET 7 SDK** (via official Microsoft script) if missing
+4. Builds **XRayCore.dll** from the Go wrapper
+5. Downloads **geoip.dat** and **geosite.dat** routing databases
+6. Downloads **InvisibleMan-TUN** service for TUN mode
+7. Builds the .NET WPF application
 
-#### Build script options
+#### Windows build options
 
 | Command | Description |
 |---|---|
@@ -91,6 +93,36 @@ The build script automatically:
 | `.\build.ps1 -Step GeoFiles` | Only download geo databases |
 | `.\build.ps1 -Configuration Debug` | Build in Debug mode |
 | `.\build.ps1 -SkipTUN` | Skip TUN service download |
+
+### Option 3: Build from source (macOS)
+
+```bash
+git clone "https://github.com/hvkeyn/InvisibleGorilla-XRayClient.git"
+cd InvisibleGorilla-XRayClient
+chmod +x build-macos.sh
+./build-macos.sh
+```
+
+Tested on **macOS Sequoia 15.7.x** (Apple Silicon & Intel). The script automatically:
+1. Checks and installs **Xcode Command Line Tools** (C compiler for cgo)
+2. Checks and installs **Go** (via Homebrew or direct .pkg from go.dev)
+3. Builds **XRayCore.dylib** from the Go wrapper (cgo c-shared)
+4. Downloads **geoip.dat** and **geosite.dat** routing databases
+5. Packages a distribution bundle (`dist/`) with all required files
+
+> **Note:** The WPF GUI is Windows-only. On macOS, the script builds the XRayCore engine and geo databases as a ready-to-use library bundle. For a macOS GUI, the project needs porting to [Avalonia UI](https://avaloniaui.net) or [.NET MAUI](https://dot.net/maui).
+
+#### macOS build options
+
+| Command | Description |
+|---|---|
+| `./build-macos.sh` | Full build (all steps) |
+| `./build-macos.sh --step go` | Only build XRayCore.dylib |
+| `./build-macos.sh --step geo` | Only download geo databases |
+| `./build-macos.sh --step bundle` | Only package distribution |
+| `./build-macos.sh --publish` | Build + package as distributable archive |
+| `./build-macos.sh --config Debug` | Build in Debug mode |
+| `./build-macos.sh --skip-dotnet` | Skip .NET build (default for WPF projects) |
 
 ### Manual build
 
@@ -124,13 +156,14 @@ The build script automatically:
 
 ## Tech Stack
 
-| Component | Technology |
-|---|---|
-| GUI | WPF (.NET 7, C#) |
-| Proxy engine | [Xray-core](https://github.com/XTLS/Xray-core) v25.1.30 |
-| Native bridge | Go 1.23 → C-shared DLL (cgo) |
-| TUN service | [InvisibleMan-TUN](https://github.com/InvisibleManVPN/InvisibleMan-TUN) |
-| Geo routing | [v2fly geoip](https://github.com/v2fly/geoip) + [domain-list](https://github.com/v2fly/domain-list-community) |
+| Component | Technology | Platform |
+|---|---|---|
+| GUI | WPF (.NET 7, C#) | Windows |
+| Proxy engine | [Xray-core](https://github.com/XTLS/Xray-core) v25.1.30 | Cross-platform |
+| Native bridge | Go 1.23 → C-shared (cgo): `.dll` / `.dylib` | Windows / macOS |
+| TUN service | [InvisibleMan-TUN](https://github.com/InvisibleManVPN/InvisibleMan-TUN) | Windows |
+| Geo routing | [v2fly geoip](https://github.com/v2fly/geoip) + [domain-list](https://github.com/v2fly/domain-list-community) | Cross-platform |
+| Build system | `build.ps1` (PowerShell) / `build-macos.sh` (Bash) | Windows / macOS |
 
 ## Troubleshooting
 

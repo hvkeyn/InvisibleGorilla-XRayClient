@@ -4,3 +4,8 @@
 *.dll
 *.dat
 *.exe
+*.dylib
+
+# Build outputs
+/publish
+/dist
