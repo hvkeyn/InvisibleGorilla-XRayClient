@@ -1,86 +1,159 @@
-# Invisible Man - XRay Client
+# Invisible Gorilla - XRay Client
 
-> A client for xray core
+> A modern, open-source GUI client for [Xray-core](https://github.com/XTLS/Xray-core) on Windows
 
-[![Downloads](https://img.shields.io/github/downloads/invisiblemanvpn/InvisibleMan-XRayClient/total.svg?label=downloads%20%28total%29)](https://github.com/InvisibleManVPN/InvisibleMan-XRayClient/releases)
-[![DownloadsLatest](https://img.shields.io/github/downloads/InvisibleManVPN/InvisibleMan-XRayClient/latest/total?label=downloads%20%28latest%29)](https://github.com/InvisibleManVPN/InvisibleMan-XRayClient/releases/latest)
-[![LatestVersion](https://img.shields.io/github/v/release/invisiblemanvpn/InvisibleMan-XRayClient?label=latest%20version)](https://github.com/InvisibleManVPN/InvisibleMan-XRayClient/releases/latest)
-[![CodeFactor](https://www.codefactor.io/repository/github/invisiblemanvpn/InvisibleMan-XRayClient/badge)](https://www.codefactor.io/repository/github/invisiblemanvpn/InvisibleMan-XRayClient)
+[![GitHub release](https://img.shields.io/github/v/release/hvkeyn/InvisibleGorilla-XRayClient?style=flat-square)](https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](./LICENSE.md)
 
-Invisible Man XRay is an open-source and free client that supports [xray core](https://github.com/XTLS/Xray-core). It provides an easy-to-use interface to configure and manage proxies and allows users to switch between different server locations.
+Invisible Gorilla XRay is a free, open-source desktop application that wraps the powerful Xray-core proxy engine with an intuitive WPF interface. Easily configure, manage, and switch between multiple proxy servers with support for VLESS, VMess, Trojan, and Shadowsocks protocols.
 
-![Image1](https://github.com/InvisibleManVPN/InvisibleMan-XRayClient/blob/master/Images/image-1.png)
-![Image2](https://github.com/InvisibleManVPN/InvisibleMan-XRayClient/blob/master/Images/image-2.png)
+**Fork of [InvisibleMan-XRay](https://github.com/InvisibleManVPN/InvisibleMan-XRay)** with critical proxy fixes, improved reliability, and gorilla branding.
 
-## Getting started
+## What's Fixed in This Fork
 
-- If you are new to this, please download the application from [releases](https://github.com/InvisibleManVPN/InvisibleMan-XRayClient/releases/latest).
+| Issue | Root Cause | Fix |
+|---|---|---|
+| **VPN shows "Running" but IP doesn't change** | Windows `DefaultConnectionSettings` blob not updated — browsers ignore registry-only proxy changes | Use `INTERNET_OPTION_PER_CONNECTION_OPTION` API to update both registry and binary blob |
+| **Browser needs restart after proxy toggle** | Missing `WM_SETTINGCHANGE` broadcast to running applications | Non-blocking `SendNotifyMessage(HWND_BROADCAST)` notifies all browsers instantly |
+| **App hangs on disconnect** | `SendMessageTimeout` blocks UI thread waiting for all windows | Replaced with async `SendNotifyMessage` + background thread for proxy cleanup |
+| **Proxy stays enabled after crash** | No cleanup on unhandled exceptions or forced exit | Added `UnhandledException`, `ProcessExit`, `OnExit` handlers |
+| **Race condition on startup** | System proxy enabled before xray-core starts listening | Start xray in background thread, poll port, enable proxy only when ready |
 
-- But if you want to get the source of the client, follow these steps:
-  - Download the [requirements](#requirements)
-  - Clone a copy of the repository:
-    ```
-    git clone "https://github.com/InvisibleManVPN/InvisibleMan-XRayClient.git"
-    ```
-  - Change to the directory:
-    ```
-    cd InvisibleMan-XRayClient
-    ```
-  - Make `XRayCore.dll` file and copy to the `/InvisibleMan-XRay/Libraries` directory:
-    ```
-    cd XRay-Wrapper
-    go build --buildmode=c-shared -o XRayCore.dll -trimpath -ldflags "-s -w -buildid=" .
-    md ..\InvisileMan-XRay\Libraries
-    copy XRayCore.dll ..\InvisibleMan-XRay\Libraries   
-    ```
-    
-  - Download `InvisibleMan-TUN` service (based on your OS) from [this](https://github.com/InvisibleManVPN/InvisibleMan-TUN/releases/latest) link, extract and copy to the `/InvisibleMan-XRay/TUN` directory.
+## Features
 
-  - Download `geoip.dat` and `geosite.dat` files and copy to the `/InvisibleMan-XRay` directory:
-    ```
-    cd ..\InvisibleMan-XRay
-    curl https://github.com/v2fly/geoip/releases/latest/download/geoip.dat -o geoip.dat -L
-    curl https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat -o geosite.dat -L
-    ```
-  - Run the project:
-    ```
-    dotnet run
-    ```
+- **Multi-protocol support** — VLESS, VMess, Trojan, Shadowsocks
+- **Proxy & TUN modes** — system-wide proxy or TUN-based tunneling
+- **Instant browser integration** — proxy changes apply to Chrome, Edge, Yandex Browser without restart
+- **Crash-safe proxy** — system proxy is always cleaned up on exit, crash, or session end
+- **Subscription management** — import and auto-update server lists from subscription links
+- **Connection testing** — one-click latency check for each server
+- **Deep link support** — import configs via `invisiblegorilla://` URI scheme
+- **Multi-language UI** — English, Russian, Persian (easily extensible)
+- **System tray integration** — runs quietly in background with quick-access menu
+- **Diagnostic logging** — detailed `diagnostic.log` for troubleshooting proxy issues
+- **Auto-update** — check and install new versions from within the app
 
-## Requirements
+## Screenshots
 
-- Go https://go.dev/dl/
-- .Net https://dotnet.microsoft.com/download
-- Curl https://curl.se/download.html
+*Coming soon — the app features a clean dark interface with gorilla branding*
+
+## Architecture
+
+```
+InvisibleGorilla-XRayClient/
+├── InvisibleGorilla-XRay/       # C# WPF application (.NET 7)
+│   ├── Core/                    # XRay core wrapper, P/Invoke bridge, diagnostic logging
+│   ├── Handlers/                # Business logic (proxy, tunnel, config, settings)
+│   │   └── Proxies/            # Windows proxy management (per-connection API)
+│   ├── Factories/               # Window creation via factory pattern
+│   ├── Managers/                # App lifecycle, IPC pipes, services
+│   ├── Models/                  # Data models & protocol templates
+│   ├── Services/                # Localization, analytics
+│   ├── Windows/                 # WPF windows (Main, Server, Settings, About, etc.)
+│   └── Assets/                  # Icons, localization XAML resources
+├── XRay-Wrapper/                # Go wrapper — compiles Xray-core into XRayCore.dll
+│   ├── xray/                    # Server start/stop, config parsing, connection test
+│   ├── main.go                  # Entry point
+│   └── go.mod                   # Go 1.23, xray-core v25.1.30
+└── build.ps1                    # One-command build script (auto-installs deps)
+```
+
+## Quick Start
+
+### Option 1: Download release
+
+Download the latest build from [Releases](https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/latest).
+
+### Option 2: Build from source
+
+```powershell
+git clone "https://github.com/hvkeyn/InvisibleGorilla-XRayClient.git"
+cd InvisibleGorilla-XRayClient
+.\build.ps1
+```
+
+The build script automatically:
+1. Checks and installs **Go** (via MSI from go.dev) if missing
+2. Checks and installs **.NET 7 SDK** (via official Microsoft script) if missing
+3. Builds **XRayCore.dll** from the Go wrapper
+4. Downloads **geoip.dat** and **geosite.dat** routing databases
+5. Downloads **InvisibleMan-TUN** service for TUN mode
+6. Builds the .NET application
+
+#### Build script options
+
+| Command | Description |
+|---|---|
+| `.\build.ps1` | Full build (all steps) |
+| `.\build.ps1 -Publish` | Build + publish as single-file executable |
+| `.\build.ps1 -Step GoWrapper` | Only build XRayCore.dll |
+| `.\build.ps1 -Step DotNet` | Only build .NET app |
+| `.\build.ps1 -Step GeoFiles` | Only download geo databases |
+| `.\build.ps1 -Configuration Debug` | Build in Debug mode |
+| `.\build.ps1 -SkipTUN` | Skip TUN service download |
+
+### Manual build
+
+<details>
+<summary>Click to expand manual build steps</summary>
+
+**Prerequisites:** [Go 1.23+](https://go.dev/dl/) and [.NET 7 SDK](https://dotnet.microsoft.com/download)
+
+1. Build the Go wrapper:
+   ```
+   cd XRay-Wrapper
+   go build --buildmode=c-shared -o XRayCore.dll -trimpath -ldflags "-s -w -buildid=" .
+   mkdir ..\InvisibleGorilla-XRay\Libraries
+   copy XRayCore.dll ..\InvisibleGorilla-XRay\Libraries
+   ```
+
+2. Download [InvisibleMan-TUN](https://github.com/InvisibleManVPN/InvisibleMan-TUN/releases/latest), extract to `InvisibleGorilla-XRay/TUN/`
+
+3. Download geo databases:
+   ```
+   cd ..\InvisibleGorilla-XRay
+   curl -L -o geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat
+   curl -L -o geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat
+   ```
+
+4. Run:
+   ```
+   dotnet run
+   ```
+</details>
+
+## Tech Stack
+
+| Component | Technology |
+|---|---|
+| GUI | WPF (.NET 7, C#) |
+| Proxy engine | [Xray-core](https://github.com/XTLS/Xray-core) v25.1.30 |
+| Native bridge | Go 1.23 → C-shared DLL (cgo) |
+| TUN service | [InvisibleMan-TUN](https://github.com/InvisibleManVPN/InvisibleMan-TUN) |
+| Geo routing | [v2fly geoip](https://github.com/v2fly/geoip) + [domain-list](https://github.com/v2fly/domain-list-community) |
+
+## Troubleshooting
+
+If the VPN shows "Running" but your IP doesn't change:
+
+1. Check `diagnostic.log` in the app directory for detailed proxy status
+2. Verify in Windows Settings > Network > Proxy that manual proxy is enabled
+3. Try opening a new incognito window in your browser
+4. Make sure your VPN config file is valid (test connection via "Manage server configuration")
 
 ## Contributing
 
-You can help this project by reporting problems, suggestions or contributing to the code.
+We welcome contributions! Here's how you can help:
 
-### Report a problem or suggestion
+- **Report bugs** — open an [issue](https://github.com/hvkeyn/InvisibleGorilla-XRayClient/issues)
+- **Add a language** — see [Language.md](./Language.md) for instructions
+- **Submit code** — fork, branch, and send a pull request
 
-Go to our [Issue tracker](https://github.com/InvisibleManVPN/InvisibleMan-XRayClient/issues) and check if your problem/suggestion is already reported. If not, create a new issue with a descriptive title and detail your suggestion or steps to reproduce the problem.
+## License
 
-### Add a new language
+[MIT](./LICENSE.md)
 
-Invisible Man XRay supports multi-languages. So, you can contribute to adding new language to the app by following [this](./Language.md) instruction.
+## Acknowledgments
 
-### Contribute to the code
-
-If you know how to code, we welcome you to send fixes and new features!
-
-## Donation
-
-
-Please consider donating to support and sustain my activities.
-<br/>
-See: https://invisiblemanvpn.github.io/donation/
-
-## Contacts
-
-- Web [invisiblemanvpn.github.io](https://invisiblemanvpn.github.io)
-- Email [invisiblemanvpn@gmail.com](mailto:invisiblemanvpn@gmail.com)
-
-## Stargazers over time
-
-[![Stargazers over time](https://starchart.cc/InvisibleManVPN/InvisibleMan-XRayClient.svg?variant=adaptive)](https://starchart.cc/InvisibleManVPN/InvisibleMan-XRayClient)
+- [InvisibleMan-XRay](https://github.com/InvisibleManVPN/InvisibleMan-XRay) — original project this fork is based on
+- [Xray-core](https://github.com/XTLS/Xray-core) — the proxy engine powering this app

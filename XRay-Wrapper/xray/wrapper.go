@@ -99,6 +99,10 @@ func TestConnection(config *C.char, port int) int {
 		return PingTimeout
 	}
 
+	if response.Body != nil {
+		response.Body.Close()
+	}
+
 	server.Close()
 	fmt.Println("info | response code >", response.StatusCode)
 

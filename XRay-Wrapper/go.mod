@@ -1,4 +1,4 @@
-module github.com/invisiblemanvpn/xray-wrapper
+module github.com/hvkeyn/xray-wrapper
 
 go 1.23
 
