@@ -1,0 +1,98 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <x:String x:Key="Lang.Run">ЗАПУСК</x:String>
+    <x:String x:Key="Lang.Stop">СТОП</x:String>
+    <x:String x:Key="Lang.Cancel">ОТМЕНА</x:String>
+
+    <x:String x:Key="Lang.Status.Stopped">Остановлен</x:String>
+    <x:String x:Key="Lang.Status.Running">Работает</x:String>
+    <x:String x:Key="Lang.Status.WaitForRun">Ожидание запуска</x:String>
+
+    <x:String x:Key="Lang.Message.NoServerConfiguration">Нет конфигурации сервера</x:String>
+    <x:String x:Key="Lang.Message.ConfigHint">Нажмите плюс, чтобы добавить новый</x:String>
+
+    <x:String x:Key="Lang.Window.Main.ManageServerConfiguration">Управление конфигурацией сервера</x:String>
+
+    <x:String x:Key="Lang.Window.Server.Title">Серверы</x:String>
+    <x:String x:Key="Lang.Window.Server.Configs">Конфигурации</x:String>
+    <x:String x:Key="Lang.Window.Server.Subscriptions">Подписки</x:String>
+    <x:String x:Key="Lang.Window.Server.AddConfig.FromLink">Импорт по ссылке</x:String>
+    <x:String x:Key="Lang.Window.Server.AddConfig.FromFile">Импорт из файла</x:String>
+    <x:String x:Key="Lang.Window.Server.AddConfig.Placeholder">Вставьте или введите ссылку на конфигурацию</x:String>
+    <x:String x:Key="Lang.Window.Server.AddSub.FromLink">Импорт по ссылке</x:String>
+    <x:String x:Key="Lang.Window.Server.AddSub.Placeholder">Вставьте или введите ссылку на подписку</x:String>
+
+    <x:String x:Key="Lang.Window.Settings.Title">Настройки</x:String>
+    <x:String x:Key="Lang.Window.Settings.Basic">Основные</x:String>
+    <x:String x:Key="Lang.Window.Settings.Port">Порт</x:String>
+    <x:String x:Key="Lang.Window.Settings.TUN">TUN</x:String>
+    <x:String x:Key="Lang.Window.Settings.Log">Журнал</x:String>
+    <x:String x:Key="Lang.Window.Settings.Language">Язык</x:String>
+    <x:String x:Key="Lang.Window.Settings.Mode">Режим</x:String>
+    <x:String x:Key="Lang.Window.Settings.Protocol">Протокол</x:String>
+    <x:String x:Key="Lang.Window.Settings.RunAtStartup">Запуск при старте системы</x:String>
+    <x:String x:Key="Lang.Window.Settings.SendAnalytics">Отправлять анонимные данные об использовании</x:String>
+    <x:String x:Key="Lang.Window.Settings.StartHidden">Запуск в свёрнутом виде</x:String>
+    <x:String x:Key="Lang.Window.Settings.AutoConnect">Автоподключение</x:String>
+    <x:String x:Key="Lang.Window.Settings.SystemProxy">Системный прокси</x:String>
+    <x:String x:Key="Lang.Window.Settings.UDP">UDP</x:String>
+    <x:String x:Key="Lang.Window.Settings.ProxyPort">Порт прокси</x:String>
+    <x:String x:Key="Lang.Window.Settings.TunPort">Порт TUN</x:String>
+    <x:String x:Key="Lang.Window.Settings.TestPort">Тестовый порт</x:String>
+    <x:String x:Key="Lang.Window.Settings.TunIp">IP-адрес TUN</x:String>
+    <x:String x:Key="Lang.Window.Settings.Dns">DNS</x:String>
+    <x:String x:Key="Lang.Window.Settings.LogLevel">Уровень журнала</x:String>
+    <x:String x:Key="Lang.Window.Settings.LogPath">Путь к файлу журнала</x:String>
+    <x:String x:Key="Lang.Window.Settings.Confirm">ПОДТВЕРДИТЬ</x:String>
+    <x:String x:Key="Lang.Window.Settings.Cancel">ОТМЕНА</x:String>
+
+    <x:String x:Key="Lang.Window.About.Title">О программе</x:String>
+    <x:String x:Key="Lang.Window.About.Description">Бесплатный GUI-клиент с открытым исходным кодом для Xray на macOS</x:String>
+    <x:String x:Key="Lang.Window.About.Version">Версия</x:String>
+    <x:String x:Key="Lang.Window.About.XRayCoreVersion">Версия XRay Core</x:String>
+    <x:String x:Key="Lang.Window.About.SourceCode">Исходный код на GitHub</x:String>
+    <x:String x:Key="Lang.Window.About.BugReport">Сообщить об ошибке и запросить функцию</x:String>
+    <x:String x:Key="Lang.Window.About.Email">Связаться с нами</x:String>
+
+    <x:String x:Key="Lang.Window.Update.Title">Обновление</x:String>
+    <x:String x:Key="Lang.Window.Update.Checking">Проверка обновлений...</x:String>
+    <x:String x:Key="Lang.Window.Update.Available">Доступна новая версия!</x:String>
+    <x:String x:Key="Lang.Window.Update.Unavailable">У вас установлена последняя версия.</x:String>
+    <x:String x:Key="Lang.Window.Update.Error">Не удалось проверить обновления.</x:String>
+    <x:String x:Key="Lang.Window.Update.Update">ОБНОВИТЬ</x:String>
+    <x:String x:Key="Lang.Window.Update.Close">ЗАКРЫТЬ</x:String>
+    <x:String x:Key="Lang.Window.Update.TryAgain">ПОВТОРИТЬ</x:String>
+
+    <x:String x:Key="Lang.Window.Policy.Title">Политика конфиденциальности</x:String>
+
+    <x:String x:Key="Lang.ToolTip.About">О программе</x:String>
+    <x:String x:Key="Lang.ToolTip.CheckForUpdates">Проверить обновления</x:String>
+    <x:String x:Key="Lang.ToolTip.Settings">Настройки</x:String>
+    <x:String x:Key="Lang.ToolTip.BugReporting">Сообщить об ошибке</x:String>
+    <x:String x:Key="Lang.ToolTip.SourceCodeOnGitHub">Исходный код на GitHub</x:String>
+
+    <x:String x:Key="Lang.Notify.Open">Открыть</x:String>
+    <x:String x:Key="Lang.Notify.Mode">Режим</x:String>
+    <x:String x:Key="Lang.Notify.Mode.Proxy">Прокси</x:String>
+    <x:String x:Key="Lang.Notify.Mode.TUN">TUN</x:String>
+    <x:String x:Key="Lang.Notify.CheckForUpdate">Проверить обновление</x:String>
+    <x:String x:Key="Lang.Notify.About">О программе</x:String>
+    <x:String x:Key="Lang.Notify.Close">Закрыть</x:String>
+
+    <x:String x:Key="Lang.Config.Status.NotChecked">Не проверено</x:String>
+    <x:String x:Key="Lang.Config.Status.Available">Доступен</x:String>
+    <x:String x:Key="Lang.Config.Status.Timeout">Тайм-аут</x:String>
+    <x:String x:Key="Lang.Config.Status.Error">Ошибка</x:String>
+
+    <x:String x:Key="Lang.Message.AppAlreadyRunning">Приложение уже запущено!</x:String>
+    <x:String x:Key="Lang.Message.NoConfig">Конфигурация не выбрана. Хотите добавить?</x:String>
+    <x:String x:Key="Lang.Message.InvalidConfig">Выбранная конфигурация недействительна.</x:String>
+    <x:String x:Key="Lang.Message.UnsupportedLink">Неподдерживаемый формат ссылки.</x:String>
+    <x:String x:Key="Lang.Message.UnsupportedSubscriptionLink">Неподдерживаемая ссылка на подписку.</x:String>
+    <x:String x:Key="Lang.Message.CantConnect">Не удалось подключиться к серверу.</x:String>
+    <x:String x:Key="Lang.Message.CantProxy">Не удалось включить прокси.</x:String>
+    <x:String x:Key="Lang.Message.CantTunnel">Не удалось подключиться к туннельному сервису.</x:String>
+
+</ResourceDictionary>
