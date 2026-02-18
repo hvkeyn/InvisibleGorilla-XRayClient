@@ -53,7 +53,8 @@ InvisibleGorilla-XRayClient/
 │   └── Assets/                  # Icons, localization XAML resources
 ├── XRay-Wrapper/                # Go wrapper — compiles Xray-core into native library
 │   ├── xray/                    # Server start/stop, config parsing, connection test
-│   ├── main.go                  # Entry point
+│   ├── cmd/gorilla-xray/        # Standalone CLI client for macOS/Linux
+│   ├── main.go                  # Entry point (c-shared library)
 │   └── go.mod                   # Go 1.23, xray-core v25.1.30
 ├── build.ps1                    # Windows build script (auto-installs deps)
 └── build-macos.sh               # macOS build script (Sequoia 15.7+, auto-installs deps)
@@ -108,16 +109,33 @@ Tested on **macOS Sequoia 15.7.x** (Apple Silicon & Intel). The script automatic
 2. Checks and installs **Go** (via Homebrew or direct .pkg from go.dev)
 3. Builds **XRayCore.dylib** from the Go wrapper (cgo c-shared)
 4. Downloads **geoip.dat** and **geosite.dat** routing databases
-5. Packages a distribution bundle (`dist/`) with all required files
+5. Packages a distribution bundle (`dist/`) with CLI binary + data files
 
-> **Note:** The WPF GUI is Windows-only. On macOS, the script builds the XRayCore engine and geo databases as a ready-to-use library bundle. For a macOS GUI, the project needs porting to [Avalonia UI](https://avaloniaui.net) or [.NET MAUI](https://dot.net/maui).
+The output is a standalone **`gorilla-xray`** CLI binary that can be run directly:
+
+```bash
+# Start proxy
+./gorilla-xray -config your-config.json
+
+# Test connection
+./gorilla-xray -config config.json -test
+
+# SOCKS5 on custom port
+./gorilla-xray -config config.json -port 1080 -socks
+
+# Enable macOS system proxy
+networksetup -setwebproxy "Wi-Fi" 127.0.0.1 10801
+networksetup -setsecurewebproxy "Wi-Fi" 127.0.0.1 10801
+```
+
+> **Note:** The WPF GUI is Windows-only. On macOS, the script builds a standalone CLI client + XRayCore shared library. For a macOS GUI, the project needs porting to [Avalonia UI](https://avaloniaui.net) or [.NET MAUI](https://dot.net/maui).
 
 #### macOS build options
 
 | Command | Description |
 |---|---|
 | `./build-macos.sh` | Full build (all steps) |
-| `./build-macos.sh --step go` | Only build XRayCore.dylib |
+| `./build-macos.sh --step go` | Only build gorilla-xray + XRayCore.dylib |
 | `./build-macos.sh --step geo` | Only download geo databases |
 | `./build-macos.sh --step bundle` | Only package distribution |
 | `./build-macos.sh --publish` | Build + package as distributable archive |

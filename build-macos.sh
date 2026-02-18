@@ -6,10 +6,10 @@
 #
 # Automates the full build cycle:
 #   1. Check & auto-install dependencies (Go, Xcode CLT, .NET SDK 7.0)
-#   2. Build Go wrapper (XRayCore.dylib via cgo c-shared)
+#   2. Build Go wrapper: XRayCore.dylib (c-shared) + gorilla-xray (CLI binary)
 #   3. Download geoip.dat and geosite.dat
 #   4. Build/publish .NET application (if cross-platform UI is available)
-#   5. Package distribution bundle with all required files
+#   5. Package distribution bundle with binary + data files
 #
 # NOTE: The .NET WPF GUI (net7.0-windows) is Windows-only.
 #       On macOS this script builds the XRayCore engine + geo databases
@@ -425,10 +425,10 @@ check_prerequisites() {
     ok "All dependencies ready"
 }
 
-# ─── Step 1: Build Go wrapper ─────────────────────────────────────────────────
+# ─── Step 1: Build Go wrapper + CLI binary ────────────────────────────────────
 
 build_go_wrapper() {
-    step_header "Step 1: Build XRayCore.dylib (Go → cgo c-shared)"
+    step_header "Step 1: Build XRayCore (Go)"
 
     if [[ ! -d "$WRAPPER_DIR" ]]; then
         err "XRay-Wrapper directory not found: $WRAPPER_DIR"
@@ -437,10 +437,8 @@ build_go_wrapper() {
 
     pushd "$WRAPPER_DIR" >/dev/null
 
+    # 1a. Build shared library (XRayCore.dylib) for FFI/embedding
     info "Building XRayCore.dylib for $ARCH..."
-
-    # On macOS, cgo uses the system C compiler (Apple Clang from Xcode CLT)
-    # No need for separate GCC — Apple Clang works perfectly with Go cgo
     CGO_ENABLED=1 \
     GOOS=darwin \
     GOARCH="$GO_ARCH" \
@@ -456,9 +454,20 @@ build_go_wrapper() {
     mkdir -p "$LIBRARIES_DIR"
     cp XRayCore.dylib "$LIBRARIES_DIR/"
     ok "XRayCore.dylib → $LIBRARIES_DIR"
-
-    # Cleanup build artifacts
     rm -f XRayCore.h XRayCore.dylib
+
+    # 1b. Build standalone CLI binary (gorilla-xray)
+    info "Building gorilla-xray CLI binary for $ARCH..."
+    CGO_ENABLED=1 \
+    GOOS=darwin \
+    GOARCH="$GO_ARCH" \
+    go build \
+        -o gorilla-xray \
+        -trimpath \
+        -ldflags "-s -w -buildid= -X main.version=$VERSION" \
+        ./cmd/gorilla-xray/
+
+    ok "gorilla-xray built ($(format_size "$(stat -f%z gorilla-xray 2>/dev/null || stat -c%s gorilla-xray)"))"
 
     popd >/dev/null
 }
@@ -559,11 +568,22 @@ package_bundle() {
 
     local found_items=0
 
+    # Copy CLI binary
+    local cli_src="$WRAPPER_DIR/gorilla-xray"
+    if [[ -f "$cli_src" ]]; then
+        cp "$cli_src" "$bundle_dir/"
+        chmod +x "$bundle_dir/gorilla-xray"
+        ok "Bundled: gorilla-xray (CLI binary)"
+        found_items=$((found_items + 1))
+    else
+        err "gorilla-xray not found — run build step 'go' first"
+    fi
+
     # Copy XRayCore.dylib
     local dylib_src="$LIBRARIES_DIR/XRayCore.dylib"
     if [[ -f "$dylib_src" ]]; then
         cp "$dylib_src" "$bundle_dir/lib/"
-        ok "Bundled: XRayCore.dylib"
+        ok "Bundled: lib/XRayCore.dylib"
         found_items=$((found_items + 1))
     else
         err "XRayCore.dylib not found — run build step 'go' first"
@@ -587,7 +607,6 @@ package_bundle() {
         return 1
     fi
 
-    # Create a README for the bundle
     cat > "$bundle_dir/README.txt" <<EOF
 Invisible Gorilla XRay Client — macOS Distribution
 ===================================================
@@ -598,23 +617,52 @@ Built: $(date '+%Y-%m-%d %H:%M:%S')
 macOS: $(sw_vers -productVersion 2>/dev/null || echo 'unknown')
 
 Contents:
-  lib/XRayCore.dylib  — XRay proxy core engine (cgo c-shared library)
+  gorilla-xray        — Standalone CLI proxy client (run directly)
+  lib/XRayCore.dylib  — XRay proxy core engine (c-shared library for FFI)
   geoip.dat           — IP geolocation routing database
   geosite.dat         — Domain routing database
 
-Usage:
-  The XRayCore.dylib exports the following C functions:
+Quick Start:
+  # Start proxy with your xray config:
+  ./gorilla-xray -config your-config.json
+
+  # Start on a specific port with SOCKS5:
+  ./gorilla-xray -config config.json -port 1080 -socks
+
+  # Test connection latency:
+  ./gorilla-xray -config config.json -test
+
+  # Enable debug logging:
+  ./gorilla-xray -config config.json -log-level debug -log-path ./logs
+
+  # Show version:
+  ./gorilla-xray -version
+
+  # Show all options:
+  ./gorilla-xray -help
+
+macOS Proxy Setup:
+  After starting gorilla-xray, configure macOS to use the proxy:
+
+  # Enable HTTP proxy (System Preferences → Network → Proxies):
+  networksetup -setwebproxy "Wi-Fi" 127.0.0.1 10801
+  networksetup -setsecurewebproxy "Wi-Fi" 127.0.0.1 10801
+
+  # Or use SOCKS5 proxy:
+  networksetup -setsocksfirewallproxy "Wi-Fi" 127.0.0.1 1080
+
+  # Disable when done:
+  networksetup -setwebproxystate "Wi-Fi" off
+  networksetup -setsecurewebproxystate "Wi-Fi" off
+
+Library Usage (XRayCore.dylib):
+  The shared library exports C functions for embedding:
     - StartServer(config, port, logLevel, logPath, isSocks, isUdpEnabled)
     - StopServer()
     - TestConnection(config, port) -> int (ping ms, or error code)
     - GetXrayCoreVersion() -> char*
 
-  Load the library via dlopen() or equivalent FFI mechanism
-  in your application.
-
-  The geo databases should be placed in the same directory
-  as the process working directory, or configure xray-core
-  to look for them at a specific path.
+  Load via dlopen() or equivalent FFI in your application.
 
 Repository: https://github.com/hvkeyn/InvisibleGorilla-XRayClient
 EOF

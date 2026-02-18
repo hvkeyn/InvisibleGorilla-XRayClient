@@ -9,3 +9,4 @@
 # Build outputs
 /publish
 /dist
+/XRay-Wrapper/gorilla-xray
