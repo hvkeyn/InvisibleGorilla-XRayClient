@@ -16,6 +16,7 @@
     <x:String x:Key="Lang.Window.Main.ManageServerConfiguration">Manage server configuration</x:String>
 
     <x:String x:Key="Lang.Window.Server.Title">Servers</x:String>
+    <x:String x:Key="Lang.Window.Server.WindowTitle">Servers</x:String>
     <x:String x:Key="Lang.Window.Server.Configs">Configs</x:String>
     <x:String x:Key="Lang.Window.Server.Subscriptions">Subscriptions</x:String>
     <x:String x:Key="Lang.Window.Server.AddConfig.FromLink">Import from link</x:String>
@@ -25,6 +26,7 @@
     <x:String x:Key="Lang.Window.Server.AddSub.Placeholder">Paste or type subscription link</x:String>
 
     <x:String x:Key="Lang.Window.Settings.Title">Settings</x:String>
+    <x:String x:Key="Lang.Window.Settings.WindowTitle">Settings</x:String>
     <x:String x:Key="Lang.Window.Settings.Basic">Basic</x:String>
     <x:String x:Key="Lang.Window.Settings.Port">Port</x:String>
     <x:String x:Key="Lang.Window.Settings.TUN">TUN</x:String>
@@ -49,6 +51,7 @@
     <x:String x:Key="Lang.Window.Settings.Cancel">CANCEL</x:String>
 
     <x:String x:Key="Lang.Window.About.Title">About</x:String>
+    <x:String x:Key="Lang.Window.About.WindowTitle">About</x:String>
     <x:String x:Key="Lang.Window.About.Description">A free and open-source GUI client for Xray on macOS</x:String>
     <x:String x:Key="Lang.Window.About.Version">Version</x:String>
     <x:String x:Key="Lang.Window.About.XRayCoreVersion">XRay Core Version</x:String>
@@ -57,6 +60,7 @@
     <x:String x:Key="Lang.Window.About.Email">Contact us</x:String>
 
     <x:String x:Key="Lang.Window.Update.Title">Update</x:String>
+    <x:String x:Key="Lang.Window.Update.WindowTitle">Update</x:String>
     <x:String x:Key="Lang.Window.Update.Checking">Checking for updates...</x:String>
     <x:String x:Key="Lang.Window.Update.Available">A new version is available!</x:String>
     <x:String x:Key="Lang.Window.Update.Unavailable">You have the latest version.</x:String>
@@ -66,6 +70,7 @@
     <x:String x:Key="Lang.Window.Update.TryAgain">TRY AGAIN</x:String>
 
     <x:String x:Key="Lang.Window.Policy.Title">Privacy Policy</x:String>
+    <x:String x:Key="Lang.Window.Policy.WindowTitle">Privacy Policy</x:String>
 
     <x:String x:Key="Lang.ToolTip.About">About</x:String>
     <x:String x:Key="Lang.ToolTip.CheckForUpdates">Check for updates</x:String>
@@ -88,11 +93,39 @@
 
     <x:String x:Key="Lang.Message.AppAlreadyRunning">Application is already running!</x:String>
     <x:String x:Key="Lang.Message.NoConfig">No configuration selected. Would you like to add one?</x:String>
+    <x:String x:Key="Lang.Message.NoConfigsFound">No configurations found.</x:String>
     <x:String x:Key="Lang.Message.InvalidConfig">The selected configuration is invalid.</x:String>
+    <x:String x:Key="Lang.Message.InvalidSubscription">Invalid subscription.</x:String>
+    <x:String x:Key="Lang.Message.NoConfigFileSelected">No configuration file selected.</x:String>
+    <x:String x:Key="Lang.Message.NoConfigLinkEntered">No configuration link entered.</x:String>
+    <x:String x:Key="Lang.Message.NoSubscriptionLinkEntered">No subscription link entered.</x:String>
+    <x:String x:Key="Lang.Message.NoSubscriptionRemarksEntered">No subscription remarks entered.</x:String>
+    <x:String x:Key="Lang.Message.FileDoesntExists">File does not exist.</x:String>
+    <x:String x:Key="Lang.Message.DeleteConfirmation">Are you sure you want to delete?</x:String>
+    <x:String x:Key="Lang.Message.UnsopportedConfigLink">Unsupported config link format.</x:String>
+    <x:String x:Key="Lang.Message.UnsopportedSubscriptionLink">Unsupported subscription link format.</x:String>
     <x:String x:Key="Lang.Message.UnsupportedLink">Unsupported link format.</x:String>
     <x:String x:Key="Lang.Message.UnsupportedSubscriptionLink">Unsupported subscription link.</x:String>
+    <x:String x:Key="Lang.Message.WaitingForServerResponse">Waiting for server response...</x:String>
+    <x:String x:Key="Lang.Message.UpdateAvailable">A new version is available!</x:String>
+    <x:String x:Key="Lang.Message.YouHaveLatestVersion">You have the latest version.</x:String>
+    <x:String x:Key="Lang.Message.CantConnectToServer">Cannot connect to server.</x:String>
+    <x:String x:Key="Lang.Message.CantConnectToTunnelService">Cannot connect to tunnel service.</x:String>
+    <x:String x:Key="Lang.Message.CantProxySystem">Cannot enable system proxy.</x:String>
+    <x:String x:Key="Lang.Message.CantTunnelSystem">Cannot enable tunnel mode.</x:String>
+    <x:String x:Key="Lang.Message.NoLogFile">No log file found.</x:String>
+    <x:String x:Key="Lang.Message.NoFileChoosen">No file chosen.</x:String>
     <x:String x:Key="Lang.Message.CantConnect">Cannot connect to server.</x:String>
     <x:String x:Key="Lang.Message.CantProxy">Cannot enable proxy.</x:String>
     <x:String x:Key="Lang.Message.CantTunnel">Cannot connect to tunnel service.</x:String>
+
+    <x:String x:Key="Lang.Notify.Update">Check for update</x:String>
+
+    <x:String x:Key="Lang.Config.Check">Check</x:String>
+    <x:String x:Key="Lang.Config.Edit">Edit</x:String>
+    <x:String x:Key="Lang.Config.Share">Share</x:String>
+    <x:String x:Key="Lang.Config.Delete">Delete</x:String>
+    <x:String x:Key="Lang.Config.Log">Log</x:String>
+    <x:String x:Key="Lang.Config.Select">Select</x:String>
 
 </ResourceDictionary>

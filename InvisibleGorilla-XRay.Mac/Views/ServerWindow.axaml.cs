@@ -1,9 +1,15 @@
 using System;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Collections.Generic;
+using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 
 namespace InvisibleGorillaXRay.Mac.Views
 {
@@ -12,6 +18,7 @@ namespace InvisibleGorillaXRay.Mac.Views
     using Services;
     using Utilities;
     using Services.Analytics.ServerWindow;
+    using Services.Analytics.Configuration;
 
     public partial class ServerWindow : Window
     {
@@ -406,11 +413,12 @@ namespace InvisibleGorillaXRay.Mac.Views
                     ? Avalonia.Media.Brush.Parse("#3d3d3d")
                     : Avalonia.Media.Brushes.Transparent,
                 Padding = new Avalonia.Thickness(15, 8),
-                Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand)
+                Cursor = new Avalonia.Input.Cursor(StandardCursorType.Hand)
             };
 
             var grid = new Grid();
             grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
             grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
 
             var nameBlock = new TextBlock
@@ -418,9 +426,21 @@ namespace InvisibleGorillaXRay.Mac.Views
                 Text = config.Name,
                 Foreground = Avalonia.Media.Brushes.White,
                 FontSize = 14,
-                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis
             };
             Grid.SetColumn(nameBlock, 0);
+
+            var statusBlock = new TextBlock
+            {
+                Text = "",
+                FontSize = 11,
+                Foreground = Avalonia.Media.Brushes.Gray,
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                Margin = new Avalonia.Thickness(8, 0),
+                Tag = config.Path
+            };
+            Grid.SetColumn(statusBlock, 1);
 
             var deleteBtn = new Button
             {
@@ -431,34 +451,132 @@ namespace InvisibleGorillaXRay.Mac.Views
                 VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
                 Padding = new Avalonia.Thickness(4, 2)
             };
-            Grid.SetColumn(deleteBtn, 1);
+            Grid.SetColumn(deleteBtn, 2);
 
-            deleteBtn.Click += (s, e) =>
-            {
-                onDeleteConfig.Invoke(group, config.Path);
-                groupPath = config.Path;
-                if (group == GroupType.SUBSCRIPTION)
-                {
-                    List<Config> remaining = getAllSubscriptionConfigs.Invoke(groupPath);
-                    if (remaining == null || remaining.Count == 0)
-                        LoadGroupsList();
-                }
-                LoadConfigsList(group);
-                if (getCurrentConfigPath.Invoke() == config.Path)
-                    onUpdateConfig.Invoke(GetLastConfigPath(group));
-            };
+            var contextMenu = new ContextMenu();
 
-            border.PointerPressed += (s, e) =>
+            var selectItem = new MenuItem { Header = "Select" };
+            selectItem.Click += (s, e) =>
             {
                 onUpdateConfig.Invoke(config.Path);
                 RefreshSelection();
+                AnalyticsService.SendEvent(new SelectButtonClickedEvent());
+            };
+            contextMenu.Items.Add(selectItem);
+
+            var checkItem = new MenuItem { Header = "Check" };
+            checkItem.Click += (s, e) =>
+            {
+                statusBlock.Text = "...";
+                statusBlock.Foreground = Avalonia.Media.Brushes.Gray;
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        int ping = testConnection.Invoke(config.Path);
+                        Dispatcher.UIThread.InvokeAsync(() =>
+                        {
+                            if (ping >= 0)
+                            {
+                                statusBlock.Text = $"{ping}ms";
+                                statusBlock.Foreground = ping < 300
+                                    ? Avalonia.Media.Brush.Parse("#43b581")
+                                    : Avalonia.Media.Brush.Parse("#faa61a");
+                            }
+                            else
+                            {
+                                statusBlock.Text = "timeout";
+                                statusBlock.Foreground = Avalonia.Media.Brush.Parse("#f04747");
+                            }
+                        });
+                    }
+                    catch
+                    {
+                        Dispatcher.UIThread.InvokeAsync(() =>
+                        {
+                            statusBlock.Text = "error";
+                            statusBlock.Foreground = Avalonia.Media.Brush.Parse("#f04747");
+                        });
+                    }
+                });
+                AnalyticsService.SendEvent(new CheckButtonClickedEvent());
+            };
+            contextMenu.Items.Add(checkItem);
+
+            contextMenu.Items.Add(new Separator());
+
+            var shareItem = new MenuItem { Header = "Share (Copy Path)" };
+            shareItem.Click += (s, e) =>
+            {
+                try
+                {
+                    var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+                    clipboard?.SetTextAsync(config.Path);
+                }
+                catch { }
+                AnalyticsService.SendEvent(new ShareButtonClickedEvent());
+            };
+            contextMenu.Items.Add(shareItem);
+
+            var logItem = new MenuItem { Header = "Log" };
+            logItem.Click += (s, e) =>
+            {
+                try
+                {
+                    string logPath = getLogPath?.Invoke();
+                    if (!string.IsNullOrEmpty(logPath) && File.Exists(logPath))
+                        Process.Start("open", logPath);
+                }
+                catch { }
+                AnalyticsService.SendEvent(new LogButtonClickedEvent());
+            };
+            contextMenu.Items.Add(logItem);
+
+            contextMenu.Items.Add(new Separator());
+
+            var deleteItem = new MenuItem { Header = "Delete" };
+            deleteItem.Click += (s, e) =>
+            {
+                DeleteConfig(config, group);
+                AnalyticsService.SendEvent(new DeleteButtonClickedEvent());
+            };
+            contextMenu.Items.Add(deleteItem);
+
+            border.ContextMenu = contextMenu;
+
+            deleteBtn.Click += (s, e) => DeleteConfig(config, group);
+
+            border.PointerPressed += (s, e) =>
+            {
+                if (e.GetCurrentPoint(border).Properties.IsLeftButtonPressed)
+                {
+                    onUpdateConfig.Invoke(config.Path);
+                    RefreshSelection();
+                    AnalyticsService.SendEvent(new SelectButtonClickedEvent());
+                }
             };
 
             grid.Children.Add(nameBlock);
+            grid.Children.Add(statusBlock);
             grid.Children.Add(deleteBtn);
             border.Child = grid;
 
             return border;
+        }
+
+        private void DeleteConfig(Config config, GroupType group)
+        {
+            onDeleteConfig.Invoke(group, config.Path);
+            groupPath = config.Path;
+            if (group == GroupType.SUBSCRIPTION)
+            {
+                List<Config> remaining = getAllSubscriptionConfigs.Invoke(groupPath);
+                if (remaining == null || remaining.Count == 0)
+                    LoadGroupsList();
+            }
+            LoadConfigsList(group);
+            if (getCurrentConfigPath.Invoke() == config.Path)
+                onUpdateConfig.Invoke(GetLastConfigPath(group));
         }
 
         private void RefreshSelection()

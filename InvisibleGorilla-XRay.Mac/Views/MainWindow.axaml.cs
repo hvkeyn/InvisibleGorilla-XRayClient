@@ -377,8 +377,15 @@ namespace InvisibleGorillaXRay.Mac.Views
 
         protected override void OnClosing(WindowClosingEventArgs e)
         {
-            e.Cancel = true;
-            Hide();
+            if (isRunWorkerBusy)
+            {
+                e.Cancel = true;
+                WindowState = WindowState.Minimized;
+                return;
+            }
+
+            onStopServer?.Invoke();
+            try { onDisableMode?.Invoke(); } catch { }
         }
     }
 }

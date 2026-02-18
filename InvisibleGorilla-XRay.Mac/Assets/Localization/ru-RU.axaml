@@ -16,6 +16,7 @@
     <x:String x:Key="Lang.Window.Main.ManageServerConfiguration">Управление конфигурацией сервера</x:String>
 
     <x:String x:Key="Lang.Window.Server.Title">Серверы</x:String>
+    <x:String x:Key="Lang.Window.Server.WindowTitle">Серверы</x:String>
     <x:String x:Key="Lang.Window.Server.Configs">Конфигурации</x:String>
     <x:String x:Key="Lang.Window.Server.Subscriptions">Подписки</x:String>
     <x:String x:Key="Lang.Window.Server.AddConfig.FromLink">Импорт по ссылке</x:String>
@@ -25,6 +26,7 @@
     <x:String x:Key="Lang.Window.Server.AddSub.Placeholder">Вставьте или введите ссылку на подписку</x:String>
 
     <x:String x:Key="Lang.Window.Settings.Title">Настройки</x:String>
+    <x:String x:Key="Lang.Window.Settings.WindowTitle">Настройки</x:String>
     <x:String x:Key="Lang.Window.Settings.Basic">Основные</x:String>
     <x:String x:Key="Lang.Window.Settings.Port">Порт</x:String>
     <x:String x:Key="Lang.Window.Settings.TUN">TUN</x:String>
@@ -49,6 +51,7 @@
     <x:String x:Key="Lang.Window.Settings.Cancel">ОТМЕНА</x:String>
 
     <x:String x:Key="Lang.Window.About.Title">О программе</x:String>
+    <x:String x:Key="Lang.Window.About.WindowTitle">О программе</x:String>
     <x:String x:Key="Lang.Window.About.Description">Бесплатный GUI-клиент с открытым исходным кодом для Xray на macOS</x:String>
     <x:String x:Key="Lang.Window.About.Version">Версия</x:String>
     <x:String x:Key="Lang.Window.About.XRayCoreVersion">Версия XRay Core</x:String>
@@ -57,6 +60,7 @@
     <x:String x:Key="Lang.Window.About.Email">Связаться с нами</x:String>
 
     <x:String x:Key="Lang.Window.Update.Title">Обновление</x:String>
+    <x:String x:Key="Lang.Window.Update.WindowTitle">Обновление</x:String>
     <x:String x:Key="Lang.Window.Update.Checking">Проверка обновлений...</x:String>
     <x:String x:Key="Lang.Window.Update.Available">Доступна новая версия!</x:String>
     <x:String x:Key="Lang.Window.Update.Unavailable">У вас установлена последняя версия.</x:String>
@@ -66,6 +70,7 @@
     <x:String x:Key="Lang.Window.Update.TryAgain">ПОВТОРИТЬ</x:String>
 
     <x:String x:Key="Lang.Window.Policy.Title">Политика конфиденциальности</x:String>
+    <x:String x:Key="Lang.Window.Policy.WindowTitle">Политика конфиденциальности</x:String>
 
     <x:String x:Key="Lang.ToolTip.About">О программе</x:String>
     <x:String x:Key="Lang.ToolTip.CheckForUpdates">Проверить обновления</x:String>
@@ -88,11 +93,39 @@
 
     <x:String x:Key="Lang.Message.AppAlreadyRunning">Приложение уже запущено!</x:String>
     <x:String x:Key="Lang.Message.NoConfig">Конфигурация не выбрана. Хотите добавить?</x:String>
+    <x:String x:Key="Lang.Message.NoConfigsFound">Конфигурации не найдены.</x:String>
     <x:String x:Key="Lang.Message.InvalidConfig">Выбранная конфигурация недействительна.</x:String>
+    <x:String x:Key="Lang.Message.InvalidSubscription">Недействительная подписка.</x:String>
+    <x:String x:Key="Lang.Message.NoConfigFileSelected">Файл конфигурации не выбран.</x:String>
+    <x:String x:Key="Lang.Message.NoConfigLinkEntered">Ссылка на конфигурацию не введена.</x:String>
+    <x:String x:Key="Lang.Message.NoSubscriptionLinkEntered">Ссылка на подписку не введена.</x:String>
+    <x:String x:Key="Lang.Message.NoSubscriptionRemarksEntered">Примечания к подписке не введены.</x:String>
+    <x:String x:Key="Lang.Message.FileDoesntExists">Файл не существует.</x:String>
+    <x:String x:Key="Lang.Message.DeleteConfirmation">Вы уверены, что хотите удалить?</x:String>
+    <x:String x:Key="Lang.Message.UnsopportedConfigLink">Неподдерживаемый формат ссылки конфигурации.</x:String>
+    <x:String x:Key="Lang.Message.UnsopportedSubscriptionLink">Неподдерживаемый формат ссылки подписки.</x:String>
     <x:String x:Key="Lang.Message.UnsupportedLink">Неподдерживаемый формат ссылки.</x:String>
     <x:String x:Key="Lang.Message.UnsupportedSubscriptionLink">Неподдерживаемая ссылка на подписку.</x:String>
+    <x:String x:Key="Lang.Message.WaitingForServerResponse">Ожидание ответа сервера...</x:String>
+    <x:String x:Key="Lang.Message.UpdateAvailable">Доступна новая версия!</x:String>
+    <x:String x:Key="Lang.Message.YouHaveLatestVersion">У вас последняя версия.</x:String>
+    <x:String x:Key="Lang.Message.CantConnectToServer">Не удалось подключиться к серверу.</x:String>
+    <x:String x:Key="Lang.Message.CantConnectToTunnelService">Не удалось подключиться к туннельному сервису.</x:String>
+    <x:String x:Key="Lang.Message.CantProxySystem">Не удалось включить системный прокси.</x:String>
+    <x:String x:Key="Lang.Message.CantTunnelSystem">Не удалось включить туннельный режим.</x:String>
+    <x:String x:Key="Lang.Message.NoLogFile">Файл журнала не найден.</x:String>
+    <x:String x:Key="Lang.Message.NoFileChoosen">Файл не выбран.</x:String>
     <x:String x:Key="Lang.Message.CantConnect">Не удалось подключиться к серверу.</x:String>
     <x:String x:Key="Lang.Message.CantProxy">Не удалось включить прокси.</x:String>
     <x:String x:Key="Lang.Message.CantTunnel">Не удалось подключиться к туннельному сервису.</x:String>
+
+    <x:String x:Key="Lang.Notify.Update">Проверить обновление</x:String>
+
+    <x:String x:Key="Lang.Config.Check">Проверить</x:String>
+    <x:String x:Key="Lang.Config.Edit">Изменить</x:String>
+    <x:String x:Key="Lang.Config.Share">Поделиться</x:String>
+    <x:String x:Key="Lang.Config.Delete">Удалить</x:String>
+    <x:String x:Key="Lang.Config.Log">Журнал</x:String>
+    <x:String x:Key="Lang.Config.Select">Выбрать</x:String>
 
 </ResourceDictionary>

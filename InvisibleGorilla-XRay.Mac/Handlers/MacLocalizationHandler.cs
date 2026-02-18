@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
@@ -13,6 +14,7 @@ namespace InvisibleGorillaXRay.Mac.Handlers
     {
         private Func<string> getCurrentLanguage;
         private Dictionary<string, string> terms = new();
+        private ResourceDictionary? currentLangDict;
 
         public void Setup(Func<string> getCurrentLanguage)
         {
@@ -36,6 +38,9 @@ namespace InvisibleGorillaXRay.Mac.Handlers
             terms.Clear();
             try
             {
+                if (currentLangDict != null && Application.Current != null)
+                    Application.Current.Resources.MergedDictionaries.Remove(currentLangDict);
+
                 var uri = new Uri($"avares://InvisibleGorilla-XRay.Mac/Assets/Localization/{language}.axaml");
                 var dict = (ResourceDictionary)AvaloniaXamlLoader.Load(uri);
                 foreach (var kv in dict)
@@ -43,6 +48,8 @@ namespace InvisibleGorillaXRay.Mac.Handlers
                     if (kv.Key is string key && kv.Value is string val)
                         terms[key] = val;
                 }
+
+                currentLangDict = dict;
                 if (Application.Current != null)
                     Application.Current.Resources.MergedDictionaries.Add(dict);
             }
