@@ -9,12 +9,10 @@
 #   2. Build Go wrapper: XRayCore.dylib (c-shared) + gorilla-xray (CLI binary)
 #   3. Download geoip.dat and geosite.dat
 #   4. Build/publish .NET application (if cross-platform UI is available)
-#   5. Package distribution bundle with binary + data files
+#   5. Package .app bundle with GUI + engine + data files
 #
-# NOTE: The .NET WPF GUI (net7.0-windows) is Windows-only.
-#       On macOS this script builds the XRayCore engine + geo databases
-#       and packages them into a ready-to-use distribution bundle.
-#       For a macOS GUI, the project needs porting to Avalonia UI or MAUI.
+# The macOS GUI uses Avalonia UI (InvisibleGorilla-XRay.Mac project).
+# The WPF GUI (InvisibleGorilla-XRay) is Windows-only and is skipped.
 #
 # Usage:
 #   ./build-macos.sh                        # Full build (all steps)
@@ -36,6 +34,8 @@ readonly VERSION="3.2.5.0"
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly WRAPPER_DIR="$SCRIPT_DIR/XRay-Wrapper"
 readonly APP_DIR="$SCRIPT_DIR/InvisibleGorilla-XRay"
+readonly MAC_DIR="$SCRIPT_DIR/InvisibleGorilla-XRay.Mac"
+readonly CORE_DIR="$SCRIPT_DIR/InvisibleGorilla.Core"
 readonly LIBRARIES_DIR="$APP_DIR/Libraries"
 readonly SOLUTION_FILE="$SCRIPT_DIR/InvisibleGorilla-XRay.sln"
 
@@ -188,14 +188,13 @@ Architecture Detection:
   and selects the correct Go and .NET runtime identifiers.
 
 Platform Notes:
-  The .NET WPF GUI (net7.0-windows) is Windows-only.
-  On macOS, this script builds:
-    - XRayCore.dylib    (xray-core proxy engine)
-    - geoip.dat         (IP geolocation database)
-    - geosite.dat       (domain routing database)
+  The macOS GUI uses Avalonia UI (InvisibleGorilla-XRay.Mac).
+  This script builds:
+    - XRayCore.dylib              (xray-core proxy engine, Go c-shared)
+    - geoip.dat / geosite.dat     (geo routing databases)
+    - InvisibleGorilla-XRay.app   (macOS application bundle)
 
-  These are packaged into a distribution bundle that can be used
-  with any macOS-compatible frontend or as a standalone library.
+  The resulting .app can be dragged into /Applications.
 
 Examples:
   ./build-macos.sh                              # Full build
@@ -491,68 +490,39 @@ download_geo_files() {
     ok "geosite.dat ($geosite_size)"
 }
 
-# ─── Step 3: Build .NET application ──────────────────────────────────────────
+# ─── Step 3: Build .NET Avalonia application ─────────────────────────────────
 
 build_dotnet_app() {
     if $SKIP_DOTNET; then
         info "Step 3: .NET build skipped (--skip-dotnet)"
-        info "The WPF GUI (net7.0-windows) requires Windows."
-        info "For macOS GUI, port the project to Avalonia UI or .NET MAUI."
         return 0
     fi
 
-    if $PUBLISH; then
-        step_header "Step 3: Publish .NET ($CONFIGURATION, $RUNTIME)"
-    else
-        step_header "Step 3: Build .NET ($CONFIGURATION)"
-    fi
+    step_header "Step 3: Build Avalonia macOS GUI ($CONFIGURATION, $RUNTIME)"
 
-    if [[ ! -f "$SOLUTION_FILE" ]]; then
-        err "Solution file not found: $SOLUTION_FILE"
+    local mac_csproj="$MAC_DIR/InvisibleGorilla-XRay.Mac.csproj"
+    if [[ ! -f "$mac_csproj" ]]; then
+        err "Avalonia project not found: $mac_csproj"
         exit 1
-    fi
-
-    # Check if the project targets windows-only
-    local csproj="$APP_DIR/InvisibleGorilla-XRay.csproj"
-    if [[ -f "$csproj" ]] && grep -q 'net7.0-windows\|UseWPF' "$csproj"; then
-        echo ""
-        err "┌─────────────────────────────────────────────────────────┐"
-        err "│  The .NET project uses WPF (net7.0-windows)            │"
-        err "│  WPF is Windows-only and cannot build on macOS.        │"
-        err "│                                                        │"
-        err "│  To build a macOS GUI, the project needs porting to:   │"
-        err "│    • Avalonia UI (https://avaloniaui.net)              │"
-        err "│    • .NET MAUI   (https://dot.net/maui)               │"
-        err "│                                                        │"
-        err "│  The XRayCore.dylib + geo files are ready to use.     │"
-        err "│  Use --skip-dotnet to suppress this message.           │"
-        err "└─────────────────────────────────────────────────────────┘"
-        echo ""
-        return 0
     fi
 
     pushd "$SCRIPT_DIR" >/dev/null
 
     info "Restoring NuGet packages..."
-    dotnet restore "$SOLUTION_FILE"
+    dotnet restore "$mac_csproj"
     ok "NuGet packages restored"
 
-    if $PUBLISH; then
-        local abs_output
-        abs_output="$(mkdir -p "$OUTPUT_DIR" && cd "$OUTPUT_DIR" && pwd)"
+    local abs_output
+    abs_output="$(mkdir -p "$OUTPUT_DIR" && cd "$OUTPUT_DIR" && pwd)"
 
-        info "Publishing application..."
-        dotnet publish "$SOLUTION_FILE" \
-            -c "$CONFIGURATION" \
-            -r "$RUNTIME" \
-            --self-contained true \
-            -o "$abs_output"
-        ok "Published to: $abs_output"
-    else
-        info "Building application..."
-        dotnet build "$SOLUTION_FILE" -c "$CONFIGURATION"
-        ok "Application built ($CONFIGURATION)"
-    fi
+    info "Publishing Avalonia GUI..."
+    dotnet publish "$mac_csproj" \
+        -c "$CONFIGURATION" \
+        -r "$RUNTIME" \
+        --self-contained true \
+        -p:PublishSingleFile=false \
+        -o "$abs_output"
+    ok "Published to: $abs_output"
 
     popd >/dev/null
 }
@@ -560,30 +530,46 @@ build_dotnet_app() {
 # ─── Step 4: Package distribution bundle ─────────────────────────────────────
 
 package_bundle() {
-    step_header "Step 4: Package distribution bundle"
+    step_header "Step 4: Package macOS .app bundle"
 
-    local bundle_dir="$SCRIPT_DIR/$DIST_DIR/InvisibleGorilla-XRay-macOS-$ARCH"
-    rm -rf "$bundle_dir"
-    mkdir -p "$bundle_dir/lib"
+    local app_bundle="$SCRIPT_DIR/$DIST_DIR/InvisibleGorilla-XRay.app"
+    local contents="$app_bundle/Contents"
+    local macos_dir="$contents/MacOS"
+    local resources="$contents/Resources"
+    local frameworks="$contents/Frameworks"
+
+    rm -rf "$app_bundle"
+    mkdir -p "$macos_dir" "$resources" "$frameworks"
 
     local found_items=0
+    local publish_dir="$SCRIPT_DIR/$OUTPUT_DIR"
 
-    # Copy CLI binary
-    local cli_src="$WRAPPER_DIR/gorilla-xray"
-    if [[ -f "$cli_src" ]]; then
-        cp "$cli_src" "$bundle_dir/"
-        chmod +x "$bundle_dir/gorilla-xray"
-        ok "Bundled: gorilla-xray (CLI binary)"
+    # Copy published Avalonia app files
+    if [[ -d "$publish_dir" ]] && ls "$publish_dir"/*.dll &>/dev/null 2>&1; then
+        cp -R "$publish_dir/"* "$macos_dir/"
+        chmod +x "$macos_dir/InvisibleGorilla-XRay.Mac" 2>/dev/null || true
+        ok "Bundled: Avalonia GUI files"
         found_items=$((found_items + 1))
     else
-        err "gorilla-xray not found — run build step 'go' first"
+        info "Avalonia publish output not found, checking for CLI binary..."
+    fi
+
+    # Copy CLI binary as fallback
+    local cli_src="$WRAPPER_DIR/gorilla-xray"
+    if [[ -f "$cli_src" ]]; then
+        cp "$cli_src" "$macos_dir/"
+        chmod +x "$macos_dir/gorilla-xray"
+        ok "Bundled: gorilla-xray (CLI binary)"
+        found_items=$((found_items + 1))
     fi
 
     # Copy XRayCore.dylib
     local dylib_src="$LIBRARIES_DIR/XRayCore.dylib"
     if [[ -f "$dylib_src" ]]; then
-        cp "$dylib_src" "$bundle_dir/lib/"
-        ok "Bundled: lib/XRayCore.dylib"
+        mkdir -p "$macos_dir/Libraries"
+        cp "$dylib_src" "$frameworks/"
+        cp "$dylib_src" "$macos_dir/Libraries/"
+        ok "Bundled: XRayCore.dylib"
         found_items=$((found_items + 1))
     else
         err "XRayCore.dylib not found — run build step 'go' first"
@@ -593,7 +579,8 @@ package_bundle() {
     for dat in geoip.dat geosite.dat; do
         local dat_src="$APP_DIR/$dat"
         if [[ -f "$dat_src" ]]; then
-            cp "$dat_src" "$bundle_dir/"
+            cp "$dat_src" "$resources/"
+            cp "$dat_src" "$macos_dir/"
             ok "Bundled: $dat"
             found_items=$((found_items + 1))
         else
@@ -603,75 +590,58 @@ package_bundle() {
 
     if (( found_items == 0 )); then
         err "No files to bundle. Run the full build first."
-        rm -rf "$bundle_dir"
+        rm -rf "$app_bundle"
         return 1
     fi
 
-    cat > "$bundle_dir/README.txt" <<EOF
-Invisible Gorilla XRay Client — macOS Distribution
-===================================================
-
-Version: $VERSION
-Architecture: $ARCH ($(uname -m))
-Built: $(date '+%Y-%m-%d %H:%M:%S')
-macOS: $(sw_vers -productVersion 2>/dev/null || echo 'unknown')
-
-Contents:
-  gorilla-xray        — Standalone CLI proxy client (run directly)
-  lib/XRayCore.dylib  — XRay proxy core engine (c-shared library for FFI)
-  geoip.dat           — IP geolocation routing database
-  geosite.dat         — Domain routing database
-
-Quick Start:
-  # Start proxy with your xray config:
-  ./gorilla-xray -config your-config.json
-
-  # Start on a specific port with SOCKS5:
-  ./gorilla-xray -config config.json -port 1080 -socks
-
-  # Test connection latency:
-  ./gorilla-xray -config config.json -test
-
-  # Enable debug logging:
-  ./gorilla-xray -config config.json -log-level debug -log-path ./logs
-
-  # Show version:
-  ./gorilla-xray -version
-
-  # Show all options:
-  ./gorilla-xray -help
-
-macOS Proxy Setup:
-  After starting gorilla-xray, configure macOS to use the proxy:
-
-  # Enable HTTP proxy (System Preferences → Network → Proxies):
-  networksetup -setwebproxy "Wi-Fi" 127.0.0.1 10801
-  networksetup -setsecurewebproxy "Wi-Fi" 127.0.0.1 10801
-
-  # Or use SOCKS5 proxy:
-  networksetup -setsocksfirewallproxy "Wi-Fi" 127.0.0.1 1080
-
-  # Disable when done:
-  networksetup -setwebproxystate "Wi-Fi" off
-  networksetup -setsecurewebproxystate "Wi-Fi" off
-
-Library Usage (XRayCore.dylib):
-  The shared library exports C functions for embedding:
-    - StartServer(config, port, logLevel, logPath, isSocks, isUdpEnabled)
-    - StopServer()
-    - TestConnection(config, port) -> int (ping ms, or error code)
-    - GetXrayCoreVersion() -> char*
-
-  Load via dlopen() or equivalent FFI in your application.
-
-Repository: https://github.com/hvkeyn/InvisibleGorilla-XRayClient
-EOF
-    ok "Bundled: README.txt"
+    # Create Info.plist
+    cat > "$contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Invisible Gorilla XRay</string>
+    <key>CFBundleDisplayName</key>
+    <string>Invisible Gorilla XRay</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.invisiblegorilla.xray</string>
+    <key>CFBundleVersion</key>
+    <string>$VERSION</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$VERSION</string>
+    <key>CFBundleExecutable</key>
+    <string>InvisibleGorilla-XRay.Mac</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleSignature</key>
+    <string>IGXR</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>Invisible Gorilla XRay URL</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>invxray</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>
+PLIST
+    ok "Bundled: Info.plist"
 
     # Create archive
     local archive_name="InvisibleGorilla-XRay-macOS-${ARCH}-v${VERSION}.tar.gz"
     pushd "$SCRIPT_DIR/$DIST_DIR" >/dev/null
-    tar -czf "$archive_name" "InvisibleGorilla-XRay-macOS-$ARCH"
+    tar -czf "$archive_name" "InvisibleGorilla-XRay.app"
     popd >/dev/null
 
     local archive_path="$SCRIPT_DIR/$DIST_DIR/$archive_name"
@@ -679,19 +649,11 @@ EOF
     archive_size="$(format_size "$(stat -f%z "$archive_path" 2>/dev/null || stat -c%s "$archive_path")")"
 
     echo ""
-    ok "Distribution bundle created:"
-    echo -e "     ${DIM}Directory: $bundle_dir${NC}"
-    echo -e "     ${DIM}Archive:   $archive_path ($archive_size)${NC}"
+    ok ".app bundle created:"
+    echo -e "     ${DIM}App:     $app_bundle${NC}"
+    echo -e "     ${DIM}Archive: $archive_path ($archive_size)${NC}"
     echo ""
-    echo -e "     ${DIM}Contents:${NC}"
-    ls -lh "$bundle_dir/" | tail -n +2 | while read -r line; do
-        echo -e "     ${DIM}  $line${NC}"
-    done
-    if [[ -d "$bundle_dir/lib" ]]; then
-        ls -lh "$bundle_dir/lib/" | tail -n +2 | while read -r line; do
-            echo -e "     ${DIM}  lib/$line${NC}"
-        done
-    fi
+    echo -e "     ${DIM}To install: drag InvisibleGorilla-XRay.app to /Applications${NC}"
 }
 
 # ─── Main ─────────────────────────────────────────────────────────────────────

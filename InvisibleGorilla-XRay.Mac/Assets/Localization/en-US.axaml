@@ -1,0 +1,131 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <x:String x:Key="Lang.Run">RUN</x:String>
+    <x:String x:Key="Lang.Stop">STOP</x:String>
+    <x:String x:Key="Lang.Cancel">CANCEL</x:String>
+
+    <x:String x:Key="Lang.Status.Stopped">Stopped</x:String>
+    <x:String x:Key="Lang.Status.Running">Running</x:String>
+    <x:String x:Key="Lang.Status.WaitForRun">Wait for running</x:String>
+
+    <x:String x:Key="Lang.Message.NoServerConfiguration">No server configuration</x:String>
+    <x:String x:Key="Lang.Message.ConfigHint">Tap the plus to add a new one</x:String>
+
+    <x:String x:Key="Lang.Window.Main.ManageServerConfiguration">Manage server configuration</x:String>
+
+    <x:String x:Key="Lang.Window.Server.Title">Servers</x:String>
+    <x:String x:Key="Lang.Window.Server.WindowTitle">Servers</x:String>
+    <x:String x:Key="Lang.Window.Server.Configs">Configs</x:String>
+    <x:String x:Key="Lang.Window.Server.Subscriptions">Subscriptions</x:String>
+    <x:String x:Key="Lang.Window.Server.AddConfig.FromLink">Import from link</x:String>
+    <x:String x:Key="Lang.Window.Server.AddConfig.FromFile">Import from file</x:String>
+    <x:String x:Key="Lang.Window.Server.AddConfig.Placeholder">Paste or type config link</x:String>
+    <x:String x:Key="Lang.Window.Server.AddSub.FromLink">Import from link</x:String>
+    <x:String x:Key="Lang.Window.Server.AddSub.Placeholder">Paste or type subscription link</x:String>
+
+    <x:String x:Key="Lang.Window.Settings.Title">Settings</x:String>
+    <x:String x:Key="Lang.Window.Settings.WindowTitle">Settings</x:String>
+    <x:String x:Key="Lang.Window.Settings.Basic">Basic</x:String>
+    <x:String x:Key="Lang.Window.Settings.Port">Port</x:String>
+    <x:String x:Key="Lang.Window.Settings.TUN">TUN</x:String>
+    <x:String x:Key="Lang.Window.Settings.Log">Log</x:String>
+    <x:String x:Key="Lang.Window.Settings.Language">Language</x:String>
+    <x:String x:Key="Lang.Window.Settings.Mode">Mode</x:String>
+    <x:String x:Key="Lang.Window.Settings.Protocol">Protocol</x:String>
+    <x:String x:Key="Lang.Window.Settings.RunAtStartup">Run at startup</x:String>
+    <x:String x:Key="Lang.Window.Settings.SendAnalytics">Send anonymous usage data</x:String>
+    <x:String x:Key="Lang.Window.Settings.StartHidden">Start hidden</x:String>
+    <x:String x:Key="Lang.Window.Settings.AutoConnect">Auto connect</x:String>
+    <x:String x:Key="Lang.Window.Settings.SystemProxy">System proxy</x:String>
+    <x:String x:Key="Lang.Window.Settings.UDP">UDP</x:String>
+    <x:String x:Key="Lang.Window.Settings.ProxyPort">Proxy port</x:String>
+    <x:String x:Key="Lang.Window.Settings.TunPort">TUN port</x:String>
+    <x:String x:Key="Lang.Window.Settings.TestPort">Test port</x:String>
+    <x:String x:Key="Lang.Window.Settings.TunIp">TUN IP</x:String>
+    <x:String x:Key="Lang.Window.Settings.Dns">DNS</x:String>
+    <x:String x:Key="Lang.Window.Settings.LogLevel">Log level</x:String>
+    <x:String x:Key="Lang.Window.Settings.LogPath">Log file path</x:String>
+    <x:String x:Key="Lang.Window.Settings.Confirm">CONFIRM</x:String>
+    <x:String x:Key="Lang.Window.Settings.Cancel">CANCEL</x:String>
+
+    <x:String x:Key="Lang.Window.About.Title">About</x:String>
+    <x:String x:Key="Lang.Window.About.WindowTitle">About</x:String>
+    <x:String x:Key="Lang.Window.About.Description">A free and open-source GUI client for Xray on macOS</x:String>
+    <x:String x:Key="Lang.Window.About.Version">Version</x:String>
+    <x:String x:Key="Lang.Window.About.XRayCoreVersion">XRay Core Version</x:String>
+    <x:String x:Key="Lang.Window.About.SourceCode">Source code on GitHub</x:String>
+    <x:String x:Key="Lang.Window.About.BugReport">Bug report &amp; feature request</x:String>
+    <x:String x:Key="Lang.Window.About.Email">Contact us</x:String>
+
+    <x:String x:Key="Lang.Window.Update.Title">Update</x:String>
+    <x:String x:Key="Lang.Window.Update.WindowTitle">Update</x:String>
+    <x:String x:Key="Lang.Window.Update.Checking">Checking for updates...</x:String>
+    <x:String x:Key="Lang.Window.Update.Available">A new version is available!</x:String>
+    <x:String x:Key="Lang.Window.Update.Unavailable">You have the latest version.</x:String>
+    <x:String x:Key="Lang.Window.Update.Error">Unable to check for updates.</x:String>
+    <x:String x:Key="Lang.Window.Update.Update">UPDATE</x:String>
+    <x:String x:Key="Lang.Window.Update.Close">CLOSE</x:String>
+    <x:String x:Key="Lang.Window.Update.TryAgain">TRY AGAIN</x:String>
+
+    <x:String x:Key="Lang.Window.Policy.Title">Privacy Policy</x:String>
+    <x:String x:Key="Lang.Window.Policy.WindowTitle">Privacy Policy</x:String>
+
+    <x:String x:Key="Lang.ToolTip.About">About</x:String>
+    <x:String x:Key="Lang.ToolTip.CheckForUpdates">Check for updates</x:String>
+    <x:String x:Key="Lang.ToolTip.Settings">Settings</x:String>
+    <x:String x:Key="Lang.ToolTip.BugReporting">Bug report</x:String>
+    <x:String x:Key="Lang.ToolTip.SourceCodeOnGitHub">Source code on GitHub</x:String>
+
+    <x:String x:Key="Lang.Notify.Open">Open</x:String>
+    <x:String x:Key="Lang.Notify.Mode">Mode</x:String>
+    <x:String x:Key="Lang.Notify.Mode.Proxy">Proxy</x:String>
+    <x:String x:Key="Lang.Notify.Mode.TUN">TUN</x:String>
+    <x:String x:Key="Lang.Notify.CheckForUpdate">Check for update</x:String>
+    <x:String x:Key="Lang.Notify.About">About</x:String>
+    <x:String x:Key="Lang.Notify.Close">Close</x:String>
+
+    <x:String x:Key="Lang.Config.Status.NotChecked">Not checked</x:String>
+    <x:String x:Key="Lang.Config.Status.Available">Available</x:String>
+    <x:String x:Key="Lang.Config.Status.Timeout">Timeout</x:String>
+    <x:String x:Key="Lang.Config.Status.Error">Error</x:String>
+
+    <x:String x:Key="Lang.Message.AppAlreadyRunning">Application is already running!</x:String>
+    <x:String x:Key="Lang.Message.NoConfig">No configuration selected. Would you like to add one?</x:String>
+    <x:String x:Key="Lang.Message.NoConfigsFound">No configurations found.</x:String>
+    <x:String x:Key="Lang.Message.InvalidConfig">The selected configuration is invalid.</x:String>
+    <x:String x:Key="Lang.Message.InvalidSubscription">Invalid subscription.</x:String>
+    <x:String x:Key="Lang.Message.NoConfigFileSelected">No configuration file selected.</x:String>
+    <x:String x:Key="Lang.Message.NoConfigLinkEntered">No configuration link entered.</x:String>
+    <x:String x:Key="Lang.Message.NoSubscriptionLinkEntered">No subscription link entered.</x:String>
+    <x:String x:Key="Lang.Message.NoSubscriptionRemarksEntered">No subscription remarks entered.</x:String>
+    <x:String x:Key="Lang.Message.FileDoesntExists">File does not exist.</x:String>
+    <x:String x:Key="Lang.Message.DeleteConfirmation">Are you sure you want to delete?</x:String>
+    <x:String x:Key="Lang.Message.UnsopportedConfigLink">Unsupported config link format.</x:String>
+    <x:String x:Key="Lang.Message.UnsopportedSubscriptionLink">Unsupported subscription link format.</x:String>
+    <x:String x:Key="Lang.Message.UnsupportedLink">Unsupported link format.</x:String>
+    <x:String x:Key="Lang.Message.UnsupportedSubscriptionLink">Unsupported subscription link.</x:String>
+    <x:String x:Key="Lang.Message.WaitingForServerResponse">Waiting for server response...</x:String>
+    <x:String x:Key="Lang.Message.UpdateAvailable">A new version is available!</x:String>
+    <x:String x:Key="Lang.Message.YouHaveLatestVersion">You have the latest version.</x:String>
+    <x:String x:Key="Lang.Message.CantConnectToServer">Cannot connect to server.</x:String>
+    <x:String x:Key="Lang.Message.CantConnectToTunnelService">Cannot connect to tunnel service.</x:String>
+    <x:String x:Key="Lang.Message.CantProxySystem">Cannot enable system proxy.</x:String>
+    <x:String x:Key="Lang.Message.CantTunnelSystem">Cannot enable tunnel mode.</x:String>
+    <x:String x:Key="Lang.Message.NoLogFile">No log file found.</x:String>
+    <x:String x:Key="Lang.Message.NoFileChoosen">No file chosen.</x:String>
+    <x:String x:Key="Lang.Message.CantConnect">Cannot connect to server.</x:String>
+    <x:String x:Key="Lang.Message.CantProxy">Cannot enable proxy.</x:String>
+    <x:String x:Key="Lang.Message.CantTunnel">Cannot connect to tunnel service.</x:String>
+
+    <x:String x:Key="Lang.Notify.Update">Check for update</x:String>
+
+    <x:String x:Key="Lang.Config.Check">Check</x:String>
+    <x:String x:Key="Lang.Config.Edit">Edit</x:String>
+    <x:String x:Key="Lang.Config.Share">Share</x:String>
+    <x:String x:Key="Lang.Config.Delete">Delete</x:String>
+    <x:String x:Key="Lang.Config.Log">Log</x:String>
+    <x:String x:Key="Lang.Config.Select">Select</x:String>
+
+</ResourceDictionary>

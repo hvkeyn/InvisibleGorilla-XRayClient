@@ -1,6 +1,10 @@
 /Files
 /InvisibleGorilla-XRay/bin
 /InvisibleGorilla-XRay/obj
+/InvisibleGorilla-XRay.Mac/bin
+/InvisibleGorilla-XRay.Mac/obj
+/InvisibleGorilla.Core/bin
+/InvisibleGorilla.Core/obj
 *.dll
 *.dat
 *.exe
