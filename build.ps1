@@ -245,9 +245,8 @@ function Invoke-Download {
             Write-Host "`r$($line.PadRight(90))" -ForegroundColor DarkGray
 
             $actualSize = if (Test-Path $OutFile) { (Get-Item $OutFile).Length } else { 0 }
-            $minRequired = if ($MinimumSize -gt 0) { $MinimumSize } else { 1MB }
-            if ($actualSize -lt $minRequired) {
-                throw "Download incomplete: $(Format-FileSize $actualSize) received, minimum $(Format-FileSize $minRequired)"
+            if ($MinimumSize -gt 0 -and $actualSize -lt $MinimumSize) {
+                throw "Download incomplete: $(Format-FileSize $actualSize) received, minimum $(Format-FileSize $MinimumSize)"
             }
             break
         }
@@ -266,13 +265,16 @@ function Invoke-Download {
                     $ProgressPreference = 'SilentlyContinue'
                     Invoke-WebRequest -Uri $Uri -OutFile $OutFile -UseBasicParsing
                     $ProgressPreference = $prevPref
-                    $fbMinRequired = if ($MinimumSize -gt 0) { $MinimumSize } else { 1MB }
-                    if ((Test-Path $OutFile) -and (Get-Item $OutFile).Length -ge $fbMinRequired) {
-                        $fbSize = Format-FileSize (Get-Item $OutFile).Length
-                        Write-Host "     $fbSize" -ForegroundColor DarkGray
-                        break
+                    if (Test-Path $OutFile) {
+                        $fbActual = (Get-Item $OutFile).Length
+                        if ($MinimumSize -gt 0 -and $fbActual -lt $MinimumSize) {
+                            Remove-Item $OutFile -Force -ErrorAction SilentlyContinue
+                        }
+                        else {
+                            Write-Host "     $(Format-FileSize $fbActual)" -ForegroundColor DarkGray
+                            break
+                        }
                     }
-                    if (Test-Path $OutFile) { Remove-Item $OutFile -Force -ErrorAction SilentlyContinue }
                 }
                 catch {
                     $ProgressPreference = $prevPref
