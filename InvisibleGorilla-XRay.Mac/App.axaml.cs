@@ -1,12 +1,13 @@
 using System;
-using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 
 namespace InvisibleGorillaXRay.Mac
 {
     using Managers;
+    using Views;
 
     public partial class App : Application
     {
@@ -22,6 +23,8 @@ namespace InvisibleGorillaXRay.Mac
         {
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
+                desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
                 appManager = new MacAppManager(desktop.Args ?? Array.Empty<string>());
                 appManager.Initialize();
 

@@ -17,6 +17,7 @@ namespace InvisibleGorillaXRay.Mac.Views
     {
         private bool isRerunRequest;
         private bool isRunWorkerBusy;
+        private bool isDialogOpen;
 
         private Func<bool> isNeedToShowPolicyWindow;
         private Func<bool> shouldStartHidden;
@@ -232,8 +233,9 @@ namespace InvisibleGorillaXRay.Mac.Views
             });
         }
 
-        private void OnManageServersClick(object sender, PointerPressedEventArgs e)
+        private void OnManageServersClick(object sender, TappedEventArgs e)
         {
+            e.Handled = true;
             OpenServerWindow();
             AnalyticsService.SendEvent(new ManageServersButtonClickedEvent());
         }
@@ -295,7 +297,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             if (!shouldStartHidden.Invoke())
                 return;
 
-            Hide();
+            WindowState = WindowState.Minimized;
         }
 
         private void TryAutoConnect()
@@ -320,16 +322,28 @@ namespace InvisibleGorillaXRay.Mac.Views
 
         private async void OpenServerWindow()
         {
-            ServerWindow serverWindow = openServerWindow.Invoke();
-            await serverWindow.ShowDialog(this);
-            UpdateUI();
+            if (isDialogOpen) return;
+            isDialogOpen = true;
+            try
+            {
+                ServerWindow serverWindow = openServerWindow.Invoke();
+                await serverWindow.ShowDialog(this);
+                UpdateUI();
+            }
+            finally { isDialogOpen = false; }
         }
 
         private async void OpenSettingsWindow()
         {
-            SettingsWindow settingsWindow = openSettingsWindow.Invoke();
-            await settingsWindow.ShowDialog(this);
-            UpdateUI();
+            if (isDialogOpen) return;
+            isDialogOpen = true;
+            try
+            {
+                SettingsWindow settingsWindow = openSettingsWindow.Invoke();
+                await settingsWindow.ShowDialog(this);
+                UpdateUI();
+            }
+            finally { isDialogOpen = false; }
         }
 
         private void OpenUpdateWindow()
@@ -377,10 +391,17 @@ namespace InvisibleGorillaXRay.Mac.Views
             buttonStop.IsVisible = false;
         }
 
+        public void ShowAndActivate()
+        {
+            WindowState = WindowState.Normal;
+            Show();
+            Activate();
+        }
+
         protected override void OnClosing(WindowClosingEventArgs e)
         {
             e.Cancel = true;
-            Hide();
+            WindowState = WindowState.Minimized;
         }
     }
 }

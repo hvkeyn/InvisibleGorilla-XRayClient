@@ -4,8 +4,8 @@
         Title="Invisible Gorilla XRay"
         Height="550" 
         Width="400"
-        MinHeight="550" MaxHeight="550"
-        MinWidth="400" MaxWidth="400"
+        MinHeight="549" MaxHeight="551"
+        MinWidth="399" MaxWidth="401"
         CanResize="True"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource Color.DarkGray}">
@@ -140,7 +140,7 @@
                     HorizontalAlignment="Center" VerticalAlignment="Top" 
                     Margin="0" Foreground="{StaticResource Color.Blue}" 
                     FontWeight="Normal" FontSize="14" Cursor="Hand"
-                    PointerPressed="OnManageServersClick"/>
+                    Tapped="OnManageServersClick"/>
             </StackPanel>
 
             <!-- Run button -->
