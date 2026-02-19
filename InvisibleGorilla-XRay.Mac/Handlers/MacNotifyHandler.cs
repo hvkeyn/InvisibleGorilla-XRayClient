@@ -1,7 +1,9 @@
 using System;
-using System.Collections.Generic;
+using System.IO;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using InvisibleGorillaXRay.Handlers;
 using InvisibleGorillaXRay.Models;
@@ -78,6 +80,7 @@ namespace InvisibleGorillaXRay.Mac.Handlers
                     var trayIcon = new TrayIcon
                     {
                         ToolTipText = "Invisible Gorilla XRay",
+                        Icon = CreateMenuBarIcon(),
                         Menu = menu
                     };
 
@@ -90,6 +93,31 @@ namespace InvisibleGorillaXRay.Mac.Handlers
                 }
                 catch { }
             });
+        }
+
+        private WindowIcon CreateMenuBarIcon()
+        {
+            try
+            {
+                int size = 44;
+                var visual = new Avalonia.Controls.Shapes.Rectangle { Width = size, Height = size };
+                if (Application.Current?.TryFindResource("Icon.InvisibleGorilla", out var res) == true && res is IBrush brush)
+                    visual.Fill = brush;
+                else
+                    visual.Fill = new SolidColorBrush(Color.Parse("#4CAF50"));
+
+                visual.Measure(new Size(size, size));
+                visual.Arrange(new Rect(0, 0, size, size));
+
+                var rtb = new RenderTargetBitmap(new PixelSize(size, size));
+                rtb.Render(visual);
+
+                using var stream = new MemoryStream();
+                rtb.Save(stream);
+                stream.Position = 0;
+                return new WindowIcon(stream);
+            }
+            catch { return null; }
         }
 
         public void CheckModeItem()

@@ -3,9 +3,10 @@
         x:Class="InvisibleGorillaXRay.Mac.Views.UpdateWindow"
         Title="Invisible Gorilla XRay - Update"
         Height="450" 
-        Width="350" 
+        Width="350"
+        MinHeight="450" MaxHeight="450"
+        MinWidth="350" MaxWidth="350"
         WindowStartupLocation="CenterOwner"
-        CanResize="False"
         ShowInTaskbar="False"
         Background="{StaticResource Color.DarkGray}">
 

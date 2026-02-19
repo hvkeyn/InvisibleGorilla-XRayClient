@@ -527,6 +527,68 @@ build_dotnet_app() {
     popd >/dev/null
 }
 
+# ─── Icon generation ──────────────────────────────────────────────────────────
+
+generate_app_icon() {
+    local output_icns="$1"
+    local tmpdir="/tmp/igxray-icon-$$"
+    local iconset="$tmpdir/AppIcon.iconset"
+
+    mkdir -p "$iconset"
+
+    info "Generating app icon..."
+
+    python3 -c "
+import math, struct, zlib, sys
+W = H = 512
+cx, cy, r = W//2, H//2, W//2 - 10
+raw = bytearray()
+for y in range(H):
+    raw.append(0)
+    for x in range(W):
+        dx, dy = x - cx, y - cy
+        d = math.sqrt(dx*dx + dy*dy)
+        if d <= r - 3:
+            raw.extend((76, 175, 80, 255))
+        elif d <= r:
+            t = (d - r + 3) / 3.0
+            a = int(255 * (1 - t))
+            raw.extend((76, 175, 80, max(0, a)))
+        else:
+            raw.extend((0, 0, 0, 0))
+def chunk(t, d):
+    c = t + d
+    return struct.pack('>I', len(d)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
+with open(sys.argv[1], 'wb') as f:
+    f.write(b'\x89PNG\r\n\x1a\n')
+    f.write(chunk(b'IHDR', struct.pack('>IIBBBBB', W, H, 8, 6, 0, 0, 0)))
+    f.write(chunk(b'IDAT', zlib.compress(bytes(raw), 9)))
+    f.write(chunk(b'IEND', b''))
+" "$tmpdir/base_512.png"
+
+    # Create 1024x1024 by upscaling
+    sips -z 1024 1024 "$tmpdir/base_512.png" --out "$tmpdir/base_1024.png" >/dev/null 2>&1
+
+    # Populate iconset with required sizes
+    for size in 16 32 128 256 512; do
+        sips -z $size $size "$tmpdir/base_512.png" --out "$iconset/icon_${size}x${size}.png" >/dev/null 2>&1
+    done
+    sips -z 32 32 "$tmpdir/base_512.png" --out "$iconset/icon_16x16@2x.png" >/dev/null 2>&1
+    sips -z 64 64 "$tmpdir/base_512.png" --out "$iconset/icon_32x32@2x.png" >/dev/null 2>&1
+    sips -z 256 256 "$tmpdir/base_512.png" --out "$iconset/icon_128x128@2x.png" >/dev/null 2>&1
+    sips -z 512 512 "$tmpdir/base_512.png" --out "$iconset/icon_256x256@2x.png" >/dev/null 2>&1
+    cp "$tmpdir/base_1024.png" "$iconset/icon_512x512@2x.png"
+
+    iconutil -c icns "$iconset" -o "$output_icns" 2>/dev/null
+    rm -rf "$tmpdir"
+
+    if [[ -f "$output_icns" ]]; then
+        ok "App icon generated: $(format_size "$(stat -f%z "$output_icns" 2>/dev/null || stat -c%s "$output_icns")")"
+    else
+        err "Failed to generate app icon"
+    fi
+}
+
 # ─── Step 4: Package distribution bundle ─────────────────────────────────────
 
 package_bundle() {
@@ -588,6 +650,12 @@ package_bundle() {
         fi
     done
 
+    # Generate app icon
+    generate_app_icon "$resources/AppIcon.icns"
+    if [[ -f "$resources/AppIcon.icns" ]]; then
+        found_items=$((found_items + 1))
+    fi
+
     if (( found_items == 0 )); then
         err "No files to bundle. Run the full build first."
         rm -rf "$app_bundle"
@@ -612,6 +680,8 @@ package_bundle() {
     <string>$VERSION</string>
     <key>CFBundleExecutable</key>
     <string>InvisibleGorilla-XRay.Mac</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSignature</key>
