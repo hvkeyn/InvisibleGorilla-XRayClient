@@ -24,7 +24,18 @@ namespace InvisibleGorillaXRay.Mac.Handlers
 
         public string GetTerm(string key)
         {
-            return terms.TryGetValue(key, out var value) ? value : key;
+            if (terms.TryGetValue(key, out var value))
+                return value;
+
+            if (Application.Current != null &&
+                Application.Current.TryFindResource(key, out var res) &&
+                res is string str)
+            {
+                terms[key] = str;
+                return str;
+            }
+
+            return key;
         }
 
         public void TryApplyCurrentLanguage()
@@ -43,15 +54,19 @@ namespace InvisibleGorillaXRay.Mac.Handlers
 
                 var uri = new Uri($"avares://InvisibleGorilla-XRay.Mac/Assets/Localization/{language}.axaml");
                 var dict = (ResourceDictionary)AvaloniaXamlLoader.Load(uri);
-                foreach (var kv in dict)
-                {
-                    if (kv.Key is string key && kv.Value is string val)
-                        terms[key] = val;
-                }
 
-                currentLangDict = dict;
-                if (Application.Current != null)
-                    Application.Current.Resources.MergedDictionaries.Add(dict);
+                if (dict != null)
+                {
+                    foreach (var kv in dict)
+                    {
+                        if (kv.Key is string k && kv.Value is string v)
+                            terms[k] = v;
+                    }
+
+                    currentLangDict = dict;
+                    if (Application.Current != null)
+                        Application.Current.Resources.MergedDictionaries.Add(dict);
+                }
             }
             catch { }
         }

@@ -318,16 +318,18 @@ namespace InvisibleGorillaXRay.Mac.Views
             policyWindow.ShowDialog(this);
         }
 
-        private void OpenServerWindow()
+        private async void OpenServerWindow()
         {
             ServerWindow serverWindow = openServerWindow.Invoke();
-            serverWindow.ShowDialog(this);
+            await serverWindow.ShowDialog(this);
+            UpdateUI();
         }
 
-        private void OpenSettingsWindow()
+        private async void OpenSettingsWindow()
         {
             SettingsWindow settingsWindow = openSettingsWindow.Invoke();
-            settingsWindow.ShowDialog(this);
+            await settingsWindow.ShowDialog(this);
+            UpdateUI();
         }
 
         private void OpenUpdateWindow()
@@ -377,15 +379,8 @@ namespace InvisibleGorillaXRay.Mac.Views
 
         protected override void OnClosing(WindowClosingEventArgs e)
         {
-            if (isRunWorkerBusy)
-            {
-                e.Cancel = true;
-                WindowState = WindowState.Minimized;
-                return;
-            }
-
-            onStopServer?.Invoke();
-            try { onDisableMode?.Invoke(); } catch { }
+            e.Cancel = true;
+            Hide();
         }
     }
 }

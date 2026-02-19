@@ -1,20 +1,17 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
+using System.Threading.Tasks;
 using Avalonia;
-using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 
 namespace InvisibleGorillaXRay.Mac
 {
     using Managers;
-    using Handlers;
-    using Factories;
 
     public partial class App : Application
     {
         private MacAppManager? appManager;
+        private bool _cleanedUp;
 
         public override void Initialize()
         {
@@ -41,8 +38,15 @@ namespace InvisibleGorillaXRay.Mac
 
         private void CleanupBeforeExit()
         {
-            try { appManager?.Core?.Stop(); } catch { }
-            try { appManager?.Core?.DisableMode(); } catch { }
+            if (_cleanedUp) return;
+            _cleanedUp = true;
+
+            var task = Task.Run(() =>
+            {
+                try { appManager?.Core?.Stop(); } catch { }
+                try { appManager?.Core?.DisableMode(); } catch { }
+            });
+            task.Wait(TimeSpan.FromSeconds(3));
         }
     }
 }

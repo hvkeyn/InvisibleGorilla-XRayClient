@@ -412,14 +412,15 @@ namespace InvisibleGorillaXRay.Mac.Views
                 Background = isSelected
                     ? Avalonia.Media.Brush.Parse("#3d3d3d")
                     : Avalonia.Media.Brushes.Transparent,
-                Padding = new Avalonia.Thickness(15, 8),
+                Padding = new Avalonia.Thickness(10, 6),
                 Cursor = new Avalonia.Input.Cursor(StandardCursorType.Hand)
             };
 
-            var grid = new Grid();
-            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
-            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
-            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+            var outerStack = new StackPanel { Spacing = 2 };
+
+            var topRow = new Grid();
+            topRow.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            topRow.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
 
             var nameBlock = new TextBlock
             {
@@ -433,42 +434,57 @@ namespace InvisibleGorillaXRay.Mac.Views
 
             var statusBlock = new TextBlock
             {
-                Text = "",
+                Text = isSelected ? "●" : "",
                 FontSize = 11,
-                Foreground = Avalonia.Media.Brushes.Gray,
+                Foreground = isSelected
+                    ? Avalonia.Media.Brush.Parse("#43b581")
+                    : Avalonia.Media.Brushes.Gray,
                 VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-                Margin = new Avalonia.Thickness(8, 0),
-                Tag = config.Path
+                Margin = new Avalonia.Thickness(6, 0)
             };
             Grid.SetColumn(statusBlock, 1);
 
-            var deleteBtn = new Button
+            topRow.Children.Add(nameBlock);
+            topRow.Children.Add(statusBlock);
+
+            var btnRow = new StackPanel
             {
-                Content = "✕",
-                FontSize = 12,
-                Foreground = Avalonia.Media.Brushes.Gray,
-                Background = Avalonia.Media.Brushes.Transparent,
-                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-                Padding = new Avalonia.Thickness(4, 2)
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                Spacing = 4,
+                Margin = new Avalonia.Thickness(0, 2, 0, 0)
             };
-            Grid.SetColumn(deleteBtn, 2);
 
-            var contextMenu = new ContextMenu();
+            Button MakeBtn(string label, string fg = "#aaa")
+            {
+                return new Button
+                {
+                    Content = label,
+                    FontSize = 11,
+                    Foreground = Avalonia.Media.Brush.Parse(fg),
+                    Background = Avalonia.Media.Brush.Parse("#2a2a2a"),
+                    BorderBrush = Avalonia.Media.Brush.Parse("#444"),
+                    BorderThickness = new Avalonia.Thickness(1),
+                    Padding = new Avalonia.Thickness(8, 2),
+                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                    Cursor = new Avalonia.Input.Cursor(StandardCursorType.Hand)
+                };
+            }
 
-            var selectItem = new MenuItem { Header = "Select" };
-            selectItem.Click += (s, e) =>
+            var selectBtn = MakeBtn(LocalizationService.GetTerm("Lang.Config.Select"), "#43b581");
+            selectBtn.Click += (s, e) =>
             {
                 onUpdateConfig.Invoke(config.Path);
-                RefreshSelection();
+                LoadConfigsList(group);
                 AnalyticsService.SendEvent(new SelectButtonClickedEvent());
             };
-            contextMenu.Items.Add(selectItem);
+            btnRow.Children.Add(selectBtn);
 
-            var checkItem = new MenuItem { Header = "Check" };
-            checkItem.Click += (s, e) =>
+            var checkBtn = MakeBtn(LocalizationService.GetTerm("Lang.Config.Check"));
+            checkBtn.Click += (s, e) =>
             {
                 statusBlock.Text = "...";
                 statusBlock.Foreground = Avalonia.Media.Brushes.Gray;
+                checkBtn.IsEnabled = false;
                 Task.Run(() =>
                 {
                     try
@@ -476,6 +492,7 @@ namespace InvisibleGorillaXRay.Mac.Views
                         int ping = testConnection.Invoke(config.Path);
                         Dispatcher.UIThread.InvokeAsync(() =>
                         {
+                            checkBtn.IsEnabled = true;
                             if (ping >= 0)
                             {
                                 statusBlock.Text = $"{ping}ms";
@@ -494,6 +511,7 @@ namespace InvisibleGorillaXRay.Mac.Views
                     {
                         Dispatcher.UIThread.InvokeAsync(() =>
                         {
+                            checkBtn.IsEnabled = true;
                             statusBlock.Text = "error";
                             statusBlock.Foreground = Avalonia.Media.Brush.Parse("#f04747");
                         });
@@ -501,25 +519,27 @@ namespace InvisibleGorillaXRay.Mac.Views
                 });
                 AnalyticsService.SendEvent(new CheckButtonClickedEvent());
             };
-            contextMenu.Items.Add(checkItem);
+            btnRow.Children.Add(checkBtn);
 
-            contextMenu.Items.Add(new Separator());
-
-            var shareItem = new MenuItem { Header = "Share (Copy Path)" };
-            shareItem.Click += (s, e) =>
+            var shareBtn = MakeBtn(LocalizationService.GetTerm("Lang.Config.Share"));
+            shareBtn.Click += (s, e) =>
             {
                 try
                 {
                     var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
                     clipboard?.SetTextAsync(config.Path);
+                    shareBtn.Content = "✓";
+                    Task.Delay(1500).ContinueWith(_ =>
+                        Dispatcher.UIThread.InvokeAsync(() =>
+                            shareBtn.Content = LocalizationService.GetTerm("Lang.Config.Share")));
                 }
                 catch { }
                 AnalyticsService.SendEvent(new ShareButtonClickedEvent());
             };
-            contextMenu.Items.Add(shareItem);
+            btnRow.Children.Add(shareBtn);
 
-            var logItem = new MenuItem { Header = "Log" };
-            logItem.Click += (s, e) =>
+            var logBtn = MakeBtn(LocalizationService.GetTerm("Lang.Config.Log"));
+            logBtn.Click += (s, e) =>
             {
                 try
                 {
@@ -530,36 +550,31 @@ namespace InvisibleGorillaXRay.Mac.Views
                 catch { }
                 AnalyticsService.SendEvent(new LogButtonClickedEvent());
             };
-            contextMenu.Items.Add(logItem);
+            btnRow.Children.Add(logBtn);
 
-            contextMenu.Items.Add(new Separator());
-
-            var deleteItem = new MenuItem { Header = "Delete" };
-            deleteItem.Click += (s, e) =>
+            var deleteBtn = MakeBtn(LocalizationService.GetTerm("Lang.Config.Delete"), "#f04747");
+            deleteBtn.Click += (s, e) =>
             {
                 DeleteConfig(config, group);
                 AnalyticsService.SendEvent(new DeleteButtonClickedEvent());
             };
-            contextMenu.Items.Add(deleteItem);
+            btnRow.Children.Add(deleteBtn);
 
-            border.ContextMenu = contextMenu;
-
-            deleteBtn.Click += (s, e) => DeleteConfig(config, group);
+            outerStack.Children.Add(topRow);
+            outerStack.Children.Add(btnRow);
 
             border.PointerPressed += (s, e) =>
             {
-                if (e.GetCurrentPoint(border).Properties.IsLeftButtonPressed)
+                if (e.GetCurrentPoint(border).Properties.IsLeftButtonPressed &&
+                    e.Source is not Button)
                 {
                     onUpdateConfig.Invoke(config.Path);
-                    RefreshSelection();
+                    LoadConfigsList(group);
                     AnalyticsService.SendEvent(new SelectButtonClickedEvent());
                 }
             };
 
-            grid.Children.Add(nameBlock);
-            grid.Children.Add(statusBlock);
-            grid.Children.Add(deleteBtn);
-            border.Child = grid;
+            border.Child = outerStack;
 
             return border;
         }
@@ -577,36 +592,6 @@ namespace InvisibleGorillaXRay.Mac.Views
             LoadConfigsList(group);
             if (getCurrentConfigPath.Invoke() == config.Path)
                 onUpdateConfig.Invoke(GetLastConfigPath(group));
-        }
-
-        private void RefreshSelection()
-        {
-            string currentPath = getCurrentConfigPath?.Invoke();
-
-            RefreshListSelection(listConfigs, currentPath);
-            RefreshListSelection(listSubscriptions, currentPath);
-
-            void RefreshListSelection(StackPanel list, string path)
-            {
-                foreach (var child in list.Children)
-                {
-                    if (child is Border b && b.Child is Grid g && g.Children.Count > 0)
-                    {
-                        var tb = g.Children[0] as TextBlock;
-                        b.Background = tb?.Text != null && IsMatchingConfig(tb.Text, path)
-                            ? Avalonia.Media.Brush.Parse("#3d3d3d")
-                            : Avalonia.Media.Brushes.Transparent;
-                    }
-                }
-            }
-
-            bool IsMatchingConfig(string name, string path)
-            {
-                var allConfigs = getAllGeneralConfigs?.Invoke() ?? new List<Config>();
-                var subConfigs = getAllSubscriptionConfigs?.Invoke(groupPath) ?? new List<Config>();
-                var all = allConfigs.Concat(subConfigs);
-                return all.Any(c => c.Name == name && c.Path == path);
-            }
         }
 
         private void LoadGroupsList()

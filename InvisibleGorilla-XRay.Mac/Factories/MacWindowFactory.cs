@@ -1,6 +1,9 @@
+using System.IO;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using InvisibleGorillaXRay.Core;
 using InvisibleGorillaXRay.Models;
 using InvisibleGorillaXRay.Managers;
@@ -17,6 +20,7 @@ namespace InvisibleGorillaXRay.Mac.Factories
     {
         private InvisibleGorillaXRayCore core;
         private HandlersManager handlersManager;
+        private WindowIcon _appIcon;
 
         private LocalizationService LocalizationService => ServiceLocator.Get<LocalizationService>();
 
@@ -24,6 +28,33 @@ namespace InvisibleGorillaXRay.Mac.Factories
         {
             this.core = core;
             this.handlersManager = handlersManager;
+        }
+
+        public WindowIcon GetAppIcon()
+        {
+            if (_appIcon != null) return _appIcon;
+            try
+            {
+                int size = 256;
+                var visual = new Avalonia.Controls.Shapes.Rectangle { Width = size, Height = size };
+                if (Application.Current?.TryFindResource("Icon.InvisibleGorilla", out var res) == true && res is IBrush brush)
+                    visual.Fill = brush;
+                else
+                    visual.Fill = new SolidColorBrush(Color.Parse("#4CAF50"));
+
+                visual.Measure(new Size(size, size));
+                visual.Arrange(new Rect(0, 0, size, size));
+
+                var rtb = new RenderTargetBitmap(new PixelSize(size, size));
+                rtb.Render(visual);
+
+                using var stream = new MemoryStream();
+                rtb.Save(stream);
+                stream.Position = 0;
+                _appIcon = new WindowIcon(stream);
+            }
+            catch { }
+            return _appIcon;
         }
 
         public MainWindow GetMainWindow()
@@ -41,6 +72,8 @@ namespace InvisibleGorillaXRay.Mac.Factories
             LinkHandler linkHandler = handlersManager.GetHandler<LinkHandler>();
 
             MainWindow mainWindow = new MainWindow();
+            var icon = GetAppIcon();
+            if (icon != null) mainWindow.Icon = icon;
             mainWindow.Setup(
                 isNeedToShowPolicyWindow: IsNeedToShowPolicyWindow,
                 shouldStartHidden: ShouldStartHidden,

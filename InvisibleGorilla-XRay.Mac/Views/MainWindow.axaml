@@ -3,9 +3,10 @@
         x:Class="InvisibleGorillaXRay.Mac.Views.MainWindow"
         Title="Invisible Gorilla XRay"
         Height="550" 
-        Width="400" 
-        WindowStartupLocation="CenterScreen" 
-        CanResize="False"
+        Width="400"
+        MinHeight="550" MaxHeight="550"
+        MinWidth="400" MaxWidth="400"
+        WindowStartupLocation="CenterScreen"
         Background="{StaticResource Color.DarkGray}">
 
     <Grid>
