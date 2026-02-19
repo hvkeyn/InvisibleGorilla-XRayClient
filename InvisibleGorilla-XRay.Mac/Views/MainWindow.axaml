@@ -6,6 +6,7 @@
         Width="400"
         MinHeight="550" MaxHeight="550"
         MinWidth="400" MaxWidth="400"
+        CanResize="True"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource Color.DarkGray}">
 
