@@ -127,10 +127,10 @@ namespace InvisibleGorillaXRay.Mac.Managers
 
         private void OpenApplication()
         {
-            if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
+                && desktop.MainWindow is Mac.Views.MainWindow mainWindow)
             {
-                desktop.MainWindow?.Show();
-                desktop.MainWindow?.Activate();
+                mainWindow.ShowAndActivate();
             }
         }
 
