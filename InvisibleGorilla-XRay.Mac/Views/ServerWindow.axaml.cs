@@ -489,7 +489,19 @@ namespace InvisibleGorillaXRay.Mac.Views
                 {
                     try
                     {
-                        int ping = testConnection.Invoke(config.Path);
+                        Status configStatus = loadConfig.Invoke(config.Path);
+                        if (configStatus.Code == Code.ERROR)
+                        {
+                            Dispatcher.UIThread.InvokeAsync(() =>
+                            {
+                                checkBtn.IsEnabled = true;
+                                statusBlock.Text = "error";
+                                statusBlock.Foreground = Avalonia.Media.Brush.Parse("#f04747");
+                            });
+                            return;
+                        }
+
+                        int ping = testConnection.Invoke(configStatus.Content.ToString());
                         Dispatcher.UIThread.InvokeAsync(() =>
                         {
                             checkBtn.IsEnabled = true;

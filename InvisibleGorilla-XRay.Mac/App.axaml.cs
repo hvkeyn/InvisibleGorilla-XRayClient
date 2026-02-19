@@ -41,12 +41,7 @@ namespace InvisibleGorillaXRay.Mac
             if (_cleanedUp) return;
             _cleanedUp = true;
 
-            var task = Task.Run(() =>
-            {
-                try { appManager?.Core?.Stop(); } catch { }
-                try { appManager?.Core?.DisableMode(); } catch { }
-            });
-            task.Wait(TimeSpan.FromSeconds(3));
+            try { appManager?.Core?.DisableMode(); } catch { }
         }
     }
 }

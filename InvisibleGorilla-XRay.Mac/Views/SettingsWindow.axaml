@@ -6,6 +6,7 @@
         Width="350"
         MinHeight="450" MaxHeight="450"
         MinWidth="350" MaxWidth="350"
+        CanResize="True"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="{StaticResource Color.DarkGray}">
