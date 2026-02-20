@@ -1,0 +1,12 @@
+fix(macos): fix broken close/minimize by removing min/max constraints
+
+- Remove all MinHeight/MaxHeight/MinWidth/MaxWidth constraints from
+  MainWindow; keep only CanResize="True" so macOS enables all traffic
+  light buttons (close, minimize, fullscreen) without restrictions
+- Revert OnClosing back to Hide() instead of WindowState.Minimized
+  (Minimized requires NSWindowStyleMaskMiniaturizable which was not
+  set when equal min/max constraints were present, breaking both buttons)
+- Revert TryStartHidden back to Hide()
+- Set child windows (Server, Settings, About, Update, Policy) to
+  CanResize="False" with no min/max constraints (modal dialogs don't
+  need minimize support)

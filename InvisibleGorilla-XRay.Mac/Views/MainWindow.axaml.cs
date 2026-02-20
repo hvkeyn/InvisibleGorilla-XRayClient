@@ -297,7 +297,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             if (!shouldStartHidden.Invoke())
                 return;
 
-            WindowState = WindowState.Minimized;
+            Hide();
         }
 
         private void TryAutoConnect()
@@ -401,7 +401,7 @@ namespace InvisibleGorillaXRay.Mac.Views
         protected override void OnClosing(WindowClosingEventArgs e)
         {
             e.Cancel = true;
-            WindowState = WindowState.Minimized;
+            Hide();
         }
     }
 }
