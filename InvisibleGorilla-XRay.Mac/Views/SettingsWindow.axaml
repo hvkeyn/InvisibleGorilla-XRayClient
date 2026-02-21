@@ -4,9 +4,7 @@
         Title="Invisible Gorilla XRay - Settings"
         Height="450" 
         Width="350"
-        MinHeight="450" MaxHeight="450"
-        MinWidth="350" MaxWidth="350"
-        CanResize="True"
+        CanResize="False"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="{StaticResource Color.DarkGray}">
