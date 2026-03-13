@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Net;
 
 namespace InvisibleGorillaXRay.Handlers.Tunnels
@@ -10,6 +10,9 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
 
     public class WindowsTunnel : ITunnel
     {
+        private const int ServiceStartTimeoutMs = 10000;
+        private const int ServicePortTimeoutMs = 10000;
+
         private bool isCanceled;
         private Scheduler scheduler;
 
@@ -50,13 +53,13 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
                 FetchServerIP();
                 StartTunnelingService();
 
-                WaitUntilServiceWasRun(out bool isServiceRunConditionSatisfied);
+                bool isServiceStartTimedOut = WaitUntilServiceWasRun(out bool isServiceRunConditionSatisfied);
                 if (!isServiceRunConditionSatisfied)
-                    return CancelStatus();
+                    return isServiceStartTimedOut ? ServiceStartTimeoutStatus() : CancelStatus();
                 
-                WaitUntilServicePortWasActive(out bool isServicePortConditionSatisfied);
+                bool isServicePortTimedOut = WaitUntilServicePortWasActive(out bool isServicePortConditionSatisfied);
                 if (!isServicePortConditionSatisfied)
-                    return CancelStatus();
+                    return isServicePortTimedOut ? ServicePortTimeoutStatus() : CancelStatus();
                 
                 Status connectingStatus = ConnectToTunnelingService();
                 if (connectingStatus.Code == Code.ERROR)
@@ -101,20 +104,22 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
 
             void StartTunnelingService() => onStartTunnelingService.Invoke();
 
-            void WaitUntilServiceWasRun(out bool isConditionSatisfied)
+            bool WaitUntilServiceWasRun(out bool isConditionSatisfied)
             {
-                scheduler.WaitUntil(
+                return scheduler.WaitUntil(
                     condition: IsServiceRunning,
                     cancellation: IsServiceCanceled,
+                    timeoutMs: ServiceStartTimeoutMs,
                     isConditionSatisfied: out isConditionSatisfied
                 );
             }
 
-            void WaitUntilServicePortWasActive(out bool isConditionSatisfied)
+            bool WaitUntilServicePortWasActive(out bool isConditionSatisfied)
             {
-                scheduler.WaitUntil(
+                return scheduler.WaitUntil(
                     condition: IsServicePortActive,
                     cancellation: IsServiceCanceled,
+                    timeoutMs: ServicePortTimeoutMs,
                     isConditionSatisfied: out isConditionSatisfied
                 );
             }
@@ -126,6 +131,28 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
             bool IsServiceCanceled() => isCanceled;
 
             Status ConnectToTunnelingService() => connectTunnelingService.Invoke();
+
+            Status ServiceStartTimeoutStatus()
+            {
+                Disable();
+
+                return new Status(
+                    code: Code.ERROR,
+                    subCode: SubCode.CANT_TUNNEL,
+                    content: LocalizationService.GetTerm(Localization.CANT_TUNNEL_SYSTEM)
+                );
+            }
+
+            Status ServicePortTimeoutStatus()
+            {
+                Disable();
+
+                return new Status(
+                    code: Code.ERROR,
+                    subCode: SubCode.CANT_CONNECT_TO_TUNNEL_SERVICE,
+                    content: LocalizationService.GetTerm(Localization.CANT_CONNECT_TO_TUNNEL_SERVICE)
+                );
+            }
         }
 
         public void Disable()

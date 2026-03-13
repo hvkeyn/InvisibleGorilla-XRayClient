@@ -9,7 +9,7 @@
     1. Проверка и автоустановка зависимостей (Go, GCC/MinGW, .NET SDK) напрямую
     2. Сборка Go-обёртки XRayCore.dll
     3. Скачивание geoip.dat и geosite.dat
-    4. Скачивание InvisibleMan-TUN (опционально)
+    4. Скачивание InvisibleGorilla-TUN (опционально)
     5. Сборка/публикация .NET приложения
 
 .PARAMETER Step
@@ -33,7 +33,7 @@
     Директория для результата публикации. По умолчанию ./publish.
 
 .PARAMETER SkipTUN
-    Пропустить скачивание InvisibleMan-TUN.
+    Пропустить скачивание InvisibleGorilla-TUN.
 
 .EXAMPLE
     .\build.ps1
@@ -80,6 +80,11 @@ $AppDir       = Join-Path $RootDir "InvisibleGorilla-XRay"
 $LibrariesDir = Join-Path $AppDir "Libraries"
 $TunDir       = Join-Path $AppDir "TUN"
 $SolutionFile = Join-Path $RootDir "InvisibleGorilla-XRay.sln"
+$LocalTunRepoDir = Join-Path (Split-Path $RootDir -Parent) "InvisibleGorilla-TUN"
+$LocalTunBuildScript = Join-Path $LocalTunRepoDir "build.ps1"
+$LocalTunProject = Join-Path $LocalTunRepoDir "InvisibleGorilla-TUN\InvisibleGorilla-TUN.csproj"
+$LocalTunProjectDir = Split-Path $LocalTunProject -Parent
+$LocalTunWrapperDir = Join-Path $LocalTunRepoDir "TUN-Wrapper"
 
 # w64devkit: GCC 14.2.0 — совместим с Go cgo
 # GCC 15+ генерирует объектные файлы, которые Go cgo не может распарсить
@@ -88,7 +93,7 @@ $W64DevkitFile    = "w64devkit-x64-2.0.0.exe"
 
 $GeoIpUrl     = "https://github.com/v2fly/geoip/releases/latest/download/geoip.dat"
 $GeoSiteUrl   = "https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat"
-$TunRelease   = "https://api.github.com/repos/InvisibleManVPN/InvisibleMan-TUN/releases/latest"
+$TunRelease   = "https://api.github.com/repos/hvkeyn/InvisibleGorilla-TUN/releases/latest"
 
 # ─── Вспомогательные функции ──────────────────────────────────────────────────
 
@@ -572,7 +577,7 @@ function Test-Prerequisites {
     Write-StepHeader "Проверка и установка зависимостей"
 
     $needGo     = $BuildStep -in @("All", "GoWrapper")
-    $needDotNet = $BuildStep -in @("All", "DotNet")
+    $needDotNet = $BuildStep -in @("All", "DotNet", "TUN")
 
     if ($needGo) {
         Ensure-Go
@@ -652,19 +657,138 @@ function Get-GeoFiles {
     }
 }
 
-# ─── Шаг 3: Скачивание TUN-сервиса ──────────────────────────────────────────
+# ─── Шаг 3: Скачивание или сборка TUN-сервиса ───────────────────────────────
+
+function Build-LocalTunService {
+    param(
+        [Parameter(Mandatory)][string]$ProjectPath,
+        [Parameter(Mandatory)][string]$DestinationDir
+    )
+
+    $publishDir = Join-Path $env:TEMP ("InvisibleGorilla-TUN-" + [guid]::NewGuid().ToString("N"))
+    $legacyTunExePath = Join-Path $DestinationDir "InvisibleMan-TUN.exe"
+    $localTunDll = Join-Path $LocalTunProjectDir "tun.dll"
+    $requiredAssets = @(
+        (Join-Path $LocalTunProjectDir "Assets\Icon.ico"),
+        (Join-Path $LocalTunProjectDir "tun.dll"),
+        (Join-Path $LocalTunProjectDir "wintun.dll"),
+        (Join-Path $LocalTunProjectDir "tun2socks.exe")
+    )
+
+    if (-not (Test-Path $DestinationDir)) {
+        New-Item -ItemType Directory -Path $DestinationDir -Force | Out-Null
+    }
+
+    New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
+
+    try {
+        Write-Info "Найден локальный репозиторий InvisibleGorilla-TUN: $LocalTunRepoDir"
+
+        if (Test-Path $LocalTunBuildScript) {
+            Write-Info "Найден локальный build.ps1, запускаю сборку TUN из исходников..."
+
+            try {
+                & $LocalTunBuildScript -Configuration $Configuration -Runtime $Runtime -OutputDir $publishDir -SkipPackage
+                if (($LASTEXITCODE -eq 0) -and (Test-Path (Join-Path $publishDir "InvisibleGorilla-TUN.exe"))) {
+                    Get-ChildItem -Path $publishDir -File | ForEach-Object {
+                        Copy-Item -Path $_.FullName -Destination $DestinationDir -Force
+                    }
+
+                    if (Test-Path $legacyTunExePath) {
+                        Remove-Item $legacyTunExePath -Force -ErrorAction SilentlyContinue
+                    }
+
+                    Write-Success "Локальный InvisibleGorilla-TUN собран через build.ps1 и скопирован в: $DestinationDir"
+                    return $true
+                }
+
+                Write-Info "Локальный build.ps1 не создал ожидаемый publish-вывод, пробую резервный сценарий..."
+            }
+            catch {
+                Write-Info "Локальный build.ps1 завершился с ошибкой: $($_.Exception.Message)"
+                Write-Info "Пробую резервный сценарий локальной публикации..."
+            }
+        }
+
+        if ((-not (Test-Path $localTunDll)) -and (Test-Path $LocalTunWrapperDir)) {
+            Write-Info "Локальный tun.dll не найден, пробую собрать его из TUN-Wrapper..."
+
+            Push-Location $LocalTunWrapperDir
+            try {
+                & go build --buildmode=c-shared -o tun.dll -trimpath -ldflags "-s -w -buildid=" .
+                if (($LASTEXITCODE -eq 0) -and (Test-Path (Join-Path $LocalTunWrapperDir "tun.dll"))) {
+                    Copy-Item -Path (Join-Path $LocalTunWrapperDir "tun.dll") -Destination $localTunDll -Force
+                    Remove-Item (Join-Path $LocalTunWrapperDir "tun.h") -Force -ErrorAction SilentlyContinue
+                    Remove-Item (Join-Path $LocalTunWrapperDir "tun.dll") -Force -ErrorAction SilentlyContinue
+                    Write-Success "tun.dll собран из локального TUN-Wrapper"
+                }
+            }
+            finally {
+                Pop-Location
+            }
+        }
+
+        $missingAssets = @($requiredAssets | Where-Object { -not (Test-Path $_) })
+        if ($missingAssets.Count -gt 0) {
+            Write-Info "Локальный TUN-репозиторий найден, но ещё не готов к публикации."
+            Write-Info "Не хватает файлов:"
+            foreach ($asset in $missingAssets) {
+                Write-Info "  - $asset"
+            }
+            return $false
+        }
+
+        Write-Info "Публикация локального TUN-сервиса..."
+        & dotnet publish $ProjectPath -c $Configuration -r $Runtime --self-contained true -o $publishDir
+
+        if ($LASTEXITCODE -ne 0) {
+            Write-Err "dotnet publish InvisibleGorilla-TUN: ошибка (код: $LASTEXITCODE)"
+            exit $LASTEXITCODE
+        }
+
+        Get-ChildItem -Path $publishDir -File | ForEach-Object {
+            Copy-Item -Path $_.FullName -Destination $DestinationDir -Force
+        }
+
+        if (Test-Path $legacyTunExePath) {
+            Remove-Item $legacyTunExePath -Force -ErrorAction SilentlyContinue
+        }
+
+        Write-Success "Локальный InvisibleGorilla-TUN опубликован в: $DestinationDir"
+        return $true
+    }
+    finally {
+        Remove-Item $publishDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
 
 function Get-TunService {
-    Write-StepHeader "Шаг 3: Скачивание InvisibleMan-TUN"
+    Write-StepHeader "Шаг 3: Скачивание InvisibleGorilla-TUN"
 
     if (-not (Test-Path $TunDir)) {
         New-Item -ItemType Directory -Path $TunDir -Force | Out-Null
         Write-Info "Создана директория: $TunDir"
     }
 
-    $tunExePath = Join-Path $TunDir "InvisibleMan-TUN.exe"
+    $tunExePath = Join-Path $TunDir "InvisibleGorilla-TUN.exe"
+    $legacyTunExePath = Join-Path $TunDir "InvisibleMan-TUN.exe"
+
+    if (Test-Path $LocalTunProject) {
+        if (Build-LocalTunService -ProjectPath $LocalTunProject -DestinationDir $TunDir) {
+            return
+        }
+
+        Write-Info "Перехожу к скачиванию release InvisibleGorilla-TUN..."
+    }
+
     if (Test-Path $tunExePath) {
-        Write-Info "InvisibleMan-TUN.exe уже существует, пропуск"
+        Write-Info "InvisibleGorilla-TUN.exe уже существует, пропуск"
+        return
+    }
+
+    if (Test-Path $legacyTunExePath) {
+        Move-Item -Path $legacyTunExePath -Destination $tunExePath -Force
+        Write-Info "Найден старый InvisibleMan-TUN.exe, переименован в InvisibleGorilla-TUN.exe"
         return
     }
 
@@ -672,7 +796,10 @@ function Get-TunService {
     try {
         $release = Invoke-RestMethod -Uri $TunRelease -UseBasicParsing
         $asset = $release.assets | Where-Object {
-            $_.name -match "windows.*x64|win.*x64|x64.*windows" -or $_.name -match "\.exe$"
+            ($_.name -match "windows.*x64") -or
+            ($_.name -match "win.*x64") -or
+            ($_.name -match "x64.*windows") -or
+            ($_.name -match "\.exe$")
         } | Select-Object -First 1
 
         if (-not $asset) {
@@ -681,8 +808,8 @@ function Get-TunService {
 
         if (-not $asset) {
             Write-Err "Не найден подходящий файл в релизе."
-            Write-Err "Скачайте вручную: https://github.com/InvisibleManVPN/InvisibleMan-TUN/releases/latest"
-            Write-Err "Поместите InvisibleMan-TUN.exe в: $TunDir"
+            Write-Err "Скачайте вручную: https://github.com/hvkeyn/InvisibleGorilla-TUN/releases/latest"
+            Write-Err "Поместите InvisibleGorilla-TUN.exe в: $TunDir"
             return
         }
 
@@ -693,16 +820,20 @@ function Get-TunService {
             Write-Info "Распаковка архива..."
             Expand-Archive -Path $tempFile -DestinationPath $TunDir -Force
             Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+
+            if ((-not (Test-Path $tunExePath)) -and (Test-Path $legacyTunExePath)) {
+                Move-Item -Path $legacyTunExePath -Destination $tunExePath -Force
+            }
         }
         else {
             Move-Item -Path $tempFile -Destination $tunExePath -Force
         }
 
-        Write-Success "InvisibleMan-TUN -> $TunDir"
+        Write-Success "InvisibleGorilla-TUN -> $TunDir"
     }
     catch {
-        Write-Err "Не удалось скачать InvisibleMan-TUN: $_"
-        Write-Err "Скачайте вручную: https://github.com/InvisibleManVPN/InvisibleMan-TUN/releases/latest"
+        Write-Err "Не удалось скачать InvisibleGorilla-TUN: $_"
+        Write-Err "Скачайте вручную: https://github.com/hvkeyn/InvisibleGorilla-TUN/releases/latest"
     }
 }
 

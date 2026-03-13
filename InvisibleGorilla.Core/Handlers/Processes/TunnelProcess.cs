@@ -1,5 +1,4 @@
-﻿using System;
-using System.Linq;
+using System;
 using System.Text;
 using System.Net;
 using System.Net.Sockets;
@@ -14,24 +13,21 @@ namespace InvisibleGorillaXRay.Handlers.Processes
 
     public class TunnelProcess
     {
-        private IPHostEntry hostEntry;
-        private IPAddress address;
+        private static readonly string[] TunProcessNames = { "InvisibleGorilla-TUN", "InvisibleMan-TUN" };
+
         private IPEndPoint endPoint;
         private Socket sender;
 
         private Func<int> getPort;
         private Processor processor;
-
-        private const string INVISIBLEMAN_TUN_PROCESS = "InvisibleMan-TUN";
+        private readonly string tunProcessName;
 
         private LocalizationService LocalizationService => ServiceLocator.Get<LocalizationService>();
 
         public TunnelProcess()
         {
-            this.hostEntry = Dns.GetHostEntry(Dns.GetHostName());
-            this.address = hostEntry.AddressList.First();
-
             this.processor = new Processor();
+            this.tunProcessName = System.IO.Path.GetFileNameWithoutExtension(Path.TUN_EXE);
         }
 
         public void Setup(Func<int> getPort)
@@ -44,11 +40,12 @@ namespace InvisibleGorillaXRay.Handlers.Processes
             if (IsProcessRunning())
                 return;
             
-            processor.StopSystemProcesses(INVISIBLEMAN_TUN_PROCESS);
+            foreach (string processName in TunProcessNames)
+                processor.StopSystemProcesses(processName);
 
             processor.StartProcess(
-                processName: INVISIBLEMAN_TUN_PROCESS,
-                fileName: System.IO.Path.GetFullPath(Path.INVISIBLEMAN_TUN_EXE),
+                processName: tunProcessName,
+                fileName: System.IO.Path.GetFullPath(Path.TUN_EXE),
                 workingDirectory: Directory.TUN,
                 command: $"-port={getPort.Invoke()}",
                 runAsAdmin: true
@@ -66,8 +63,8 @@ namespace InvisibleGorillaXRay.Handlers.Processes
 
             try
             {
-                endPoint = new IPEndPoint(address, getPort.Invoke());
-                sender = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+                endPoint = new IPEndPoint(IPAddress.Loopback, getPort.Invoke());
+                sender = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
                 sender.Connect(endPoint);
                 System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpConnections();
 
@@ -116,7 +113,7 @@ namespace InvisibleGorillaXRay.Handlers.Processes
             }
         }
 
-        public bool IsProcessRunning() => processor.IsProcessRunning(INVISIBLEMAN_TUN_PROCESS);
+        public bool IsProcessRunning() => processor.IsProcessRunning(tunProcessName);
 
         public bool IsProcessPortActive() => NetworkUtility.IsPortActive(getPort.Invoke());
     }

@@ -115,7 +115,7 @@ Tested on macOS Sequoia 15.7+ (Apple Silicon & Intel). Builds an `.app` bundle w
 | Proxy engine | [Xray-core](https://github.com/XTLS/Xray-core) v25.1.30 | Cross-platform |
 | Native bridge | Go 1.23 → cgo c-shared (`.dll` / `.dylib`) | Windows / macOS |
 | Shared logic | InvisibleGorilla.Core (.NET class library) | Cross-platform |
-| TUN service | [InvisibleMan-TUN](https://github.com/InvisibleManVPN/InvisibleMan-TUN) | Windows |
+| TUN service | [InvisibleGorilla-TUN](https://github.com/hvkeyn/InvisibleGorilla-TUN) | Windows |
 | Geo routing | [v2fly geoip](https://github.com/v2fly/geoip) + [domain-list](https://github.com/v2fly/domain-list-community) | Cross-platform |
 
 ## Troubleshooting

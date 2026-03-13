@@ -1,3 +1,4 @@
+using System.IO;
 using System.Runtime.InteropServices;
 
 namespace InvisibleGorillaXRay.Values
@@ -10,12 +11,14 @@ namespace InvisibleGorillaXRay.Values
             ? $"{Directory.LIBRARIES}/XRayCore.dll"
             : $"{Directory.LIBRARIES}/XRayCore.dylib";
 
+        public const string INVISIBLEGORILLA_TUN_EXE = $"{Directory.TUN}/InvisibleGorilla-TUN.exe";
+        public const string INVISIBLEMAN_TUN_EXE = $"{Directory.TUN}/InvisibleMan-TUN.exe";
+
         public static readonly string TUN_EXE = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? $"{Directory.TUN}/InvisibleMan-TUN.exe"
+            ? (File.Exists(INVISIBLEGORILLA_TUN_EXE) ? INVISIBLEGORILLA_TUN_EXE : INVISIBLEMAN_TUN_EXE)
             : $"{Directory.TUN}/tun2socks";
 
         // Keep the old constant for backward compatibility with Windows project
         public const string XRAY_CORE_DLL = $"{Directory.LIBRARIES}/XRayCore.dll";
-        public const string INVISIBLEMAN_TUN_EXE = $"{Directory.TUN}/InvisibleMan-TUN.exe";
     }
 }

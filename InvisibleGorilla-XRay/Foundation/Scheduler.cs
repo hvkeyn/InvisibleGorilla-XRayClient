@@ -1,31 +1,38 @@
-﻿using System;
+using System;
 using System.Threading;
 
 namespace InvisibleGorillaXRay.Foundation
 {
     public class Scheduler
     {
-        public void WaitUntil(
+        private const int PollIntervalMs = 100;
+
+        public bool WaitUntil(
             Func<bool> condition, 
             Func<bool> cancellation, 
+            int timeoutMs,
             out bool isConditionSatisfied
         )
         {
             isConditionSatisfied = false;
+            int elapsedMs = 0;
 
-            while(true)
+            while (elapsedMs < timeoutMs)
             {
-                Thread.Sleep(100);
-
                 if (cancellation.Invoke())
-                    break;
+                    return false;
 
                 if (condition.Invoke())
                 {
                     isConditionSatisfied = true;
-                    break;
+                    return false;
                 }
+
+                Thread.Sleep(PollIntervalMs);
+                elapsedMs += PollIntervalMs;
             }
+
+            return true;
         }
     }
 }
