@@ -4,6 +4,7 @@ using System.Collections.Generic;
 
 namespace InvisibleGorillaXRay.Foundation
 {
+    using Core;
     using Values;
 
     public class Processor
@@ -19,6 +20,15 @@ namespace InvisibleGorillaXRay.Foundation
         {
             try
             {
+                DiagnosticLog.Write(
+                    "Processor",
+                    $"StartProcess requested: processName={processName}, fileName={fileName}, " +
+                    $"workingDirectory={workingDirectory}, command={command}, runAsAdmin={runAsAdmin}");
+                DiagnosticLog.Write(
+                    "Processor",
+                    $"StartProcess paths: fileExists={System.IO.File.Exists(fileName)}, " +
+                    $"workingDirectoryExists={System.IO.Directory.Exists(workingDirectory)}");
+
                 Process process = new Process();
                 process.StartInfo.FileName = fileName;
                 process.StartInfo.Arguments = command;
@@ -32,9 +42,11 @@ namespace InvisibleGorillaXRay.Foundation
                 
                 process.Start();
                 AddProcess(process, processName);
+                DiagnosticLog.Write("Processor", $"Process started: processName={processName}, pid={process.Id}");
             }
             catch (Exception ex)
             {
+                DiagnosticLog.WriteException("Processor.StartProcess", ex);
                 Debug.WriteLine($"Failed to start process '{processName}': {ex.Message}");
                 StopProcess(processName);
             }
@@ -47,11 +59,13 @@ namespace InvisibleGorillaXRay.Foundation
 
             try
             {
+                DiagnosticLog.Write("Processor", $"StopProcess: processName={processName}, pid={process.Id}");
                 RemoveProcess(processName);
                 process.Kill(true);
             }
             catch (Exception ex)
             {
+                DiagnosticLog.WriteException("Processor.StopProcess", ex);
                 Debug.WriteLine($"Failed to stop process '{processName}': {ex.Message}");
             }
             finally
@@ -68,10 +82,12 @@ namespace InvisibleGorillaXRay.Foundation
             {
                 try
                 {
+                    DiagnosticLog.Write("Processor", $"StopSystemProcesses killing: processName={processName}, pid={process.Id}");
                     process.Kill();
                 }
                 catch (Exception ex)
                 {
+                    DiagnosticLog.WriteException("Processor.StopSystemProcesses", ex);
                     Debug.WriteLine($"Failed to kill system process '{processName}': {ex.Message}");
                 }
                 finally

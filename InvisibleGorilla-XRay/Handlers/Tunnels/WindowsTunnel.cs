@@ -3,6 +3,7 @@ using System.Net;
 
 namespace InvisibleGorillaXRay.Handlers.Tunnels
 {
+    using Core;
     using Foundation;
     using InvisibleGorillaXRay.Services;
     using Models;
@@ -48,20 +49,36 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
 
         public Status Enable(string ip, int port, string address, string server, string dns)
         {
+            DiagnosticLog.Write(
+                "WindowsTunnel",
+                $"Enable requested: proxy={ip}:{port}, address={address}, server={server}, dns={dns}");
+
             try
             {
                 FetchServerIP();
+                DiagnosticLog.Write("WindowsTunnel", $"Resolved server IP={server}");
+
+                DiagnosticLog.Write("WindowsTunnel", "Starting tunneling service");
                 StartTunnelingService();
 
                 bool isServiceStartTimedOut = WaitUntilServiceWasRun(out bool isServiceRunConditionSatisfied);
+                DiagnosticLog.Write(
+                    "WindowsTunnel",
+                    $"WaitUntilServiceWasRun: satisfied={isServiceRunConditionSatisfied}, timedOut={isServiceStartTimedOut}, isCanceled={isCanceled}");
                 if (!isServiceRunConditionSatisfied)
                     return isServiceStartTimedOut ? ServiceStartTimeoutStatus() : CancelStatus();
                 
                 bool isServicePortTimedOut = WaitUntilServicePortWasActive(out bool isServicePortConditionSatisfied);
+                DiagnosticLog.Write(
+                    "WindowsTunnel",
+                    $"WaitUntilServicePortWasActive: satisfied={isServicePortConditionSatisfied}, timedOut={isServicePortTimedOut}, isCanceled={isCanceled}");
                 if (!isServicePortConditionSatisfied)
                     return isServicePortTimedOut ? ServicePortTimeoutStatus() : CancelStatus();
                 
                 Status connectingStatus = ConnectToTunnelingService();
+                DiagnosticLog.Write(
+                    "WindowsTunnel",
+                    $"ConnectToTunnelingService: code={connectingStatus.Code}, subCode={connectingStatus.SubCode}");
                 if (connectingStatus.Code == Code.ERROR)
                     return connectingStatus;
 
@@ -74,21 +91,33 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
                         $"-server={server} " + 
                         $"-dns={dns}"
                 );
+                DiagnosticLog.Write("WindowsTunnel", "Sending enable command to TUN service");
                 
                 if(enablingCommandStatus.Code == Code.ERROR)
+                {
+                    DiagnosticLog.Write(
+                        "WindowsTunnel",
+                        $"Enable command failed: code={enablingCommandStatus.Code}, subCode={enablingCommandStatus.SubCode}");
                     return enablingCommandStatus;
+                }
+                
+                DiagnosticLog.Write(
+                    "WindowsTunnel",
+                    $"Enable command result: code={enablingCommandStatus.Code}, subCode={enablingCommandStatus.SubCode}");
                 
                 if (isCanceled)
                     return CancelStatus();
 
+                DiagnosticLog.Write("WindowsTunnel", "Enable completed successfully");
                 return new Status(
                     code: Code.SUCCESS,
                     subCode: SubCode.SUCCESS,
                     content: null
                 );
             }
-            catch
+            catch (Exception ex)
             {
+                DiagnosticLog.WriteException("WindowsTunnel.Enable", ex);
                 return new Status(
                     code: Code.ERROR,
                     subCode: SubCode.CANT_TUNNEL,
@@ -157,12 +186,14 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
 
         public void Disable()
         {
+            DiagnosticLog.Write("WindowsTunnel", "Disable requested");
             isCanceled = false;
             ExecuteCommand(command: $"-command=disable");
         }
 
         public void Cancel()
         {
+            DiagnosticLog.Write("WindowsTunnel", "Cancel requested");
             isCanceled = true;
         }
 

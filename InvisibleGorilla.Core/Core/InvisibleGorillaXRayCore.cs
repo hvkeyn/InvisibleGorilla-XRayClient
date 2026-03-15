@@ -126,14 +126,16 @@ namespace InvisibleGorillaXRay.Core
         {
             DiagnosticLog.Clear();
             Mode mode = getMode.Invoke();
-            int port = mode == Mode.PROXY ? getProxyPort.Invoke() : getTunPort.Invoke();
+            int proxyPort = getProxyPort.Invoke();
+            int tunnelServicePort = getTunPort.Invoke();
             LogLevel logLevel = getLogLevel.Invoke();
             string logPath = System.IO.Path.GetFullPath($"{getLogPath.Invoke()}/{getConfig.Invoke().Name}");
             bool isSocks = getProtocol.Invoke() == Protocol.SOCKS || mode == Mode.TUN;
             bool isUdpEnabled = getUdpEnabled.Invoke();
             bool systemProxy = getSystemProxyUsed.Invoke();
 
-            DiagnosticLog.Write("Run", $"mode={mode}, port={port}, logLevel={logLevel}, isSocks={isSocks}, isUdpEnabled={isUdpEnabled}, systemProxy={systemProxy}");
+            // Xray always listens on the local proxy port; the TUN port is reserved for the control service.
+            DiagnosticLog.Write("Run", $"mode={mode}, proxyPort={proxyPort}, tunnelServicePort={tunnelServicePort}, logLevel={logLevel}, isSocks={isSocks}, isUdpEnabled={isUdpEnabled}, systemProxy={systemProxy}");
             DiagnosticLog.Write("Run", $"logPath={logPath}");
             DiagnosticLog.Write("Run", $"config length={config?.Length ?? 0}, first 200 chars: {(config?.Length > 200 ? config.Substring(0, 200) : config)}");
 
@@ -147,7 +149,7 @@ namespace InvisibleGorillaXRay.Core
                 try
                 {
                     DiagnosticLog.Write("ServerThread", "Calling XRayCoreWrapper.StartServer...");
-                    XRayCoreWrapper.StartServer(config, port, logLevel, logPath, isSocks, isUdpEnabled);
+                    XRayCoreWrapper.StartServer(config, proxyPort, logLevel, logPath, isSocks, isUdpEnabled);
                     DiagnosticLog.Write("ServerThread", "StartServer returned (server stopped)");
                 }
                 catch (Exception ex)
@@ -159,9 +161,9 @@ namespace InvisibleGorillaXRay.Core
             serverThread.IsBackground = true;
             serverThread.Start();
 
-            DiagnosticLog.Write("Run", $"Server thread started (ID={serverThread.ManagedThreadId}), waiting for port {port}...");
+            DiagnosticLog.Write("Run", $"Server thread started (ID={serverThread.ManagedThreadId}), waiting for port {proxyPort}...");
 
-            bool portActive = WaitForPortActive(port, maxWaitMs: 5000);
+            bool portActive = WaitForPortActive(proxyPort, maxWaitMs: 5000);
 
             DiagnosticLog.Write("Run", $"WaitForPortActive result: portActive={portActive}");
 
@@ -297,7 +299,7 @@ namespace InvisibleGorillaXRay.Core
                 parent: "outbounds",
                 jsonString: configStatus.Content.ToString()
             );
-            int port = getTunPort.Invoke();
+            int proxyPort = getProxyPort.Invoke();
             string address = getTunIp.Invoke();
             string dns = getDns.Invoke();
             
@@ -305,7 +307,7 @@ namespace InvisibleGorillaXRay.Core
 
             return tunnel.Enable(
                 ip: Global.LOCAL_HOST,
-                port: port,
+                port: proxyPort,
                 address: address,
                 server: server,
                 dns: dns
