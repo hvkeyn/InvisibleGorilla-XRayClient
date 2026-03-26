@@ -39,7 +39,7 @@ namespace InvisibleGorillaXRay.Handlers
             this.userSettings.TestPort = userSettings.TestPort;
             this.userSettings.TunIp = userSettings.TunIp;
             this.userSettings.Dns = userSettings.Dns;
-            this.userSettings.LogPath = userSettings.LogPath;
+            this.userSettings.LogPath = NormalizePath(userSettings.LogPath, Values.Directory.LOGS);
 
             UpdateStartupSetting();
             SaveUserSettings();
@@ -53,7 +53,7 @@ namespace InvisibleGorillaXRay.Handlers
 
         public void UpdateCurrentConfigPath(string path)
         {
-            userSettings.CurrentConfigPath = string.IsNullOrEmpty(path) ? Directory.CONFIGS : path;
+            userSettings.CurrentConfigPath = NormalizePath(path, Values.Directory.CONFIGS);
             SaveUserSettings();
         }
 
@@ -75,20 +75,41 @@ namespace InvisibleGorillaXRay.Handlers
 
         private UserSettings LoadUserSettings()
         {
+            Values.Directory.EnsureWritableDirectories();
+
             if (!File.Exists(Path.USER_SETTINGS))
-                return new UserSettings();
+                return NormalizePaths(new UserSettings());
 
             string rawSettings = File.ReadAllText(Path.USER_SETTINGS);
             if (!JsonUtility.IsJsonValid(rawSettings))
-                return new UserSettings();
+                return NormalizePaths(new UserSettings());
 
-            return JsonConvert.DeserializeObject<UserSettings>(rawSettings);
+            return NormalizePaths(JsonConvert.DeserializeObject<UserSettings>(rawSettings));
+
+            UserSettings NormalizePaths(UserSettings settings)
+            {
+                settings.CurrentConfigPath = NormalizePath(settings.CurrentConfigPath, Values.Directory.CONFIGS);
+                settings.LogPath = NormalizePath(settings.LogPath, Values.Directory.LOGS);
+                return settings;
+            }
         }
 
         private void SaveUserSettings()
         {
+            Values.Directory.EnsureWritableDirectories();
             string rawSettings = JsonConvert.SerializeObject(userSettings);
             File.WriteAllText(Path.USER_SETTINGS, rawSettings);
+        }
+
+        private static string NormalizePath(string path, string fallback)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return fallback;
+
+            if (!System.IO.Path.IsPathRooted(path))
+                return System.IO.Path.GetFullPath(System.IO.Path.Combine(Values.Directory.ROOT, path));
+
+            return path;
         }
     }
 }

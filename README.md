@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="Images/image-1.png" width="300" alt="Invisible Gorilla XRay — Main Window"/>
+  <img src="Images/image-1.png" width="300" alt="Invisible Gorilla XRay - Main Window"/>
 </p>
 
 <h1 align="center">Invisible Gorilla XRay</h1>
 
 <p align="center">
-  Free, open-source VPN client for Windows & macOS<br>
+  Free, open-source Xray client for Windows, macOS, and Android (experimental)<br>
   powered by <a href="https://github.com/XTLS/Xray-core">Xray-core</a>
 </p>
 
@@ -22,24 +22,33 @@
 |---|---|---|
 | **Windows** | [Latest Release (.exe)](https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/latest) | Windows 10+ |
 | **macOS** | [Latest Release (.app)](https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/latest) | macOS 13+ (Apple Silicon & Intel) |
+| **Android** | Build from source with `.\build-android.ps1` | .NET Android workload, Android SDK, JDK 11+, Android NDK, arm64 device |
 
 ## What Is This?
 
-Invisible Gorilla XRay wraps the powerful [Xray-core](https://github.com/XTLS/Xray-core) proxy engine with a clean, intuitive interface. Import your server configuration, click **Run**, and your traffic is encrypted.
+Invisible Gorilla XRay wraps [Xray-core](https://github.com/XTLS/Xray-core) with desktop and mobile clients, shared config management, and platform-specific routing logic.
 
-No command-line knowledge needed — just download, add your config, and connect.
+On Windows and macOS, the project already provides desktop-ready flows. Android support is now present as an experimental Avalonia head with APK packaging groundwork, local proxy workflow, shared config management, and storage/runtime preparation for mobile packaging.
+
+## Current Android Status
+
+Android support is **experimental**.
+
+- The repo now includes an `InvisibleGorilla-XRay.Android` project that can be packaged as an APK.
+- Shared config handling, local Xray listener startup, config import, and Android app-private storage setup are implemented.
+- The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
+- `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
 ## Features
 
-- **One-click connect** — import config and press Run
-- **VLESS, VMess, Trojan, Shadowsocks** — all major protocols supported
-- **Proxy & TUN modes** — system-wide proxy or tunnel-based routing
-- **Server management** — add, test, switch between multiple servers
-- **Connection testing** — check latency with one click
-- **Subscription support** — auto-update server lists from provider links
-- **System tray** — runs quietly in background
-- **Multi-language** — English, Russian, Persian
-- **Crash-safe** — proxy settings are always cleaned up on exit
+- **One-click connect** on desktop - import config and press Run
+- **VLESS, VMess, Trojan, Shadowsocks** - all major protocols supported
+- **Proxy and TUN modes** - Windows and macOS desktop routing, Android groundwork for local proxy and future mobile VPN
+- **Server management** - add, test, switch between multiple servers
+- **Connection testing** - check latency with one click
+- **Subscription support** - auto-update server lists from provider links
+- **Shared core logic** - common config, templates, analytics, and Xray wrapper integration across platforms
+- **Diagnostic logging** - startup/runtime troubleshooting for both desktop and mobile app roots
 
 ## Screenshots
 
@@ -51,17 +60,19 @@ No command-line knowledge needed — just download, add your config, and connect
 
 ## Quick Start
 
-### 1. Download & Install
+### 1. Download or build
 
-Grab the latest release for your platform from the [Releases page](https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/latest).
+- Windows and macOS: use the latest release from the [Releases page](https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/latest).
+- Android: build the APK from source with `.\build-android.ps1`.
 
-### 2. Add a Server
+### 2. Add a server
 
-Open the app → click **Manage server configuration** → tap **+** → paste your server config (JSON file or subscription link).
+Open the app, import a raw JSON config, config link, or subscription, then select the config you want to run.
 
 ### 3. Connect
 
-Select your server, go back to the main screen, and click **Run**. That's it — you're connected.
+- Desktop: choose your mode and click **Run**.
+- Android: use the experimental Android head to manage configs and start the local proxy workflow while the mobile tunnel bridge is being finalized.
 
 ## Build from Source
 
@@ -74,14 +85,14 @@ cd InvisibleGorilla-XRayClient
 .\build.ps1
 ```
 
-The script auto-installs Go, GCC, .NET 7 SDK if missing, then builds everything.
+The script auto-installs Go, GCC, and .NET 7 SDK if missing, then builds everything for Windows.
 
 | Command | Description |
 |---|---|
-| `.\build.ps1` | Full build |
+| `.\build.ps1` | Full Windows build |
 | `.\build.ps1 -Publish` | Build + single-file executable |
-| `.\build.ps1 -Step GoWrapper` | Only build XRayCore.dll |
-| `.\build.ps1 -Step DotNet` | Only build .NET app |
+| `.\build.ps1 -Step GoWrapper` | Only build `XRayCore.dll` |
+| `.\build.ps1 -Step DotNet` | Only build the .NET desktop app |
 
 </details>
 
@@ -95,14 +106,56 @@ chmod +x build-macos.sh
 ./build-macos.sh
 ```
 
-Tested on macOS Sequoia 15.7+ (Apple Silicon & Intel). Builds an `.app` bundle with Avalonia UI.
+Tested on macOS Sequoia 15.7+ (Apple Silicon and Intel). Builds an `.app` bundle with Avalonia UI.
 
 | Command | Description |
 |---|---|
-| `./build-macos.sh` | Full build |
+| `./build-macos.sh` | Full macOS build |
 | `./build-macos.sh --publish` | Build + distributable archive |
-| `./build-macos.sh --step go` | Only build XRayCore.dylib |
-| `./build-macos.sh --step bundle` | Only package .app bundle |
+| `./build-macos.sh --step go` | Only build `XRayCore.dylib` |
+| `./build-macos.sh --step bundle` | Only package the `.app` bundle |
+
+</details>
+
+<details>
+<summary><b>Android</b></summary>
+
+### Prerequisites
+
+On Windows, `.\build-android.ps1` now installs missing prerequisites automatically on first run. That includes:
+
+- .NET 8 SDK
+- .NET Android workload
+- JDK 17
+- Android command-line tools
+- Android SDK platform/build-tools
+- Android NDK
+- Go 1.23
+
+You still need a working internet connection, and some installers may request elevation depending on local system policy.
+
+### Build
+
+```powershell
+git clone https://github.com/hvkeyn/InvisibleGorilla-XRayClient.git
+cd InvisibleGorilla-XRayClient
+.\build-android.ps1
+```
+
+The Android build script:
+
+- checks for missing build dependencies and installs them automatically when possible
+- downloads `geoip.dat` and `geosite.dat` into `InvisibleGorilla-XRay.Android/Assets/Runtime`
+- builds the Android native bridge from `XRay-Wrapper` using the Android NDK and packages it into runtime assets
+- publishes `InvisibleGorilla-XRay.Android` as an APK
+
+| Command | Description |
+|---|---|
+| `.\build-android.ps1` | Full Android build + APK publish |
+| `.\build-android.ps1 -SkipNativeBridge` | Reuse the existing Android native bridge runtime asset in `Assets/Runtime` |
+| `.\build-android.ps1 -SkipGeoFiles` | Reuse existing geo files in `Assets/Runtime` |
+| `.\build-android.ps1 -NoPublish` | Prepare runtime assets without publishing the APK |
+| `.\build-android.ps1 -KeystorePath <path> -KeyAlias <alias>` | Publish a signed APK using `ANDROID_SIGNING_PASSWORD` |
 
 </details>
 
@@ -111,27 +164,31 @@ Tested on macOS Sequoia 15.7+ (Apple Silicon & Intel). Builds an `.app` bundle w
 | Component | Technology | Platform |
 |---|---|---|
 | Windows GUI | WPF (.NET 7, C#) | Windows |
-| macOS GUI | Avalonia UI 11 (.NET 8, C#) | macOS |
+| macOS GUI | Avalonia UI 11 (.NET 7, C#) | macOS |
+| Android GUI | Avalonia UI 11 (.NET 8 Android, C#) | Android |
+| Shared logic | `InvisibleGorilla.Core` (.NET class library) | Cross-platform |
 | Proxy engine | [Xray-core](https://github.com/XTLS/Xray-core) v25.1.30 | Cross-platform |
-| Native bridge | Go 1.23 → cgo c-shared (`.dll` / `.dylib`) | Windows / macOS |
-| Shared logic | InvisibleGorilla.Core (.NET class library) | Cross-platform |
-| TUN service | [InvisibleGorilla-TUN](https://github.com/hvkeyn/InvisibleGorilla-TUN) | Windows |
+| Native bridge | Go 1.23 -> cgo shared library (`.dll` / `.dylib` / `.so`) | Windows / macOS / Android |
+| Windows tunnel service | [InvisibleGorilla-TUN](https://github.com/hvkeyn/InvisibleGorilla-TUN) | Windows only |
+| Android mobile VPN layer | `VpnService` groundwork in Android head | Android |
 | Geo routing | [v2fly geoip](https://github.com/v2fly/geoip) + [domain-list](https://github.com/v2fly/domain-list-community) | Cross-platform |
 
 ## Troubleshooting
 
 | Problem | Solution |
 |---|---|
-| VPN shows "Running" but IP doesn't change | Check `diagnostic.log` in the app folder. Try a different server or protocol. |
-| Can't connect to server | Click **Check** on your config to test latency. If timeout — the server may be down. |
-| App won't start on macOS | Right-click → Open (first launch). Grant Network permissions in System Settings. |
-| Proxy stays on after crash | Restart the app — it automatically cleans up stale proxy settings. |
+| App shows "Running" but traffic does not change on desktop | Check `diagnostic.log` in the app folder. Try a different server or protocol. |
+| Android proxy mode starts but apps do not route automatically | Android currently starts a local listener; point apps to `127.0.0.1:<proxy-port>` or wait for the follow-up mobile tunnel bridge. |
+| Android TUN mode reports an error | This repository now contains the Android groundwork, but the native mobile tunnel bridge is still a follow-up task. |
+| Android native bridge asset is missing during packaging | Run `.\build-android.ps1` with a valid `ANDROID_NDK_ROOT` so the wrapper can build and package the Android shared library runtime asset. |
+| `dotnet publish` cannot find Android SDK | Set `ANDROID_SDK_ROOT` or `ANDROID_HOME`, or pass `-AndroidSdkDirectory` to `.\build-android.ps1`. |
+| Desktop proxy stays on after a crash | Restart the app - it cleans up stale proxy settings on startup/shutdown. |
 
 ## Contributing
 
-- **Report bugs** — open an [issue](https://github.com/hvkeyn/InvisibleGorilla-XRayClient/issues)
-- **Add a language** — see [Language.md](./Language.md)
-- **Submit code** — fork, branch, and send a pull request
+- **Report bugs** - open an [issue](https://github.com/hvkeyn/InvisibleGorilla-XRayClient/issues)
+- **Add a language** - see [Language.md](./Language.md)
+- **Submit code** - fork, branch, and send a pull request
 
 ## License
 
@@ -139,5 +196,6 @@ Tested on macOS Sequoia 15.7+ (Apple Silicon & Intel). Builds an `.app` bundle w
 
 ## Credits
 
-- [InvisibleMan-XRay](https://github.com/InvisibleManVPN/InvisibleMan-XRay) — original project
-- [Xray-core](https://github.com/XTLS/Xray-core) — proxy engine
+- [InvisibleMan-XRay](https://github.com/InvisibleManVPN/InvisibleMan-XRay) - original project
+- [Xray-core](https://github.com/XTLS/Xray-core) - proxy engine
+- [InvisibleGorilla-TUN](https://github.com/hvkeyn/InvisibleGorilla-TUN) - Windows tunnel companion service

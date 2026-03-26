@@ -129,7 +129,15 @@ namespace InvisibleGorillaXRay.Core
             int proxyPort = getProxyPort.Invoke();
             int tunnelServicePort = getTunPort.Invoke();
             LogLevel logLevel = getLogLevel.Invoke();
-            string logPath = System.IO.Path.GetFullPath($"{getLogPath.Invoke()}/{getConfig.Invoke().Name}");
+            string configuredLogDirectory = getLogPath.Invoke();
+            if (!System.IO.Path.IsPathRooted(configuredLogDirectory))
+            {
+                configuredLogDirectory = System.IO.Path.GetFullPath(
+                    System.IO.Path.Combine(Values.Directory.ROOT, configuredLogDirectory));
+            }
+
+            string logPath = System.IO.Path.GetFullPath(
+                System.IO.Path.Combine(configuredLogDirectory, getConfig.Invoke().Name));
             bool isSocks = getProtocol.Invoke() == Protocol.SOCKS || mode == Mode.TUN;
             bool isUdpEnabled = getUdpEnabled.Invoke();
             bool systemProxy = getSystemProxyUsed.Invoke();

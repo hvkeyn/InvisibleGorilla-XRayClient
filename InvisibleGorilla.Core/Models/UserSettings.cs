@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using Newtonsoft.Json;
 
 namespace InvisibleGorillaXRay.Models
@@ -69,7 +69,7 @@ namespace InvisibleGorillaXRay.Models
         {
             this.ClientId = "";
             this.Language = "en-US";
-            this.CurrentConfigPath = "./Configs";
+            this.CurrentConfigPath = Values.Directory.CONFIGS;
             this.Mode = Mode.PROXY;
             this.Protocol = Protocol.HTTP;
             this.IsSystemProxyUse = true;
@@ -84,7 +84,7 @@ namespace InvisibleGorillaXRay.Models
             this.TestPort = 10803;
             this.Dns = "8.8.8.8";
             this.LogLevel = LogLevel.NONE;
-            this.LogPath = "./Logs";
+            this.LogPath = Values.Directory.LOGS;
         }
 
         public UserSettings(

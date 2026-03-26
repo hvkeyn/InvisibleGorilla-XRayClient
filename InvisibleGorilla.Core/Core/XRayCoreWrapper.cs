@@ -23,8 +23,7 @@ namespace InvisibleGorillaXRay.Core
             if (libraryName != LIB_NAME)
                 return IntPtr.Zero;
 
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            string libDir = System.IO.Path.Combine(baseDir, "Libraries");
+            string libDir = Values.Directory.LIBRARIES;
 
             string libPath;
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))

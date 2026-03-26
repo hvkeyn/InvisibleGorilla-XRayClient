@@ -3,14 +3,18 @@
 /InvisibleGorilla-XRay/obj
 /InvisibleGorilla-XRay.Mac/bin
 /InvisibleGorilla-XRay.Mac/obj
+/InvisibleGorilla-XRay.Android/bin
+/InvisibleGorilla-XRay.Android/obj
 /InvisibleGorilla.Core/bin
 /InvisibleGorilla.Core/obj
 *.dll
 *.dat
 *.exe
 *.dylib
+*.so
 
 # Build outputs
 /publish
+/publish-android
 /dist
 /XRay-Wrapper/gorilla-xray

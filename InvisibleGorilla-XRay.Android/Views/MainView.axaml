@@ -1,0 +1,93 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="InvisibleGorillaXRay.Android.Views.MainView">
+    <ScrollViewer>
+        <StackPanel Margin="20" Spacing="14">
+            <TextBlock Text="Invisible Gorilla XRay"
+                       FontSize="26"
+                       FontWeight="Bold" />
+
+            <Border Padding="12" CornerRadius="10">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Status" FontWeight="SemiBold" />
+                    <TextBlock x:Name="StatusTextBlock" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Padding="12" CornerRadius="10">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Runtime" FontWeight="SemiBold" />
+                    <TextBlock x:Name="RuntimeTextBlock" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="Connection settings" FontSize="18" FontWeight="SemiBold" />
+
+            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                <StackPanel Grid.Row="0" Grid.Column="0" Spacing="4" Margin="0,0,6,8">
+                    <TextBlock Text="Mode" />
+                    <ComboBox x:Name="ModeComboBox" SelectionChanged="OnModeChanged" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="0" Grid.Column="1" Spacing="4" Margin="6,0,0,8">
+                    <TextBlock Text="Protocol" />
+                    <ComboBox x:Name="ProtocolComboBox" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Grid.Column="0" Spacing="4" Margin="0,0,6,8">
+                    <TextBlock Text="Proxy port" />
+                    <TextBox x:Name="ProxyPortTextBox" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4" Margin="6,0,0,8">
+                    <TextBlock Text="TUN port" />
+                    <TextBox x:Name="TunPortTextBox" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="2" Grid.Column="0" Spacing="4" Margin="0,0,6,8">
+                    <TextBlock Text="TUN IP" />
+                    <TextBox x:Name="TunIpTextBox" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="2" Grid.Column="1" Spacing="4" Margin="6,0,0,8">
+                    <TextBlock Text="DNS" />
+                    <TextBox x:Name="DnsTextBox" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="10">
+                    <Button x:Name="SaveSettingsButton" Content="Save settings" Click="OnSaveSettingsClick" />
+                    <Button x:Name="RefreshConfigsButton" Content="Refresh configs" Click="OnRefreshConfigsClick" />
+                </StackPanel>
+            </Grid>
+
+            <TextBlock Text="Available configs" FontSize="18" FontWeight="SemiBold" />
+            <ListBox x:Name="ConfigsListBox"
+                     Height="220"
+                     SelectionChanged="OnConfigSelectionChanged" />
+
+            <TextBlock Text="Import config link" FontSize="18" FontWeight="SemiBold" />
+            <TextBox x:Name="ConfigLinkTextBox"
+                     Watermark="vless://, vmess://, trojan:// or ss://" />
+            <Button Content="Import config link" Click="OnImportConfigLinkClick" />
+
+            <TextBlock Text="Import subscription" FontSize="18" FontWeight="SemiBold" />
+            <TextBox x:Name="SubscriptionRemarkTextBox" Watermark="Subscription name" />
+            <TextBox x:Name="SubscriptionLinkTextBox" Watermark="Subscription URL" />
+            <Button Content="Import subscription" Click="OnImportSubscriptionClick" />
+
+            <TextBlock Text="Save raw JSON config" FontSize="18" FontWeight="SemiBold" />
+            <TextBox x:Name="ConfigRemarkTextBox" Watermark="Config name" />
+            <TextBox x:Name="RawConfigTextBox"
+                     Height="240"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"
+                     Watermark="{}{&quot;inbounds&quot;: [], &quot;outbounds&quot;: []}" />
+            <Button Content="Save raw JSON config" Click="OnSaveRawConfigClick" />
+
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <Button x:Name="RunButton" Content="Run" Click="OnRunClick" />
+                <Button x:Name="StopButton" Content="Stop" Click="OnStopClick" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

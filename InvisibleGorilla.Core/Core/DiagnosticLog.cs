@@ -3,17 +3,19 @@ using System.IO;
 
 namespace InvisibleGorillaXRay.Core
 {
-    internal static class DiagnosticLog
-    {
-        private static readonly string LogFilePath = Path.Combine(
-            AppDomain.CurrentDomain.BaseDirectory, "diagnostic.log");
+    using Values;
 
+    public static class DiagnosticLog
+    {
         private static readonly object LockObj = new object();
+
+        private static string LogFilePath => Values.Path.DIAGNOSTIC_LOG;
 
         public static void Write(string message)
         {
             try
             {
+                Values.Directory.EnsureWritableDirectories();
                 string line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}";
                 lock (LockObj)
                 {
@@ -41,6 +43,7 @@ namespace InvisibleGorillaXRay.Core
         {
             try
             {
+                Values.Directory.EnsureWritableDirectories();
                 lock (LockObj)
                 {
                     File.WriteAllText(LogFilePath, $"=== Diagnostic Log Started: {DateTime.Now:yyyy-MM-dd HH:mm:ss} ==={Environment.NewLine}");
