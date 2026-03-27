@@ -128,4 +128,78 @@
     <x:String x:Key="Lang.Config.Log">Журнал</x:String>
     <x:String x:Key="Lang.Config.Select">Выбрать</x:String>
 
+    <x:String x:Key="Lang.Android.Home.Subtitle.Stopped">Прокси-режим готов на Android. VPN/TUN пока в разработке.</x:String>
+    <x:String x:Key="Lang.Android.Home.Subtitle.Starting">Запускается локальный Xray listener для прокси-режима Android.</x:String>
+    <x:String x:Key="Lang.Android.Home.Subtitle.Running">Прокси-режим активен. VPN/TUN пока остаётся помеченным как будущая возможность.</x:String>
+    <x:String x:Key="Lang.Android.Home.ProxyAvailability">Прокси-режим уже работает на Android. VPN/TUN пока остаётся в интерфейсе для совместимости и будет включён после завершения мобильного моста VpnService.</x:String>
+    <x:String x:Key="Lang.Android.Home.UpdateAvailable">Доступно обновление на GitHub Releases.</x:String>
+
+    <x:String x:Key="Lang.Android.Server.Description">Выберите активную конфигурацию, импортируйте ссылки и управляйте подписками отдельно от главного экрана подключения.</x:String>
+    <x:String x:Key="Lang.Android.Server.ConfigItemPrefix">Конфиг</x:String>
+    <x:String x:Key="Lang.Android.Server.SubscriptionItemPrefix">Подписка</x:String>
+    <x:String x:Key="Lang.Android.Server.AvailableConfigurations">Доступные конфигурации</x:String>
+    <x:String x:Key="Lang.Android.Server.ImportConfigButton">Импортировать конфиг по ссылке</x:String>
+    <x:String x:Key="Lang.Android.Server.ShowAdvancedTools">Показать расширенный импорт</x:String>
+    <x:String x:Key="Lang.Android.Server.HideAdvancedTools">Скрыть расширенный импорт</x:String>
+    <x:String x:Key="Lang.Android.Server.AdvancedImport">Расширенный импорт</x:String>
+    <x:String x:Key="Lang.Android.Server.AdvancedImportDescription">Используйте сырой JSON только если нужен полный ручной контроль над профилем.</x:String>
+    <x:String x:Key="Lang.Android.Server.ConfigName">Название конфигурации</x:String>
+    <x:String x:Key="Lang.Android.Server.SaveRawConfig">Сохранить JSON-конфигурацию</x:String>
+    <x:String x:Key="Lang.Android.Server.SubscriptionGroups">Группы подписок</x:String>
+    <x:String x:Key="Lang.Android.Server.RefreshSelected">Обновить выбранную</x:String>
+    <x:String x:Key="Lang.Android.Server.DeleteSelected">Удалить выбранную</x:String>
+    <x:String x:Key="Lang.Android.Server.AddOrReplaceSubscription">Добавить или заменить подписку</x:String>
+    <x:String x:Key="Lang.Android.Server.AddOrReplaceSubscriptionDescription">Сохраните подписку по имени и URL. Если имя совпадает с существующей группой, она будет обновлена на месте.</x:String>
+    <x:String x:Key="Lang.Android.Server.SubscriptionName">Название подписки</x:String>
+    <x:String x:Key="Lang.Android.Server.SaveSubscription">Сохранить подписку</x:String>
+
+    <x:String x:Key="Lang.Android.Settings.Description">На Android главный экран сделан компактным. Сетевые параметры и диагностика вынесены сюда, а VPN/TUN остаётся видимым как запланированная возможность.</x:String>
+    <x:String x:Key="Lang.Android.Settings.VpnComingSoon">VPN/TUN скоро</x:String>
+    <x:String x:Key="Lang.Android.Settings.Network">Сеть</x:String>
+    <x:String x:Key="Lang.Android.Settings.TunDescription">Интерфейс Android сохраняет VPN/TUN для визуальной совместимости с Windows и macOS, но сам мобильный tunnel runtime пока не поставляется.</x:String>
+    <x:String x:Key="Lang.Android.Settings.LogsAndDiagnostics">Журналы и диагностика</x:String>
+
+    <x:String x:Key="Lang.Android.Runtime.NoneSelected">Не выбрано</x:String>
+    <x:String x:Key="Lang.Android.Runtime.AppRoot">Корень приложения</x:String>
+    <x:String x:Key="Lang.Android.Runtime.CurrentConfigPath">Путь к текущей конфигурации</x:String>
+    <x:String x:Key="Lang.Android.Runtime.ProxyListener">Локальный прокси</x:String>
+    <x:String x:Key="Lang.Android.Runtime.Protocol">Протокол</x:String>
+    <x:String x:Key="Lang.Android.Runtime.Dns">DNS</x:String>
+    <x:String x:Key="Lang.Android.Runtime.Udp">UDP</x:String>
+    <x:String x:Key="Lang.Android.Runtime.Enabled">Включено</x:String>
+    <x:String x:Key="Lang.Android.Runtime.Disabled">Выключено</x:String>
+    <x:String x:Key="Lang.Android.Runtime.SystemProxyNotice">Переключение системного прокси на Android отключено. VPN/TUN пока в разработке.</x:String>
+    <x:String x:Key="Lang.Android.Runtime.Broadcast">Объявление</x:String>
+
+    <x:String x:Key="Lang.Android.Status.LoadingConfig">Загрузка конфигурации...</x:String>
+    <x:String x:Key="Lang.Android.Status.SettingsSaved">Настройки сохранены. На Android продолжает использоваться прокси-режим, а VPN/TUN пока остаётся помеченным как будущая возможность.</x:String>
+    <x:String x:Key="Lang.Android.Status.InvalidProxyPort">Некорректный порт прокси.</x:String>
+    <x:String x:Key="Lang.Android.Status.StartCanceled">Запуск отменён.</x:String>
+    <x:String x:Key="Lang.Android.Status.RunningProxy">Прокси-режим запущен...</x:String>
+    <x:String x:Key="Lang.Android.Status.StopRequested">Запрошена остановка...</x:String>
+    <x:String x:Key="Lang.Android.Status.SelectedConfig">Выбрана конфигурация: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.SelectedSubscription">Выбрана подписка: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.ConvertConfigFailed">Не удалось преобразовать ссылку конфигурации.</x:String>
+    <x:String x:Key="Lang.Android.Status.ImportedConfig">Импортирована конфигурация: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.ImportSubscriptionFailed">Не удалось импортировать подписку.</x:String>
+    <x:String x:Key="Lang.Android.Status.SavedSubscription">Подписка сохранена: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.SelectSubscriptionFirst">Сначала выберите группу подписок.</x:String>
+    <x:String x:Key="Lang.Android.Status.RefreshSubscriptionFailed">Не удалось обновить подписку.</x:String>
+    <x:String x:Key="Lang.Android.Status.RefreshedSubscription">Подписка обновлена: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.DeletedSubscription">Подписка удалена: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.FilePickerUnavailable">Выбор файла недоступен на этом Android-устройстве.</x:String>
+    <x:String x:Key="Lang.Android.Status.ImportedConfigFile">Импортирован файл конфигурации: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.SelectConfigFirst">Сначала выберите конфигурацию.</x:String>
+    <x:String x:Key="Lang.Android.Status.CheckingConfig">Проверяется конфигурация: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.CheckConfigUnsupported">Не удалось определить удалённый endpoint для проверки этой конфигурации.</x:String>
+    <x:String x:Key="Lang.Android.Status.CheckedConfigSuccess">Конфигурация {0} ответила за {1} мс.</x:String>
+    <x:String x:Key="Lang.Android.Status.CheckedConfigTimeout">Превышено время ожидания конфигурации {0}.</x:String>
+    <x:String x:Key="Lang.Android.Status.NativeRuntimeUnavailable">Нативный рантайм Xray недоступен на этом устройстве или сборке эмулятора.</x:String>
+    <x:String x:Key="Lang.Android.Status.SharedConfig">Конфигурация отправлена: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.SharedSubscription">Ссылка подписки отправлена: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.DeletedConfig">Конфигурация удалена: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.EnterConfigName">Введите название конфигурации.</x:String>
+    <x:String x:Key="Lang.Android.Status.RawConfigInvalidJson">Сырой JSON конфигурации некорректен.</x:String>
+    <x:String x:Key="Lang.Android.Status.SavedRawConfig">JSON-конфигурация сохранена: {0}</x:String>
+
 </ResourceDictionary>

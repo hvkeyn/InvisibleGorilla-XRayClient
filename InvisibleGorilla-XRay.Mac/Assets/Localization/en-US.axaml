@@ -128,4 +128,78 @@
     <x:String x:Key="Lang.Config.Log">Log</x:String>
     <x:String x:Key="Lang.Config.Select">Select</x:String>
 
+    <x:String x:Key="Lang.Android.Home.Subtitle.Stopped">Proxy mode is ready on Android. VPN/TUN is still coming soon.</x:String>
+    <x:String x:Key="Lang.Android.Home.Subtitle.Starting">Starting the local Xray listener for Android proxy mode.</x:String>
+    <x:String x:Key="Lang.Android.Home.Subtitle.Running">Proxy mode is active. VPN/TUN remains visible as a coming-soon capability.</x:String>
+    <x:String x:Key="Lang.Android.Home.ProxyAvailability">Proxy mode is ready on Android. VPN/TUN stays visible for continuity and will be enabled after the mobile VpnService bridge is finished.</x:String>
+    <x:String x:Key="Lang.Android.Home.UpdateAvailable">Update available on GitHub Releases.</x:String>
+
+    <x:String x:Key="Lang.Android.Server.Description">Choose the active configuration, import links, and manage subscriptions separately from the main connection screen.</x:String>
+    <x:String x:Key="Lang.Android.Server.ConfigItemPrefix">Config</x:String>
+    <x:String x:Key="Lang.Android.Server.SubscriptionItemPrefix">Subscription</x:String>
+    <x:String x:Key="Lang.Android.Server.AvailableConfigurations">Available configurations</x:String>
+    <x:String x:Key="Lang.Android.Server.ImportConfigButton">Import config link</x:String>
+    <x:String x:Key="Lang.Android.Server.ShowAdvancedTools">Show advanced import tools</x:String>
+    <x:String x:Key="Lang.Android.Server.HideAdvancedTools">Hide advanced import tools</x:String>
+    <x:String x:Key="Lang.Android.Server.AdvancedImport">Advanced import</x:String>
+    <x:String x:Key="Lang.Android.Server.AdvancedImportDescription">Use raw JSON only when you need full manual control over a profile.</x:String>
+    <x:String x:Key="Lang.Android.Server.ConfigName">Config name</x:String>
+    <x:String x:Key="Lang.Android.Server.SaveRawConfig">Save raw JSON config</x:String>
+    <x:String x:Key="Lang.Android.Server.SubscriptionGroups">Subscription groups</x:String>
+    <x:String x:Key="Lang.Android.Server.RefreshSelected">Refresh selected</x:String>
+    <x:String x:Key="Lang.Android.Server.DeleteSelected">Delete selected</x:String>
+    <x:String x:Key="Lang.Android.Server.AddOrReplaceSubscription">Add or replace subscription</x:String>
+    <x:String x:Key="Lang.Android.Server.AddOrReplaceSubscriptionDescription">Save a subscription by name and URL. If the name matches an existing group, it will be refreshed in place.</x:String>
+    <x:String x:Key="Lang.Android.Server.SubscriptionName">Subscription name</x:String>
+    <x:String x:Key="Lang.Android.Server.SaveSubscription">Save subscription</x:String>
+
+    <x:String x:Key="Lang.Android.Settings.Description">Android keeps the main screen compact. Network and diagnostics live here, while VPN/TUN remains visible as a planned capability.</x:String>
+    <x:String x:Key="Lang.Android.Settings.VpnComingSoon">VPN/TUN coming soon</x:String>
+    <x:String x:Key="Lang.Android.Settings.Network">Network</x:String>
+    <x:String x:Key="Lang.Android.Settings.TunDescription">The Android UI keeps VPN/TUN visible for continuity with Windows and macOS, but the actual mobile tunnel runtime is not bundled yet.</x:String>
+    <x:String x:Key="Lang.Android.Settings.LogsAndDiagnostics">Logs and diagnostics</x:String>
+
+    <x:String x:Key="Lang.Android.Runtime.NoneSelected">None selected</x:String>
+    <x:String x:Key="Lang.Android.Runtime.AppRoot">App root</x:String>
+    <x:String x:Key="Lang.Android.Runtime.CurrentConfigPath">Current config path</x:String>
+    <x:String x:Key="Lang.Android.Runtime.ProxyListener">Proxy listener</x:String>
+    <x:String x:Key="Lang.Android.Runtime.Protocol">Protocol</x:String>
+    <x:String x:Key="Lang.Android.Runtime.Dns">DNS</x:String>
+    <x:String x:Key="Lang.Android.Runtime.Udp">UDP</x:String>
+    <x:String x:Key="Lang.Android.Runtime.Enabled">Enabled</x:String>
+    <x:String x:Key="Lang.Android.Runtime.Disabled">Disabled</x:String>
+    <x:String x:Key="Lang.Android.Runtime.SystemProxyNotice">Android system proxy switching is disabled. VPN/TUN remains coming soon.</x:String>
+    <x:String x:Key="Lang.Android.Runtime.Broadcast">Broadcast</x:String>
+
+    <x:String x:Key="Lang.Android.Status.LoadingConfig">Loading config...</x:String>
+    <x:String x:Key="Lang.Android.Status.SettingsSaved">Settings saved. Proxy mode remains active on Android while VPN/TUN stays marked as coming soon.</x:String>
+    <x:String x:Key="Lang.Android.Status.InvalidProxyPort">Invalid proxy port.</x:String>
+    <x:String x:Key="Lang.Android.Status.StartCanceled">Start canceled.</x:String>
+    <x:String x:Key="Lang.Android.Status.RunningProxy">Running in proxy mode...</x:String>
+    <x:String x:Key="Lang.Android.Status.StopRequested">Stop requested...</x:String>
+    <x:String x:Key="Lang.Android.Status.SelectedConfig">Selected config: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.SelectedSubscription">Selected subscription: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.ConvertConfigFailed">Failed to convert config link.</x:String>
+    <x:String x:Key="Lang.Android.Status.ImportedConfig">Imported config: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.ImportSubscriptionFailed">Failed to import subscription.</x:String>
+    <x:String x:Key="Lang.Android.Status.SavedSubscription">Saved subscription: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.SelectSubscriptionFirst">Select a subscription group first.</x:String>
+    <x:String x:Key="Lang.Android.Status.RefreshSubscriptionFailed">Failed to refresh subscription.</x:String>
+    <x:String x:Key="Lang.Android.Status.RefreshedSubscription">Refreshed subscription: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.DeletedSubscription">Deleted subscription: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.FilePickerUnavailable">File picker is not available on this Android device.</x:String>
+    <x:String x:Key="Lang.Android.Status.ImportedConfigFile">Imported config file: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.SelectConfigFirst">Select a configuration first.</x:String>
+    <x:String x:Key="Lang.Android.Status.CheckingConfig">Checking config: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.CheckConfigUnsupported">Couldn't detect a remote endpoint to check for this config.</x:String>
+    <x:String x:Key="Lang.Android.Status.CheckedConfigSuccess">Config {0} responded in {1} ms.</x:String>
+    <x:String x:Key="Lang.Android.Status.CheckedConfigTimeout">Config {0} timed out.</x:String>
+    <x:String x:Key="Lang.Android.Status.NativeRuntimeUnavailable">The native Xray runtime is unavailable on this device or emulator build.</x:String>
+    <x:String x:Key="Lang.Android.Status.SharedConfig">Shared config: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.SharedSubscription">Shared subscription link: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.DeletedConfig">Deleted config: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.EnterConfigName">Enter a config name.</x:String>
+    <x:String x:Key="Lang.Android.Status.RawConfigInvalidJson">Raw config is not valid JSON.</x:String>
+    <x:String x:Key="Lang.Android.Status.SavedRawConfig">Saved raw config: {0}</x:String>
+
 </ResourceDictionary>

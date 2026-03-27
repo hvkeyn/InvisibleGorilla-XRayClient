@@ -13,7 +13,7 @@ param(
 
     [string]$OutputDir = ".\publish-android",
 
-    [ValidateSet("arm64-v8a")]
+    [ValidateSet("arm64-v8a", "x86_64")]
     [string]$Abi = "arm64-v8a",
 
     [int]$AndroidApiLevel = 24,
@@ -792,14 +792,15 @@ function Get-GeoFiles {
 function Resolve-AndroidClang {
     param(
         [Parameter(Mandatory)][string]$NdkRoot,
-        [Parameter(Mandatory)][int]$ApiLevel
+        [Parameter(Mandatory)][int]$ApiLevel,
+        [Parameter(Mandatory)][string]$TargetTriple
     )
 
     $toolchainDir = Join-Path $NdkRoot "toolchains\llvm\prebuilt\windows-x86_64\bin"
     $candidates = @(
-        (Join-Path $toolchainDir "aarch64-linux-android$ApiLevel-clang.cmd"),
-        (Join-Path $toolchainDir "aarch64-linux-android$ApiLevel-clang.exe"),
-        (Join-Path $toolchainDir "aarch64-linux-android$ApiLevel-clang")
+        (Join-Path $toolchainDir "$TargetTriple$ApiLevel-clang.cmd"),
+        (Join-Path $toolchainDir "$TargetTriple$ApiLevel-clang.exe"),
+        (Join-Path $toolchainDir "$TargetTriple$ApiLevel-clang")
     )
 
     foreach ($candidate in $candidates) {
@@ -818,42 +819,79 @@ function Invoke-NativeBridgeBuild {
         throw "ANDROID_NDK_ROOT is not configured. The prerequisite step should have installed it automatically."
     }
 
-    $clang = Resolve-AndroidClang -NdkRoot $AndroidNdkDirectory -ApiLevel $AndroidApiLevel
     New-DirectoryIfMissing $RuntimeDir
 
     Push-Location $WrapperDir
     try {
         $oldGoos = $env:GOOS
         $oldGoarch = $env:GOARCH
+        $oldGoamd64 = $env:GOAMD64
         $oldCgo = $env:CGO_ENABLED
         $oldCc = $env:CC
 
-        $env:GOOS = "android"
-        $env:GOARCH = "arm64"
-        $env:CGO_ENABLED = "1"
-        $env:CC = $clang
+        $targets = @(
+            @{
+                Label = "arm64-v8a"
+                GoArch = "arm64"
+                TargetTriple = "aarch64-linux-android"
+                OutputDir = $RuntimeDir
+            },
+            @{
+                Label = "x86_64"
+                GoArch = "amd64"
+                TargetTriple = "x86_64-linux-android"
+                OutputDir = (Join-Path $RuntimeDir "x86_64")
+            }
+        )
 
-        $nativeLibPath = Join-Path $RuntimeDir "libXRayCore.so"
-        $nativeAssetPath = Join-Path $RuntimeDir "libXRayCore.bin"
-        Remove-Item $nativeLibPath -Force -ErrorAction SilentlyContinue
-        Remove-Item $nativeAssetPath -Force -ErrorAction SilentlyContinue
+        foreach ($target in $targets) {
+            $clang = Resolve-AndroidClang `
+                -NdkRoot $AndroidNdkDirectory `
+                -ApiLevel $AndroidApiLevel `
+                -TargetTriple $target.TargetTriple
 
-        & go build --buildmode=c-shared `
-            -o $nativeLibPath `
-            -trimpath `
-            -ldflags "-s -w -buildid=" .
+            New-DirectoryIfMissing $target.OutputDir
 
-        if ($LASTEXITCODE -ne 0) {
-            throw "go build failed with exit code $LASTEXITCODE"
+            $env:GOOS = "android"
+            $env:GOARCH = $target.GoArch
+            $env:CGO_ENABLED = "1"
+            $env:CC = $clang
+
+            if ($target.GoArch -eq "amd64") {
+                $env:GOAMD64 = "v1"
+            }
+            else {
+                Remove-Item Env:GOAMD64 -ErrorAction SilentlyContinue
+            }
+
+            $nativeLibPath = Join-Path $target.OutputDir "libXRayCore.so"
+            $nativeAssetPath = Join-Path $target.OutputDir "libXRayCore.bin"
+            Remove-Item $nativeLibPath -Force -ErrorAction SilentlyContinue
+            Remove-Item $nativeAssetPath -Force -ErrorAction SilentlyContinue
+
+            & go build --buildmode=c-shared `
+                -o $nativeLibPath `
+                -trimpath `
+                -ldflags "-s -w -buildid=" .
+
+            if ($LASTEXITCODE -ne 0) {
+                throw "go build failed for $($target.Label) with exit code $LASTEXITCODE"
+            }
+
+            Remove-Item (Join-Path $target.OutputDir "libXRayCore.h") -Force -ErrorAction SilentlyContinue
+            Move-Item -Path $nativeLibPath -Destination $nativeAssetPath -Force
+            Write-Success "libXRayCore runtime asset created for $($target.Label)"
         }
-
-        Remove-Item (Join-Path $RuntimeDir "libXRayCore.h") -Force -ErrorAction SilentlyContinue
-        Move-Item -Path $nativeLibPath -Destination $nativeAssetPath -Force
-        Write-Success "libXRayCore runtime asset created in Assets/Runtime"
     }
     finally {
         $env:GOOS = $oldGoos
         $env:GOARCH = $oldGoarch
+        if ([string]::IsNullOrWhiteSpace($oldGoamd64)) {
+            Remove-Item Env:GOAMD64 -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:GOAMD64 = $oldGoamd64
+        }
         $env:CGO_ENABLED = $oldCgo
         $env:CC = $oldCc
         Pop-Location
@@ -865,6 +903,7 @@ function Convert-AndroidAbiToRuntimeIdentifier {
 
     switch ($AndroidAbi) {
         "arm64-v8a" { return "android-arm64" }
+        "x86_64" { return "android-x64" }
         default { throw "Unsupported Android ABI: $AndroidAbi" }
     }
 }

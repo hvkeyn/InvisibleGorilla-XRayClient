@@ -50,7 +50,9 @@ namespace InvisibleGorillaXRay.Android.Managers
             settingsHandler.UpdateUserSettings(new InvisibleGorillaXRay.Models.UserSettings
             {
                 Language = settingsHandler.UserSettings.GetLanguage(),
-                Mode = settingsHandler.UserSettings.GetMode(),
+                // Android still exposes VPN/TUN as coming soon in the UI,
+                // but the persisted runtime mode must stay on the working proxy path.
+                Mode = InvisibleGorillaXRay.Models.Mode.PROXY,
                 Protocol = settingsHandler.UserSettings.GetProtocol(),
                 LogLevel = settingsHandler.UserSettings.GetLogLevel(),
                 IsSystemProxyUse = false,

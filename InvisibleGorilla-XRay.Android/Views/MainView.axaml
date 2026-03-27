@@ -1,93 +1,847 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="InvisibleGorillaXRay.Android.Views.MainView">
-    <ScrollViewer>
-        <StackPanel Margin="20" Spacing="14">
-            <TextBlock Text="Invisible Gorilla XRay"
-                       FontSize="26"
-                       FontWeight="Bold" />
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="SurfaceDark" Color="#1E1E1E" />
+        <SolidColorBrush x:Key="SurfaceLight" Color="#2D2D2D" />
+        <SolidColorBrush x:Key="SurfaceBright" Color="#3F3F3F" />
+        <SolidColorBrush x:Key="TextMuted" Color="#D0D0D0" />
+        <SolidColorBrush x:Key="AccentMint" Color="#6DCC8E" />
+        <SolidColorBrush x:Key="AccentMintLight" Color="#81ECA6" />
+        <SolidColorBrush x:Key="AccentMintDark" Color="#549F6E" />
+        <SolidColorBrush x:Key="AccentRed" Color="#D95F5F" />
+        <SolidColorBrush x:Key="AccentRedLight" Color="#E96666" />
+        <SolidColorBrush x:Key="AccentRedDark" Color="#CB5A5A" />
+        <SolidColorBrush x:Key="AccentBlue" Color="#19B3E4" />
 
-            <Border Padding="12" CornerRadius="10">
-                <StackPanel Spacing="6">
-                    <TextBlock Text="Status" FontWeight="SemiBold" />
-                    <TextBlock x:Name="StatusTextBlock" TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
+        <ControlTheme x:Key="CircleActionButton" TargetType="Button">
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border Name="border"
+                            Background="{StaticResource AccentMint}"
+                            CornerRadius="999">
+                        <ContentPresenter Name="PART_ContentPresenter"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#border">
+                <Setter Property="Background" Value="{StaticResource AccentMintLight}" />
+            </Style>
+            <Style Selector="^:pressed /template/ Border#border">
+                <Setter Property="Background" Value="{StaticResource AccentMintDark}" />
+            </Style>
+            <Style Selector="^:disabled /template/ Border#border">
+                <Setter Property="Opacity" Value="0.35" />
+            </Style>
+        </ControlTheme>
 
-            <Border Padding="12" CornerRadius="10">
-                <StackPanel Spacing="6">
-                    <TextBlock Text="Runtime" FontWeight="SemiBold" />
-                    <TextBlock x:Name="RuntimeTextBlock" TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
+        <ControlTheme x:Key="GreenActionButton" TargetType="Button">
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border Name="border"
+                            Background="{StaticResource AccentMint}"
+                            CornerRadius="3">
+                        <ContentPresenter Name="PART_ContentPresenter"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#border">
+                <Setter Property="Background" Value="{StaticResource AccentMintLight}" />
+            </Style>
+            <Style Selector="^:pressed /template/ Border#border">
+                <Setter Property="Background" Value="{StaticResource AccentMintDark}" />
+            </Style>
+        </ControlTheme>
 
-            <TextBlock Text="Connection settings" FontSize="18" FontWeight="SemiBold" />
+        <ControlTheme x:Key="RedActionButton" TargetType="Button">
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border Name="border"
+                            Background="{StaticResource AccentRed}"
+                            CornerRadius="3">
+                        <ContentPresenter Name="PART_ContentPresenter"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#border">
+                <Setter Property="Background" Value="{StaticResource AccentRedLight}" />
+            </Style>
+            <Style Selector="^:pressed /template/ Border#border">
+                <Setter Property="Background" Value="{StaticResource AccentRedDark}" />
+            </Style>
+        </ControlTheme>
 
-            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto">
-                <StackPanel Grid.Row="0" Grid.Column="0" Spacing="4" Margin="0,0,6,8">
-                    <TextBlock Text="Mode" />
-                    <ComboBox x:Name="ModeComboBox" SelectionChanged="OnModeChanged" />
-                </StackPanel>
+        <ControlTheme x:Key="GrayActionButton" TargetType="Button">
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border Name="border"
+                            Background="{StaticResource SurfaceLight}"
+                            CornerRadius="3">
+                        <ContentPresenter Name="PART_ContentPresenter"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#border">
+                <Setter Property="Background" Value="{StaticResource SurfaceBright}" />
+            </Style>
+            <Style Selector="^:pressed /template/ Border#border">
+                <Setter Property="Background" Value="#252526" />
+            </Style>
+            <Style Selector="^:disabled /template/ Border#border">
+                <Setter Property="Opacity" Value="0.35" />
+            </Style>
+        </ControlTheme>
 
-                <StackPanel Grid.Row="0" Grid.Column="1" Spacing="4" Margin="6,0,0,8">
-                    <TextBlock Text="Protocol" />
-                    <ComboBox x:Name="ProtocolComboBox" />
-                </StackPanel>
+        <ControlTheme x:Key="LinkButton" TargetType="Button">
+            <Setter Property="Template">
+                <ControlTemplate TargetType="Button">
+                    <Border Background="Transparent">
+                        <ContentPresenter Name="PART_ContentPresenter"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+    </UserControl.Resources>
 
-                <StackPanel Grid.Row="1" Grid.Column="0" Spacing="4" Margin="0,0,6,8">
-                    <TextBlock Text="Proxy port" />
-                    <TextBox x:Name="ProxyPortTextBox" />
-                </StackPanel>
+    <Grid Background="{StaticResource SurfaceDark}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="80" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="52" />
+        </Grid.RowDefinitions>
 
-                <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4" Margin="6,0,0,8">
-                    <TextBlock Text="TUN port" />
-                    <TextBox x:Name="TunPortTextBox" />
-                </StackPanel>
+        <Border Grid.Row="0"
+                Background="{StaticResource SurfaceLight}">
+            <Grid ColumnDefinitions="75,*">
+                <Grid Grid.Column="0"
+                      Width="58"
+                      Height="58"
+                      HorizontalAlignment="Right"
+                      VerticalAlignment="Center">
+                    <Ellipse Fill="{StaticResource AccentMint}" />
+                    <Ellipse Width="34"
+                             Height="38"
+                             Margin="0,5,0,0"
+                             Fill="#4A8C62"
+                             VerticalAlignment="Center" />
+                    <Ellipse Width="7"
+                             Height="9"
+                             Margin="-8,2,0,0"
+                             Fill="#3D7A55"
+                             VerticalAlignment="Center" />
+                    <Ellipse Width="7"
+                             Height="9"
+                             Margin="8,2,0,0"
+                             Fill="#3D7A55"
+                             VerticalAlignment="Center" />
+                    <Ellipse Width="22"
+                             Height="8"
+                             Margin="0,6,0,0"
+                             Fill="#1E3E2A"
+                             VerticalAlignment="Center" />
+                    <Ellipse Width="12"
+                             Height="4"
+                             Margin="0,6,0,0"
+                             Fill="{StaticResource AccentMint}"
+                             VerticalAlignment="Center" />
+                    <Ellipse Width="12"
+                             Height="12"
+                             Margin="0,20,0,0"
+                             Fill="#1E3E2A"
+                             VerticalAlignment="Center" />
+                </Grid>
 
-                <StackPanel Grid.Row="2" Grid.Column="0" Spacing="4" Margin="0,0,6,8">
-                    <TextBlock Text="TUN IP" />
-                    <TextBox x:Name="TunIpTextBox" />
-                </StackPanel>
-
-                <StackPanel Grid.Row="2" Grid.Column="1" Spacing="4" Margin="6,0,0,8">
-                    <TextBlock Text="DNS" />
-                    <TextBox x:Name="DnsTextBox" />
-                </StackPanel>
-
-                <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="10">
-                    <Button x:Name="SaveSettingsButton" Content="Save settings" Click="OnSaveSettingsClick" />
-                    <Button x:Name="RefreshConfigsButton" Content="Refresh configs" Click="OnRefreshConfigsClick" />
+                <StackPanel Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Spacing="0">
+                    <TextBlock Margin="15,7,0,0"
+                               Text="INVISIBLE GORILLA"
+                               FontWeight="Light"
+                               FontSize="14"
+                               Foreground="White" />
+                    <TextBlock Margin="15,-4,0,0"
+                               Text="XRAY"
+                               FontWeight="Light"
+                               FontSize="42"
+                               Foreground="White" />
                 </StackPanel>
             </Grid>
+        </Border>
 
-            <TextBlock Text="Available configs" FontSize="18" FontWeight="SemiBold" />
-            <ListBox x:Name="ConfigsListBox"
-                     Height="220"
-                     SelectionChanged="OnConfigSelectionChanged" />
+        <ScrollViewer Grid.Row="1">
+            <Grid>
+                <StackPanel x:Name="HomeSectionPanel"
+                            Margin="20,16,20,28"
+                            Spacing="0"
+                            IsVisible="True">
+                    <Grid Width="140"
+                          Height="140"
+                          Margin="0,6,0,0"
+                          HorizontalAlignment="Center">
+                        <Border x:Name="ConnectionHeroGlow"
+                                Width="140"
+                                Height="140"
+                                CornerRadius="70"
+                                Background="{StaticResource AccentMint}"
+                                Opacity="0.28"
+                                IsVisible="False" />
 
-            <TextBlock Text="Import config link" FontSize="18" FontWeight="SemiBold" />
-            <TextBox x:Name="ConfigLinkTextBox"
-                     Watermark="vless://, vmess://, trojan:// or ss://" />
-            <Button Content="Import config link" Click="OnImportConfigLinkClick" />
+                        <Grid x:Name="StoppedHeroIcon"
+                              Width="120"
+                              Height="120"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center">
+                            <Ellipse Fill="{StaticResource SurfaceLight}" />
+                            <Ellipse Width="66"
+                                     Height="80"
+                                     Margin="0,10,0,18"
+                                     Fill="#725B5B"
+                                     VerticalAlignment="Center" />
+                            <Ellipse Width="12"
+                                     Height="18"
+                                     Margin="-34,-10,0,0"
+                                     Fill="#5A4545"
+                                     VerticalAlignment="Center" />
+                            <Ellipse Width="12"
+                                     Height="18"
+                                     Margin="34,-10,0,0"
+                                     Fill="#5A4545"
+                                     VerticalAlignment="Center" />
+                            <Ellipse Width="44"
+                                     Height="16"
+                                     Margin="0,10,0,0"
+                                     Fill="#4A3535"
+                                     VerticalAlignment="Center" />
+                            <Ellipse Width="24"
+                                     Height="8"
+                                     Margin="0,10,0,0"
+                                     Fill="{StaticResource SurfaceLight}"
+                                     VerticalAlignment="Center" />
+                            <Ellipse Width="22"
+                                     Height="24"
+                                     Margin="0,36,0,0"
+                                     Fill="#4A3535"
+                                     VerticalAlignment="Center" />
+                            <Ellipse Width="8"
+                                     Height="10"
+                                     Margin="-7,36,0,0"
+                                     Fill="{StaticResource SurfaceLight}"
+                                     VerticalAlignment="Center" />
+                            <Ellipse Width="8"
+                                     Height="10"
+                                     Margin="7,36,0,0"
+                                     Fill="{StaticResource SurfaceLight}"
+                                     VerticalAlignment="Center" />
+                        </Grid>
 
-            <TextBlock Text="Import subscription" FontSize="18" FontWeight="SemiBold" />
-            <TextBox x:Name="SubscriptionRemarkTextBox" Watermark="Subscription name" />
-            <TextBox x:Name="SubscriptionLinkTextBox" Watermark="Subscription URL" />
-            <Button Content="Import subscription" Click="OnImportSubscriptionClick" />
+                        <Grid x:Name="RunningHeroIcon"
+                              Width="120"
+                              Height="120"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              IsVisible="False">
+                            <Ellipse Fill="{StaticResource SurfaceLight}" />
+                            <Ellipse Width="66"
+                                     Height="80"
+                                     Margin="0,10,0,18"
+                                     Fill="#384949"
+                                     VerticalAlignment="Center" />
+                            <Ellipse Width="12"
+                                     Height="18"
+                                     Margin="-34,-10,0,0"
+                                     Fill="#2B3A3A"
+                                     VerticalAlignment="Center" />
+                            <Ellipse Width="12"
+                                     Height="18"
+                                     Margin="34,-10,0,0"
+                                     Fill="#2B3A3A"
+                                     VerticalAlignment="Center" />
+                            <Ellipse Width="44"
+                                     Height="16"
+                                     Margin="0,10,0,0"
+                                     Fill="{StaticResource AccentBlue}"
+                                     VerticalAlignment="Center" />
+                            <Ellipse Width="24"
+                                     Height="8"
+                                     Margin="0,10,0,0"
+                                     Fill="{StaticResource SurfaceLight}"
+                                     VerticalAlignment="Center" />
+                            <Ellipse Width="22"
+                                     Height="24"
+                                     Margin="0,36,0,0"
+                                     Fill="{StaticResource AccentBlue}"
+                                     VerticalAlignment="Center" />
+                            <Ellipse Width="8"
+                                     Height="10"
+                                     Margin="-7,36,0,0"
+                                     Fill="{StaticResource SurfaceLight}"
+                                     VerticalAlignment="Center" />
+                            <Ellipse Width="8"
+                                     Height="10"
+                                     Margin="7,36,0,0"
+                                     Fill="{StaticResource SurfaceLight}"
+                                     VerticalAlignment="Center" />
+                        </Grid>
+                    </Grid>
 
-            <TextBlock Text="Save raw JSON config" FontSize="18" FontWeight="SemiBold" />
-            <TextBox x:Name="ConfigRemarkTextBox" Watermark="Config name" />
-            <TextBox x:Name="RawConfigTextBox"
-                     Height="240"
-                     AcceptsReturn="True"
-                     TextWrapping="Wrap"
-                     Watermark="{}{&quot;inbounds&quot;: [], &quot;outbounds&quot;: []}" />
-            <Button Content="Save raw JSON config" Click="OnSaveRawConfigClick" />
+                    <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Center"
+                                Spacing="8"
+                                Margin="0,10,0,0">
+                        <Border x:Name="ConnectionStateIndicator"
+                                Width="12"
+                                Height="12"
+                                CornerRadius="6"
+                                Background="#D66A75"
+                                VerticalAlignment="Center" />
+                        <TextBlock x:Name="ConnectionStateTitleTextBlock"
+                                   Text="Stopped"
+                                   Foreground="White"
+                                   FontWeight="SemiBold"
+                                   FontSize="22"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
 
-            <StackPanel Orientation="Horizontal" Spacing="12">
-                <Button x:Name="RunButton" Content="Run" Click="OnRunClick" />
-                <Button x:Name="StopButton" Content="Stop" Click="OnStopClick" />
+                    <TextBlock x:Name="ConnectionStateSubtitleTextBlock"
+                               Margin="0,8,0,0"
+                               MaxWidth="320"
+                               Text="Proxy mode is ready on Android."
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource TextMuted}"
+                               FontSize="14" />
+
+                    <TextBlock x:Name="CurrentConfigNameTextBlock"
+                               Width="320"
+                               Margin="0,22,0,0"
+                               Text="No server configuration selected"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="White"
+                               FontWeight="Light"
+                               FontSize="18"
+                               HorizontalAlignment="Center" />
+
+                    <Button Theme="{StaticResource LinkButton}"
+                            HorizontalAlignment="Center"
+                            Margin="0,10,0,0"
+                            Click="OnServersSectionClick">
+                        <StackPanel Orientation="Horizontal">
+                            <Grid Width="15"
+                                  Height="15"
+                                  Margin="0,0,7,0">
+                                <Border Height="5"
+                                        CornerRadius="2"
+                                        Background="{StaticResource AccentBlue}"
+                                        VerticalAlignment="Top" />
+                                <Border Height="5"
+                                        CornerRadius="2"
+                                        Background="{StaticResource AccentBlue}"
+                                        VerticalAlignment="Center" />
+                                <Border Height="5"
+                                        CornerRadius="2"
+                                        Background="{StaticResource AccentBlue}"
+                                        VerticalAlignment="Bottom" />
+                            </Grid>
+                            <TextBlock x:Name="ManageServerConfigurationTextBlock"
+                                       Text="Manage server configuration"
+                                       TextDecorations="Underline"
+                                       Foreground="{StaticResource AccentBlue}"
+                                       FontSize="14" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button x:Name="RunButton"
+                            Width="200"
+                            Height="40"
+                            Margin="0,26,0,0"
+                            Content="RUN"
+                            Theme="{StaticResource GreenActionButton}"
+                            FontWeight="Bold"
+                            FontSize="15"
+                            Foreground="#252526"
+                            HorizontalAlignment="Center"
+                            Click="OnRunClick" />
+
+                    <Button x:Name="StopButton"
+                            Width="200"
+                            Height="40"
+                            Margin="0,26,0,0"
+                            Content="STOP"
+                            Theme="{StaticResource RedActionButton}"
+                            FontWeight="Bold"
+                            FontSize="15"
+                            Foreground="#252526"
+                            HorizontalAlignment="Center"
+                            IsVisible="False"
+                            Click="OnStopClick" />
+
+                    <Border x:Name="HomeStatusPanel"
+                            Margin="0,18,0,0"
+                            Padding="16,14"
+                            CornerRadius="12"
+                            BorderBrush="{StaticResource SurfaceBright}"
+                            BorderThickness="1"
+                            Background="{StaticResource SurfaceLight}"
+                            IsVisible="False">
+                        <TextBlock x:Name="HomeStatusTextBlock"
+                                   TextWrapping="Wrap"
+                                   Foreground="White"
+                                   FontSize="14" />
+                    </Border>
+
+                    <Border x:Name="HomeInfoPanel"
+                            Margin="0,18,0,0"
+                            Padding="16,14"
+                            CornerRadius="12"
+                            BorderBrush="{StaticResource SurfaceBright}"
+                            BorderThickness="1"
+                            Background="{StaticResource SurfaceLight}"
+                            IsVisible="False">
+                        <TextBlock x:Name="HomeInfoTextBlock"
+                                   TextWrapping="Wrap"
+                                   Foreground="White"
+                                   FontSize="14" />
+                    </Border>
+                </StackPanel>
+
+                <StackPanel x:Name="ServersSectionPanel"
+                            Margin="20,20,20,24"
+                            Spacing="14"
+                            IsVisible="False">
+                    <TextBlock x:Name="ServersTitleTextBlock"
+                               Text="Servers"
+                               FontSize="26"
+                               FontWeight="Bold" />
+                    <TextBlock x:Name="ServersDescriptionTextBlock"
+                               Text="Choose the active configuration, import links, and manage subscriptions separately from the main connection screen."
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource TextMuted}" />
+
+                    <Border x:Name="ServersStatusPanel"
+                            Padding="16,14"
+                            CornerRadius="12"
+                            BorderBrush="{StaticResource SurfaceBright}"
+                            BorderThickness="1"
+                            Background="{StaticResource SurfaceLight}"
+                            IsVisible="False">
+                        <TextBlock x:Name="ServersStatusTextBlock"
+                                   TextWrapping="Wrap"
+                                   Foreground="White"
+                                   FontSize="14" />
+                    </Border>
+
+                    <Grid ColumnDefinitions="*,*">
+                        <Button x:Name="ConfigurationsTabButton"
+                                Grid.Column="0"
+                                Margin="0,0,5,0"
+                                Height="38"
+                                Content="Configurations"
+                                Theme="{StaticResource GrayActionButton}"
+                                Click="OnConfigurationsTabClick" />
+                        <Button x:Name="SubscriptionsTabButton"
+                                Grid.Column="1"
+                                Margin="5,0,0,0"
+                                Height="38"
+                                Content="Subscriptions"
+                                Theme="{StaticResource GrayActionButton}"
+                                Click="OnSubscriptionsTabClick" />
+                    </Grid>
+
+                    <StackPanel x:Name="ConfigurationsPanel" Spacing="14">
+                        <Border Padding="14"
+                                CornerRadius="12"
+                                BorderBrush="{StaticResource SurfaceBright}"
+                                BorderThickness="1"
+                                Background="{StaticResource SurfaceLight}">
+                            <StackPanel Spacing="8">
+                                <TextBlock x:Name="AvailableConfigurationsTextBlock"
+                                           Text="Available configurations"
+                                           FontSize="18"
+                                           FontWeight="SemiBold" />
+                                <ListBox x:Name="ConfigsListBox"
+                                         Height="260"
+                                         SelectionChanged="OnConfigSelectionChanged" />
+                                <Grid ColumnDefinitions="*,*,*">
+                                    <Button x:Name="CheckSelectedConfigButton"
+                                            Grid.Column="0"
+                                            Margin="0,0,5,0"
+                                            Height="38"
+                                            Content="Check"
+                                            Theme="{StaticResource GrayActionButton}"
+                                            Click="OnCheckSelectedConfigClick" />
+                                    <Button x:Name="ShareSelectedConfigButton"
+                                            Grid.Column="1"
+                                            Margin="5,0,5,0"
+                                            Height="38"
+                                            Content="Share"
+                                            Theme="{StaticResource GrayActionButton}"
+                                            Click="OnShareSelectedConfigClick" />
+                                    <Button x:Name="DeleteSelectedConfigButton"
+                                            Grid.Column="2"
+                                            Margin="5,0,0,0"
+                                            Height="38"
+                                            Content="Delete"
+                                            Theme="{StaticResource RedActionButton}"
+                                            Foreground="#252526"
+                                            FontWeight="Bold"
+                                            Click="OnDeleteSelectedConfigClick" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Padding="14"
+                                CornerRadius="12"
+                                BorderBrush="{StaticResource SurfaceBright}"
+                                BorderThickness="1"
+                                Background="{StaticResource SurfaceLight}">
+                            <StackPanel Spacing="8">
+                                <TextBlock x:Name="ImportConfigTitleTextBlock"
+                                           Text="Import from link"
+                                           FontSize="18"
+                                           FontWeight="SemiBold" />
+                                <TextBox x:Name="ConfigLinkTextBox"
+                                         Watermark="vless://, vmess://, trojan:// or ss://" />
+                                <Grid ColumnDefinitions="*,*">
+                                    <Button x:Name="ImportConfigFileButton"
+                                            Grid.Column="0"
+                                            Margin="0,0,5,0"
+                                            Content="Import from file"
+                                            Height="38"
+                                            Theme="{StaticResource GrayActionButton}"
+                                            Click="OnImportConfigFileClick" />
+                                    <Button x:Name="ImportConfigButton"
+                                            Grid.Column="1"
+                                            Margin="5,0,0,0"
+                                            Content="Import config link"
+                                            Height="38"
+                                            Theme="{StaticResource GreenActionButton}"
+                                            Foreground="#252526"
+                                            FontWeight="Bold"
+                                            Click="OnImportConfigLinkClick" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Button x:Name="AdvancedImportToggleButton"
+                                Height="38"
+                                Content="Show advanced import tools"
+                                Theme="{StaticResource GrayActionButton}"
+                                Click="OnToggleAdvancedImportClick" />
+
+                        <Border x:Name="AdvancedImportPanel"
+                                IsVisible="False"
+                                Padding="14"
+                                CornerRadius="12"
+                                BorderBrush="{StaticResource SurfaceBright}"
+                                BorderThickness="1"
+                                Background="{StaticResource SurfaceLight}">
+                            <StackPanel Spacing="8">
+                                <TextBlock x:Name="AdvancedImportTitleTextBlock"
+                                           Text="Advanced import"
+                                           FontSize="18"
+                                           FontWeight="SemiBold" />
+                                <TextBlock x:Name="AdvancedImportDescriptionTextBlock"
+                                           Text="Use raw JSON only when you need full manual control over a profile."
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource TextMuted}" />
+                                <TextBox x:Name="ConfigRemarkTextBox"
+                                         Watermark="Config name" />
+                                <TextBox x:Name="RawConfigTextBox"
+                                         Height="220"
+                                         AcceptsReturn="True"
+                                         TextWrapping="Wrap"
+                                         Watermark="{}{&quot;inbounds&quot;: [], &quot;outbounds&quot;: []}" />
+                                <Button x:Name="SaveRawConfigButton"
+                                        Content="Save raw JSON config"
+                                        Height="38"
+                                        Theme="{StaticResource GreenActionButton}"
+                                        Foreground="#252526"
+                                        FontWeight="Bold"
+                                        Click="OnSaveRawConfigClick" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel x:Name="SubscriptionsPanel" IsVisible="False" Spacing="14">
+                        <Border Padding="14"
+                                CornerRadius="12"
+                                BorderBrush="{StaticResource SurfaceBright}"
+                                BorderThickness="1"
+                                Background="{StaticResource SurfaceLight}">
+                            <StackPanel Spacing="8">
+                                <TextBlock x:Name="SubscriptionGroupsTitleTextBlock"
+                                           Text="Subscription groups"
+                                           FontSize="18"
+                                           FontWeight="SemiBold" />
+                                <ListBox x:Name="SubscriptionsListBox"
+                                         Height="180"
+                                         SelectionChanged="OnSubscriptionSelectionChanged" />
+                                <Grid ColumnDefinitions="*,*,*">
+                                    <Button x:Name="RefreshSubscriptionButton"
+                                            Grid.Column="0"
+                                            Margin="0,0,5,0"
+                                            Height="38"
+                                            Content="Refresh selected"
+                                            Theme="{StaticResource GrayActionButton}"
+                                            Click="OnRefreshSubscriptionClick" />
+                                    <Button x:Name="ShareSubscriptionButton"
+                                            Grid.Column="1"
+                                            Margin="5,0,5,0"
+                                            Height="38"
+                                            Content="Share"
+                                            Theme="{StaticResource GrayActionButton}"
+                                            Click="OnShareSubscriptionClick" />
+                                    <Button x:Name="DeleteSubscriptionButton"
+                                            Grid.Column="2"
+                                            Margin="5,0,0,0"
+                                            Height="38"
+                                            Content="Delete selected"
+                                            Theme="{StaticResource RedActionButton}"
+                                            Foreground="#252526"
+                                            FontWeight="Bold"
+                                            Click="OnDeleteSubscriptionClick" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Padding="14"
+                                CornerRadius="12"
+                                BorderBrush="{StaticResource SurfaceBright}"
+                                BorderThickness="1"
+                                Background="{StaticResource SurfaceLight}">
+                            <StackPanel Spacing="8">
+                                <TextBlock x:Name="AddSubscriptionTitleTextBlock"
+                                           Text="Add or replace subscription"
+                                           FontSize="18"
+                                           FontWeight="SemiBold" />
+                                <TextBlock x:Name="AddSubscriptionDescriptionTextBlock"
+                                           Text="Save a subscription by name and URL. If the name matches an existing group, it will be refreshed in place."
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource TextMuted}" />
+                                <TextBox x:Name="SubscriptionRemarkTextBox"
+                                         Watermark="Subscription name" />
+                                <TextBox x:Name="SubscriptionLinkTextBox"
+                                         Watermark="Subscription URL" />
+                                <Button x:Name="SaveSubscriptionButton"
+                                        Content="Save subscription"
+                                        Height="38"
+                                        Theme="{StaticResource GreenActionButton}"
+                                        Foreground="#252526"
+                                        FontWeight="Bold"
+                                        Click="OnImportSubscriptionClick" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel x:Name="SettingsSectionPanel"
+                            Margin="20,20,20,24"
+                            Spacing="14"
+                            IsVisible="False">
+                    <TextBlock x:Name="SettingsTitleTextBlock"
+                               Text="Settings"
+                               FontSize="26"
+                               FontWeight="Bold" />
+                    <TextBlock x:Name="SettingsDescriptionTextBlock"
+                               Text="Android keeps the main screen compact. Network and diagnostics live here, while VPN/TUN remains visible as a planned capability."
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource TextMuted}" />
+
+                    <Border x:Name="SettingsStatusPanel"
+                            Padding="16,14"
+                            CornerRadius="12"
+                            BorderBrush="{StaticResource SurfaceBright}"
+                            BorderThickness="1"
+                            Background="{StaticResource SurfaceLight}"
+                            IsVisible="False">
+                        <TextBlock x:Name="SettingsStatusTextBlock"
+                                   TextWrapping="Wrap"
+                                   Foreground="White"
+                                   FontSize="14" />
+                    </Border>
+
+                    <Border Padding="14"
+                            CornerRadius="12"
+                            BorderBrush="{StaticResource SurfaceBright}"
+                            BorderThickness="1"
+                            Background="{StaticResource SurfaceLight}">
+                        <StackPanel Spacing="10">
+                            <TextBlock x:Name="BasicSettingsTitleTextBlock"
+                                       Text="Basic"
+                                       FontSize="18"
+                                       FontWeight="SemiBold" />
+                            <TextBlock x:Name="ConnectionModeTitleTextBlock"
+                                       Text="Connection mode" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Border Padding="10,4"
+                                        CornerRadius="999"
+                                        Background="{StaticResource AccentMint}">
+                                    <TextBlock x:Name="ProxyModeBadgeTextBlock"
+                                               Text="Proxy"
+                                               FontWeight="SemiBold"
+                                               Foreground="#252526" />
+                                </Border>
+                                <Border Padding="10,4"
+                                        CornerRadius="999"
+                                        Background="{StaticResource SurfaceBright}">
+                                    <TextBlock x:Name="VpnComingSoonBadgeTextBlock"
+                                               Text="VPN/TUN coming soon"
+                                               Foreground="{StaticResource TextMuted}" />
+                                </Border>
+                            </StackPanel>
+                            <TextBlock x:Name="ProtocolTitleTextBlock"
+                                       Text="Protocol" />
+                            <ComboBox x:Name="ProtocolComboBox" />
+                            <CheckBox x:Name="UdpEnabledCheckBox"
+                                      Content="Enable UDP" />
+                            <CheckBox x:Name="AnalyticsCheckBox"
+                                      Content="Send anonymous analytics" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Padding="14"
+                            CornerRadius="12"
+                            BorderBrush="{StaticResource SurfaceBright}"
+                            BorderThickness="1"
+                            Background="{StaticResource SurfaceLight}">
+                        <StackPanel Spacing="10">
+                            <TextBlock x:Name="NetworkTitleTextBlock"
+                                       Text="Network"
+                                       FontSize="18"
+                                       FontWeight="SemiBold" />
+                            <TextBlock x:Name="ProxyPortTitleTextBlock"
+                                       Text="Proxy port" />
+                            <TextBox x:Name="ProxyPortTextBox" />
+                            <TextBlock x:Name="DnsTitleTextBlock"
+                                       Text="DNS" />
+                            <TextBox x:Name="DnsTextBox" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Padding="14"
+                            CornerRadius="12"
+                            BorderBrush="{StaticResource SurfaceBright}"
+                            BorderThickness="1"
+                            Background="{StaticResource SurfaceLight}">
+                        <StackPanel Spacing="8">
+                            <TextBlock x:Name="TunTitleTextBlock"
+                                       Text="VPN/TUN"
+                                       FontSize="18"
+                                       FontWeight="SemiBold" />
+                            <TextBlock x:Name="TunDescriptionTextBlock"
+                                       Text="The Android UI keeps VPN/TUN visible for continuity with Windows and macOS, but the actual mobile tunnel runtime is not bundled yet."
+                                       TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextMuted}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Padding="14"
+                            CornerRadius="12"
+                            BorderBrush="{StaticResource SurfaceBright}"
+                            BorderThickness="1"
+                            Background="{StaticResource SurfaceLight}">
+                        <StackPanel Spacing="8">
+                            <TextBlock x:Name="LogsAndDiagnosticsTitleTextBlock"
+                                       Text="Logs and diagnostics"
+                                       FontSize="18"
+                                       FontWeight="SemiBold" />
+                            <TextBlock x:Name="RuntimeTextBlock"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                    <Button x:Name="SaveSettingsButton"
+                            Content="Save settings"
+                            Height="40"
+                            Theme="{StaticResource GreenActionButton}"
+                            Foreground="#252526"
+                            FontWeight="Bold"
+                            Click="OnSaveSettingsClick" />
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <Border Grid.Row="2"
+                Background="{StaticResource SurfaceLight}">
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Spacing="10">
+                <Button x:Name="HomeSectionButton"
+                        Width="30"
+                        Height="30"
+                        Theme="{StaticResource CircleActionButton}"
+                        Click="OnHomeSectionClick">
+                    <TextBlock Text="i"
+                               Foreground="#252526"
+                               FontWeight="Bold"
+                               FontSize="18" />
+                </Button>
+
+                <Button Width="30"
+                        Height="30"
+                        Theme="{StaticResource CircleActionButton}"
+                        Click="OnOpenReleasesClick">
+                    <TextBlock Text="U"
+                               Foreground="#252526"
+                               FontWeight="Bold"
+                               FontSize="14" />
+                </Button>
+
+                <Button x:Name="SettingsSectionButton"
+                        Width="30"
+                        Height="30"
+                        Theme="{StaticResource CircleActionButton}"
+                        Click="OnSettingsSectionClick">
+                    <TextBlock Text="S"
+                               Foreground="#252526"
+                               FontWeight="Bold"
+                               FontSize="14" />
+                </Button>
+
+                <Button x:Name="ServersSectionButton"
+                        Width="30"
+                        Height="30"
+                        Theme="{StaticResource CircleActionButton}"
+                        Click="OnServersSectionClick">
+                    <TextBlock Text="SV"
+                               Foreground="#252526"
+                               FontWeight="Bold"
+                               FontSize="9" />
+                </Button>
+
+                <Button Width="30"
+                        Height="30"
+                        Theme="{StaticResource CircleActionButton}"
+                        Click="OnOpenGitHubClick">
+                    <TextBlock Text="GH"
+                               Foreground="#252526"
+                               FontWeight="Bold"
+                               FontSize="9" />
+                </Button>
             </StackPanel>
-        </StackPanel>
-    </ScrollViewer>
+        </Border>
+    </Grid>
 </UserControl>

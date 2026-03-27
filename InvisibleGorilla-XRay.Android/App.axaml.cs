@@ -1,9 +1,12 @@
+using System;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 
 namespace InvisibleGorillaXRay.Android
 {
+    using InvisibleGorillaXRay.Android.Handlers;
     using InvisibleGorillaXRay.Android.Managers;
     using InvisibleGorillaXRay.Android.Platforms;
     using InvisibleGorillaXRay.Android.Views;
@@ -19,15 +22,53 @@ namespace InvisibleGorillaXRay.Android
 
         public override void OnFrameworkInitializationCompleted()
         {
-            if (ApplicationLifetime is ISingleViewApplicationLifetime singleView)
+            try
             {
-                AndroidAppStorage.ConfigureAppRoot();
-                AndroidAppStorage.EnsureRuntimeAssets();
+                if (ApplicationLifetime is ISingleViewApplicationLifetime singleView)
+                {
+                    InvisibleGorillaXRay.Core.DiagnosticLog.Write("AndroidApp", "Single view lifetime detected");
 
-                appManager = new AndroidAppManager();
-                appManager.Initialize();
+                    AndroidAppStorage.ConfigureAppRoot();
+                    InvisibleGorillaXRay.Core.DiagnosticLog.Write(
+                        "AndroidApp",
+                        $"App root configured: {InvisibleGorillaXRay.Values.Directory.ROOT}");
 
-                singleView.MainView = new MainView(appManager);
+                    AndroidAppStorage.EnsureRuntimeAssets();
+                    InvisibleGorillaXRay.Core.DiagnosticLog.Write("AndroidApp", "Runtime assets prepared");
+
+                    appManager = new AndroidAppManager();
+                    InvisibleGorillaXRay.Core.DiagnosticLog.Write("AndroidApp", "App manager created");
+
+                    appManager.Initialize();
+                    InvisibleGorillaXRay.Core.DiagnosticLog.Write("AndroidApp", "App manager initialized");
+
+                    MainView mainView = new MainView();
+                    InvisibleGorillaXRay.Core.DiagnosticLog.Write("AndroidApp", "MainView constructed");
+
+                    singleView.MainView = mainView;
+                    InvisibleGorillaXRay.Core.DiagnosticLog.Write("AndroidApp", "MainView assigned to lifetime");
+
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        try
+                        {
+                            appManager.HandlersManager
+                                .GetHandler<AndroidLocalizationHandler>()
+                                .TryApplyCurrentLanguage();
+                            mainView.Setup(appManager);
+                            InvisibleGorillaXRay.Core.DiagnosticLog.Write("AndroidApp", "MainView setup completed");
+                        }
+                        catch (Exception ex)
+                        {
+                            InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("AndroidApp.SetupPost", ex);
+                        }
+                    }, DispatcherPriority.ApplicationIdle);
+                }
+            }
+            catch (Exception ex)
+            {
+                InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("AndroidApp", ex);
+                throw;
             }
 
             base.OnFrameworkInitializationCompleted();
