@@ -5,6 +5,10 @@
     <x:String x:Key="Lang.Run">ЗАПУСК</x:String>
     <x:String x:Key="Lang.Stop">СТОП</x:String>
     <x:String x:Key="Lang.Cancel">ОТМЕНА</x:String>
+    <x:String x:Key="Lang.Button.Import">ИМПОРТ</x:String>
+    <x:String x:Key="Lang.Button.Cancel">ОТМЕНА</x:String>
+    <x:String x:Key="Lang.Button.ChooseFile">ВЫБРАТЬ ФАЙЛ</x:String>
+    <x:String x:Key="Lang.Button.Paste">ВСТАВИТЬ</x:String>
 
     <x:String x:Key="Lang.Status.Stopped">Остановлен</x:String>
     <x:String x:Key="Lang.Status.Running">Работает</x:String>
@@ -24,6 +28,11 @@
     <x:String x:Key="Lang.Window.Server.AddConfig.Placeholder">Вставьте или введите ссылку на конфигурацию</x:String>
     <x:String x:Key="Lang.Window.Server.AddSub.FromLink">Импорт по ссылке</x:String>
     <x:String x:Key="Lang.Window.Server.AddSub.Placeholder">Вставьте или введите ссылку на подписку</x:String>
+    <x:String x:Key="Lang.Window.Server.Tab.Configuration">Конфигурация</x:String>
+    <x:String x:Key="Lang.Window.Server.Tab.Subscription">Подписка</x:String>
+    <x:String x:Key="Lang.Window.Server.Import.File">Импортировать файл конфигурации</x:String>
+    <x:String x:Key="Lang.Window.Server.Import.Link">Импортировать по ссылке</x:String>
+    <x:String x:Key="Lang.Window.Server.Import.Remarks">Название подписки</x:String>
 
     <x:String x:Key="Lang.Window.Settings.Title">Настройки</x:String>
     <x:String x:Key="Lang.Window.Settings.WindowTitle">Настройки</x:String>
@@ -135,9 +144,12 @@
     <x:String x:Key="Lang.Android.Home.UpdateAvailable">Доступно обновление на GitHub Releases.</x:String>
 
     <x:String x:Key="Lang.Android.Server.Description">Выберите активную конфигурацию, импортируйте ссылки и управляйте подписками отдельно от главного экрана подключения.</x:String>
+    <x:String x:Key="Lang.Android.Server.HeaderTitle">КОНФИГ СЕРВЕРА</x:String>
     <x:String x:Key="Lang.Android.Server.ConfigItemPrefix">Конфиг</x:String>
     <x:String x:Key="Lang.Android.Server.SubscriptionItemPrefix">Подписка</x:String>
     <x:String x:Key="Lang.Android.Server.AvailableConfigurations">Доступные конфигурации</x:String>
+    <x:String x:Key="Lang.Android.Server.AddConfigTitle">Добавить конфигурацию</x:String>
+    <x:String x:Key="Lang.Android.Server.AddConfigDescription">Выберите файл или вставьте ссылку, как это сделано в desktop-клиенте.</x:String>
     <x:String x:Key="Lang.Android.Server.ImportConfigButton">Импортировать конфиг по ссылке</x:String>
     <x:String x:Key="Lang.Android.Server.ShowAdvancedTools">Показать расширенный импорт</x:String>
     <x:String x:Key="Lang.Android.Server.HideAdvancedTools">Скрыть расширенный импорт</x:String>
@@ -150,6 +162,8 @@
     <x:String x:Key="Lang.Android.Server.DeleteSelected">Удалить выбранную</x:String>
     <x:String x:Key="Lang.Android.Server.AddOrReplaceSubscription">Добавить или заменить подписку</x:String>
     <x:String x:Key="Lang.Android.Server.AddOrReplaceSubscriptionDescription">Сохраните подписку по имени и URL. Если имя совпадает с существующей группой, она будет обновлена на месте.</x:String>
+    <x:String x:Key="Lang.Android.Server.NoSubscriptions">Подписок пока нет. Нажмите плюс, чтобы добавить новую.</x:String>
+    <x:String x:Key="Lang.Android.Server.NoSubscriptionConfigs">В этой подписке пока нет конфигураций.</x:String>
     <x:String x:Key="Lang.Android.Server.SubscriptionName">Название подписки</x:String>
     <x:String x:Key="Lang.Android.Server.SaveSubscription">Сохранить подписку</x:String>
 
@@ -198,6 +212,8 @@
     <x:String x:Key="Lang.Android.Status.SharedConfig">Конфигурация отправлена: {0}</x:String>
     <x:String x:Key="Lang.Android.Status.SharedSubscription">Ссылка подписки отправлена: {0}</x:String>
     <x:String x:Key="Lang.Android.Status.DeletedConfig">Конфигурация удалена: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.PastedFromClipboard">Текст вставлен из буфера обмена.</x:String>
+    <x:String x:Key="Lang.Android.Status.ClipboardEmpty">Буфер обмена пуст.</x:String>
     <x:String x:Key="Lang.Android.Status.EnterConfigName">Введите название конфигурации.</x:String>
     <x:String x:Key="Lang.Android.Status.RawConfigInvalidJson">Сырой JSON конфигурации некорректен.</x:String>
     <x:String x:Key="Lang.Android.Status.SavedRawConfig">JSON-конфигурация сохранена: {0}</x:String>

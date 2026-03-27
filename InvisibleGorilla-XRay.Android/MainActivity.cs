@@ -3,6 +3,7 @@ using Android.App;
 using Android.Content;
 using Android.Content.PM;
 using Android.OS;
+using Android.Views;
 using Avalonia;
 using Avalonia.Android;
 
@@ -16,6 +17,7 @@ namespace InvisibleGorillaXRay.Android
         Theme = "@style/Theme.AppCompat.DayNight.NoActionBar",
         MainLauncher = true,
         LaunchMode = LaunchMode.SingleTask,
+        WindowSoftInputMode = SoftInput.AdjustResize,
         ConfigurationChanges =
             ConfigChanges.Orientation |
             ConfigChanges.ScreenSize |

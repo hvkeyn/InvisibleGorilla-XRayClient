@@ -9,12 +9,18 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Android.App;
 using Android.Content;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Avalonia.Input;
+using Avalonia.Layout;
+using Avalonia.Styling;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 
 namespace InvisibleGorillaXRay.Android.Views
 {
@@ -30,10 +36,19 @@ namespace InvisibleGorillaXRay.Android.Views
         private enum NavigationSection { Home, Servers, Settings }
         private enum ServerTab { Configurations, Subscriptions }
         private enum ConnectionState { Stopped, Starting, Running }
+        private enum ServersViewMode { Browse, AddConfig, AddSubscription }
+        private enum ConfigImportMode { File, Link }
 
         private static readonly IBrush StoppedBrush = new SolidColorBrush(Color.Parse("#D66A75"));
         private static readonly IBrush StartingBrush = new SolidColorBrush(Color.Parse("#C9A227"));
         private static readonly IBrush RunningBrush = new SolidColorBrush(Color.Parse("#56B870"));
+        private static readonly IBrush SelectedConfigBrush = new SolidColorBrush(Color.Parse("#343434"));
+        private static readonly IBrush IdleConfigBrush = new SolidColorBrush(Color.Parse("#252526"));
+        private static readonly IBrush SelectedMarkerBrush = new SolidColorBrush(Color.Parse("#6DCC8E"));
+        private static readonly IBrush IdleMarkerBrush = new SolidColorBrush(Color.Parse("#5A5A5A"));
+        private static readonly IBrush AvailabilityPendingBrush = new SolidColorBrush(Color.Parse("#8C8C8C"));
+        private static readonly IBrush AvailabilityErrorBrush = new SolidColorBrush(Color.Parse("#D95F5F"));
+        private static readonly IBrush AvailabilitySuccessBrush = new SolidColorBrush(Color.Parse("#6DCC8E"));
 
         private InvisibleGorillaXRay.Core.InvisibleGorillaXRayCore core = null!;
         private SettingsHandler settingsHandler = null!;
@@ -43,19 +58,23 @@ namespace InvisibleGorillaXRay.Android.Views
         private BroadcastHandler broadcastHandler = null!;
         private Android.Handlers.AndroidLocalizationHandler localizationHandler = null!;
 
-        private List<ConfigListItem> configItems = new();
+        private List<Config> generalConfigs = new();
+        private List<Config> subscriptionConfigs = new();
         private List<Subscription> subscriptionGroups = new();
         private Subscription? selectedSubscription;
+        private readonly Dictionary<string, int> configAvailability = new(StringComparer.OrdinalIgnoreCase);
         private bool isCheckWorkerBusy;
         private bool isRunWorkerBusy;
         private bool isInitialized;
         private bool isShowingAdvancedImport;
         private bool isServersSectionInitialized;
         private bool isSettingsSectionInitialized;
-        private bool suppressConfigSelectionChanged;
         private bool suppressSubscriptionSelectionChanged;
         private bool updateAvailable;
         private string? broadcastMessage;
+        private ServersViewMode currentServersViewMode;
+        private ConfigImportMode currentConfigImportMode;
+        private IStorageFile? pendingConfigImportFile;
 
         public MainView()
         {
@@ -106,12 +125,15 @@ namespace InvisibleGorillaXRay.Android.Views
         private StackPanel ServersSectionScroll => GetRequiredControl<StackPanel>("ServersSectionPanel");
         private StackPanel SettingsSectionScroll => GetRequiredControl<StackPanel>("SettingsSectionPanel");
         private Button HomeNavButton => GetRequiredControl<Button>("HomeSectionButton");
-        private Button ServersNavButton => GetRequiredControl<Button>("ServersSectionButton");
         private Button SettingsNavButton => GetRequiredControl<Button>("SettingsSectionButton");
+        private Ellipse UpdateNotificationIndicator => GetRequiredControl<Ellipse>("UpdateNotificationDot");
         private Button ConfigurationsTabNavButton => GetRequiredControl<Button>("ConfigurationsTabButton");
         private Button SubscriptionsTabNavButton => GetRequiredControl<Button>("SubscriptionsTabButton");
+        private StackPanel ServersBrowseContainer => GetRequiredControl<StackPanel>("ServersBrowsePanel");
         private StackPanel ConfigurationsContentPanel => GetRequiredControl<StackPanel>("ConfigurationsPanel");
         private StackPanel SubscriptionsContentPanel => GetRequiredControl<StackPanel>("SubscriptionsPanel");
+        private StackPanel AddConfigContainer => GetRequiredControl<StackPanel>("AddConfigPanel");
+        private StackPanel AddSubscriptionContainer => GetRequiredControl<StackPanel>("AddSubscriptionPanel");
         private Border ConnectionHeroGlowBorder => GetRequiredControl<Border>("ConnectionHeroGlow");
         private Grid StoppedHeroIconShape => GetRequiredControl<Grid>("StoppedHeroIcon");
         private Grid RunningHeroIconShape => GetRequiredControl<Grid>("RunningHeroIcon");
@@ -129,12 +151,25 @@ namespace InvisibleGorillaXRay.Android.Views
         private TextBlock ServersTitleText => GetRequiredControl<TextBlock>("ServersTitleTextBlock");
         private TextBlock ServersDescriptionText => GetRequiredControl<TextBlock>("ServersDescriptionTextBlock");
         private TextBlock AvailableConfigurationsText => GetRequiredControl<TextBlock>("AvailableConfigurationsTextBlock");
+        private StackPanel GeneralConfigsItemsHost => GetRequiredControl<StackPanel>("GeneralConfigsListPanel");
+        private TextBlock NoGeneralConfigsText => GetRequiredControl<TextBlock>("NoGeneralConfigsTextBlock");
+        private TextBlock SubscriptionGroupsTitleText => GetRequiredControl<TextBlock>("SubscriptionGroupsTitleTextBlock");
+        private ComboBox SubscriptionGroupSelector => GetRequiredControl<ComboBox>("SubscriptionGroupComboBox");
+        private StackPanel SubscriptionConfigsItemsHost => GetRequiredControl<StackPanel>("SubscriptionConfigsListPanel");
+        private TextBlock NoSubscriptionConfigsText => GetRequiredControl<TextBlock>("NoSubscriptionConfigsTextBlock");
+        private TextBlock AddConfigTitleText => GetRequiredControl<TextBlock>("AddConfigTitleTextBlock");
+        private TextBlock AddConfigDescriptionText => GetRequiredControl<TextBlock>("AddConfigDescriptionTextBlock");
+        private Button ConfigImportFileModeActionButton => GetRequiredControl<Button>("ConfigImportFileModeButton");
+        private Button ConfigImportLinkModeActionButton => GetRequiredControl<Button>("ConfigImportLinkModeButton");
+        private Border ConfigFileImportContainer => GetRequiredControl<Border>("ConfigFileImportPanel");
+        private Border ConfigLinkImportContainer => GetRequiredControl<Border>("ConfigLinkImportPanel");
+        private TextBlock ConfigFileImportTitleText => GetRequiredControl<TextBlock>("ConfigFileImportTitleTextBlock");
+        private Button ChooseConfigFileActionButton => GetRequiredControl<Button>("ChooseConfigFileButton");
+        private TextBlock SelectedConfigFileText => GetRequiredControl<TextBlock>("SelectedConfigFileTextBlock");
         private TextBlock ImportConfigTitleText => GetRequiredControl<TextBlock>("ImportConfigTitleTextBlock");
-        private Button ImportConfigActionButton => GetRequiredControl<Button>("ImportConfigButton");
-        private Button ImportConfigFileActionButton => GetRequiredControl<Button>("ImportConfigFileButton");
-        private Button CheckSelectedConfigActionButton => GetRequiredControl<Button>("CheckSelectedConfigButton");
-        private Button ShareSelectedConfigActionButton => GetRequiredControl<Button>("ShareSelectedConfigButton");
-        private Button DeleteSelectedConfigActionButton => GetRequiredControl<Button>("DeleteSelectedConfigButton");
+        private Button PasteConfigLinkActionButton => GetRequiredControl<Button>("PasteConfigLinkButton");
+        private Button ConfirmConfigImportActionButton => GetRequiredControl<Button>("ConfirmConfigImportButton");
+        private Button CancelConfigImportActionButton => GetRequiredControl<Button>("CancelConfigImportButton");
         private TextBlock RuntimeText => GetRequiredControl<TextBlock>("RuntimeTextBlock");
         private Button RunActionButton => GetRequiredControl<Button>("RunButton");
         private Button StopActionButton => GetRequiredControl<Button>("StopButton");
@@ -143,13 +178,14 @@ namespace InvisibleGorillaXRay.Android.Views
         private TextBlock AdvancedImportTitleText => GetRequiredControl<TextBlock>("AdvancedImportTitleTextBlock");
         private TextBlock AdvancedImportDescriptionText => GetRequiredControl<TextBlock>("AdvancedImportDescriptionTextBlock");
         private Button SaveRawConfigActionButton => GetRequiredControl<Button>("SaveRawConfigButton");
-        private TextBlock SubscriptionGroupsTitleText => GetRequiredControl<TextBlock>("SubscriptionGroupsTitleTextBlock");
+        private TextBlock AddSubscriptionTitleText => GetRequiredControl<TextBlock>("AddSubscriptionTitleTextBlock");
+        private TextBlock AddSubscriptionDescriptionText => GetRequiredControl<TextBlock>("AddSubscriptionDescriptionTextBlock");
         private Button RefreshSubscriptionActionButton => GetRequiredControl<Button>("RefreshSubscriptionButton");
         private Button ShareSubscriptionActionButton => GetRequiredControl<Button>("ShareSubscriptionButton");
         private Button DeleteSubscriptionActionButton => GetRequiredControl<Button>("DeleteSubscriptionButton");
-        private TextBlock AddSubscriptionTitleText => GetRequiredControl<TextBlock>("AddSubscriptionTitleTextBlock");
-        private TextBlock AddSubscriptionDescriptionText => GetRequiredControl<TextBlock>("AddSubscriptionDescriptionTextBlock");
+        private Button CancelSubscriptionActionButton => GetRequiredControl<Button>("CancelSubscriptionButton");
         private Button SaveSubscriptionActionButton => GetRequiredControl<Button>("SaveSubscriptionButton");
+        private Button PasteSubscriptionLinkActionButton => GetRequiredControl<Button>("PasteSubscriptionLinkButton");
         private Border SettingsStatusPanelContainer => GetRequiredControl<Border>("SettingsStatusPanel");
         private TextBlock SettingsStatusText => GetRequiredControl<TextBlock>("SettingsStatusTextBlock");
         private TextBlock SettingsTitleText => GetRequiredControl<TextBlock>("SettingsTitleTextBlock");
@@ -165,8 +201,6 @@ namespace InvisibleGorillaXRay.Android.Views
         private TextBlock TunTitleText => GetRequiredControl<TextBlock>("TunTitleTextBlock");
         private TextBlock TunDescriptionText => GetRequiredControl<TextBlock>("TunDescriptionTextBlock");
         private TextBlock LogsAndDiagnosticsTitleText => GetRequiredControl<TextBlock>("LogsAndDiagnosticsTitleTextBlock");
-        private ListBox ConfigList => GetRequiredControl<ListBox>("ConfigsListBox");
-        private ListBox SubscriptionGroupList => GetRequiredControl<ListBox>("SubscriptionsListBox");
         private ComboBox ProtocolSelector => GetRequiredControl<ComboBox>("ProtocolComboBox");
         private TextBox ProxyPortInput => GetRequiredControl<TextBox>("ProxyPortTextBox");
         private TextBox DnsInput => GetRequiredControl<TextBox>("DnsTextBox");
@@ -190,10 +224,34 @@ namespace InvisibleGorillaXRay.Android.Views
                 ?? throw new InvalidOperationException($"Required control '{name}' was not found.");
         }
 
+        private object? GetViewResource(string key)
+        {
+            if (Resources.TryGetValue(key, out object? resource))
+                return resource;
+
+            if (Avalonia.Application.Current?.TryFindResource(key, out object? appResource) == true)
+                return appResource;
+
+            return null;
+        }
+
+        private IBrush GetBrushResource(string key, IBrush fallback)
+        {
+            return GetViewResource(key) as IBrush ?? fallback;
+        }
+
+        private ControlTheme? GetControlThemeResource(string key)
+        {
+            return GetViewResource(key) as ControlTheme;
+        }
+
         private void InitializeControls()
         {
             ShowSection(NavigationSection.Home);
             SetRunningState(false);
+            SetServersViewMode(ServersViewMode.Browse);
+            SetConfigImportMode(ConfigImportMode.Link);
+            UpdateNotificationIndicator.IsVisible = false;
         }
 
         private void ApplyLocalizedText()
@@ -203,31 +261,37 @@ namespace InvisibleGorillaXRay.Android.Views
             RunActionButton.Content = Localize("Lang.Run");
             StopActionButton.Content = Localize("Lang.Stop");
 
-            ServersTitleText.Text = Localize("Lang.Window.Server.Title");
-            ServersDescriptionText.Text = Localize("Lang.Android.Server.Description");
-            ConfigurationsTabNavButton.Content = Localize("Lang.Window.Server.Configs");
-            SubscriptionsTabNavButton.Content = Localize("Lang.Window.Server.Subscriptions");
+            ServersTitleText.Text = Localize("Lang.Android.Server.HeaderTitle");
+            ServersDescriptionText.Text = Localize("Lang.Window.Main.ManageServerConfiguration");
+            ConfigurationsTabNavButton.Content = Localize("Lang.Window.Server.Tab.Configuration");
+            SubscriptionsTabNavButton.Content = Localize("Lang.Window.Server.Tab.Subscription");
             AvailableConfigurationsText.Text = Localize("Lang.Android.Server.AvailableConfigurations");
-            ImportConfigTitleText.Text = Localize("Lang.Window.Server.AddConfig.FromLink");
+            NoGeneralConfigsText.Text = Localize("Lang.Message.NoServerConfiguration");
+            SubscriptionGroupsTitleText.Text = Localize("Lang.Android.Server.SubscriptionGroups");
+            NoSubscriptionConfigsText.Text = Localize("Lang.Android.Server.NoSubscriptions");
+            AddConfigTitleText.Text = Localize("Lang.Android.Server.AddConfigTitle");
+            AddConfigDescriptionText.Text = Localize("Lang.Android.Server.AddConfigDescription");
+            ConfigImportFileModeActionButton.Content = Localize("Lang.Window.Server.Import.File");
+            ConfigImportLinkModeActionButton.Content = Localize("Lang.Window.Server.Import.Link");
+            ConfigFileImportTitleText.Text = Localize("Lang.Window.Server.Import.File");
+            ChooseConfigFileActionButton.Content = Localize("Lang.Button.ChooseFile");
+            SelectedConfigFileText.Text = Localize("Lang.Message.NoFileChoosen");
+            ImportConfigTitleText.Text = Localize("Lang.Window.Server.Import.Link");
+            PasteConfigLinkActionButton.Content = Localize("Lang.Button.Paste");
             ConfigLinkInput.Watermark = Localize("Lang.Window.Server.AddConfig.Placeholder");
-            ImportConfigFileActionButton.Content = Localize("Lang.Window.Server.AddConfig.FromFile");
-            ImportConfigActionButton.Content = Localize("Lang.Android.Server.ImportConfigButton");
-            CheckSelectedConfigActionButton.Content = Localize("Lang.Config.Check");
-            ShareSelectedConfigActionButton.Content = Localize("Lang.Config.Share");
-            DeleteSelectedConfigActionButton.Content = Localize("Lang.Config.Delete");
+            ConfirmConfigImportActionButton.Content = Localize("Lang.Button.Import");
+            CancelConfigImportActionButton.Content = Localize("Lang.Button.Cancel");
             AdvancedImportTitleText.Text = Localize("Lang.Android.Server.AdvancedImport");
             AdvancedImportDescriptionText.Text = Localize("Lang.Android.Server.AdvancedImportDescription");
             ConfigRemarkInput.Watermark = Localize("Lang.Android.Server.ConfigName");
             SaveRawConfigActionButton.Content = Localize("Lang.Android.Server.SaveRawConfig");
-            SubscriptionGroupsTitleText.Text = Localize("Lang.Android.Server.SubscriptionGroups");
-            RefreshSubscriptionActionButton.Content = Localize("Lang.Android.Server.RefreshSelected");
-            ShareSubscriptionActionButton.Content = Localize("Lang.Config.Share");
-            DeleteSubscriptionActionButton.Content = Localize("Lang.Android.Server.DeleteSelected");
             AddSubscriptionTitleText.Text = Localize("Lang.Android.Server.AddOrReplaceSubscription");
             AddSubscriptionDescriptionText.Text = Localize("Lang.Android.Server.AddOrReplaceSubscriptionDescription");
-            SubscriptionRemarkInput.Watermark = Localize("Lang.Android.Server.SubscriptionName");
+            SubscriptionRemarkInput.Watermark = Localize("Lang.Window.Server.Import.Remarks");
             SubscriptionLinkInput.Watermark = Localize("Lang.Window.Server.AddSub.Placeholder");
-            SaveSubscriptionActionButton.Content = Localize("Lang.Android.Server.SaveSubscription");
+            PasteSubscriptionLinkActionButton.Content = Localize("Lang.Button.Paste");
+            CancelSubscriptionActionButton.Content = Localize("Lang.Button.Cancel");
+            SaveSubscriptionActionButton.Content = Localize("Lang.Button.Import");
 
             SettingsTitleText.Text = Localize("Lang.Window.Settings.Title");
             SettingsDescriptionText.Text = Localize("Lang.Android.Settings.Description");
@@ -247,6 +311,8 @@ namespace InvisibleGorillaXRay.Android.Views
             SaveSettingsActionButton.Content = Localize("Lang.Window.Settings.Confirm");
 
             SetAdvancedImportVisible(isShowingAdvancedImport);
+            SetConfigImportMode(currentConfigImportMode);
+            UpdateSubscriptionEmptyState();
         }
 
         private string Localize(string key)
@@ -263,8 +329,13 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             if (!isServersSectionInitialized)
             {
-                ShowServerTab(ServerTab.Configurations);
+                Config? currentConfig = configHandler.GetCurrentConfig();
+                ShowServerTab(currentConfig?.Group == GroupType.SUBSCRIPTION
+                    ? ServerTab.Subscriptions
+                    : ServerTab.Configurations);
+                SetServersViewMode(ServersViewMode.Browse);
                 SetAdvancedImportVisible(false);
+                SetConfigImportMode(ConfigImportMode.Link);
                 isServersSectionInitialized = true;
             }
 
@@ -297,15 +368,13 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void RefreshConfigs()
         {
-            string currentConfigPath = settingsHandler.UserSettings.GetCurrentConfigPath();
-            configItems = BuildConfigList();
+            generalConfigs = configHandler.GetAllGeneralConfigs();
 
-            suppressConfigSelectionChanged = true;
-            ConfigList.ItemsSource = configItems.Select(item => item.Label).ToList();
-            ConfigList.SelectedIndex = configItems.FindIndex(item =>
-                string.Equals(item.Config.Path, currentConfigPath, StringComparison.OrdinalIgnoreCase));
-            suppressConfigSelectionChanged = false;
-            UpdateConfigActionAvailability();
+            foreach (Config config in generalConfigs)
+                ApplyCachedAvailability(config);
+
+            RenderConfigCards(GeneralConfigsItemsHost, generalConfigs);
+            NoGeneralConfigsText.IsVisible = generalConfigs.Count == 0;
         }
 
         private void RefreshSubscriptions()
@@ -314,53 +383,266 @@ namespace InvisibleGorillaXRay.Android.Views
             subscriptionGroups = configHandler.GetAllGroups();
 
             suppressSubscriptionSelectionChanged = true;
-            SubscriptionGroupList.ItemsSource = subscriptionGroups.Select(group => group.Directory.Name).ToList();
+            SubscriptionGroupSelector.ItemsSource = subscriptionGroups.Select(group => group.Directory.Name).ToList();
 
-            int selectedIndex = subscriptionGroups.FindIndex(group =>
-                string.Equals(group.Directory.FullName, previousSelection, StringComparison.OrdinalIgnoreCase));
-
+            int selectedIndex = FindSubscriptionGroupIndexForCurrentConfig();
             if (selectedIndex < 0)
-                selectedIndex = FindSubscriptionGroupIndexForCurrentConfig();
+            {
+                selectedIndex = subscriptionGroups.FindIndex(group =>
+                    string.Equals(group.Directory.FullName, previousSelection, StringComparison.OrdinalIgnoreCase));
+            }
 
-            SubscriptionGroupList.SelectedIndex = selectedIndex;
+            SubscriptionGroupSelector.SelectedIndex = selectedIndex;
             suppressSubscriptionSelectionChanged = false;
 
             if (selectedIndex >= 0 && selectedIndex < subscriptionGroups.Count)
             {
                 selectedSubscription = subscriptionGroups[selectedIndex];
-                PopulateSubscriptionEditor(selectedSubscription);
             }
             else
             {
                 selectedSubscription = null;
-                ClearSubscriptionEditor();
             }
 
             UpdateSubscriptionActionAvailability();
-
+            RefreshSubscriptionConfigs();
         }
 
-        private List<ConfigListItem> BuildConfigList()
+        private void RefreshSubscriptionConfigs()
         {
-            string configPrefix = Localize("Lang.Android.Server.ConfigItemPrefix");
-            string subscriptionPrefix = Localize("Lang.Android.Server.SubscriptionItemPrefix");
+            subscriptionConfigs = selectedSubscription == null
+                ? new List<Config>()
+                : configHandler.GetAllSubscriptionConfigs(selectedSubscription.Directory.FullName);
 
-            List<ConfigListItem> items = configHandler
-                .GetAllGeneralConfigs()
-                .Select(config => new ConfigListItem($"[{configPrefix}] {config.Name}", config))
-                .ToList();
+            foreach (Config config in subscriptionConfigs)
+                ApplyCachedAvailability(config);
 
-            foreach (Subscription group in configHandler.GetAllGroups())
+            RenderConfigCards(SubscriptionConfigsItemsHost, subscriptionConfigs);
+            UpdateSubscriptionEmptyState();
+        }
+
+        private void UpdateSubscriptionEmptyState()
+        {
+            if (subscriptionGroups.Count == 0)
             {
-                foreach (Config config in configHandler.GetAllSubscriptionConfigs(group.Directory.FullName))
-                {
-                    items.Add(new ConfigListItem(
-                        label: $"[{subscriptionPrefix}] {group.Directory.Name} / {config.Name}",
-                        config: config));
-                }
+                NoSubscriptionConfigsText.Text = Localize("Lang.Android.Server.NoSubscriptions");
+                NoSubscriptionConfigsText.IsVisible = true;
+                return;
             }
 
-            return items;
+            NoSubscriptionConfigsText.Text = Localize("Lang.Android.Server.NoSubscriptionConfigs");
+            NoSubscriptionConfigsText.IsVisible = subscriptionConfigs.Count == 0;
+        }
+
+        private void RenderConfigCards(StackPanel host, IReadOnlyList<Config> configs)
+        {
+            host.Children.Clear();
+
+            foreach (Config config in configs)
+                host.Children.Add(CreateConfigCard(config));
+        }
+
+        private Border CreateConfigCard(Config config)
+        {
+            bool isSelected = string.Equals(
+                settingsHandler.UserSettings.GetCurrentConfigPath(),
+                config.Path,
+                StringComparison.OrdinalIgnoreCase);
+
+            Border border = new()
+            {
+                Background = isSelected ? SelectedConfigBrush : IdleConfigBrush,
+                BorderBrush = GetBrushResource("SurfaceBright", IdleMarkerBrush),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(10)
+            };
+
+            Grid root = new();
+            root.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(5, GridUnitType.Pixel)));
+            root.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            root.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(124, GridUnitType.Pixel)));
+
+            root.Children.Add(new Border
+            {
+                Background = isSelected ? SelectedMarkerBrush : IdleMarkerBrush
+            });
+
+            StackPanel textColumn = new()
+            {
+                Margin = new Thickness(12, 8),
+                Spacing = 0,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            textColumn.Children.Add(new TextBlock
+            {
+                Text = config.Name,
+                Foreground = Brushes.White,
+                FontSize = 14,
+                FontWeight = FontWeight.Normal,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            });
+            textColumn.Children.Add(new TextBlock
+            {
+                Text = config.UpdateTime,
+                Foreground = GetBrushResource("TextMuted", Brushes.Gray),
+                FontSize = 12
+            });
+            Grid.SetColumn(textColumn, 1);
+            root.Children.Add(textColumn);
+
+            Grid rightColumn = new()
+            {
+                Margin = new Thickness(8, 8, 8, 8)
+            };
+            rightColumn.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            rightColumn.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+
+            (string statusText, IBrush statusBrush) = GetAvailabilityPresentation(config.Availability);
+            StackPanel statusRow = new()
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Spacing = 4
+            };
+            statusRow.Children.Add(new Ellipse
+            {
+                Width = 8,
+                Height = 8,
+                Fill = statusBrush,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            statusRow.Children.Add(new TextBlock
+            {
+                Text = statusText,
+                Foreground = Brushes.White,
+                FontSize = 12,
+                FontWeight = FontWeight.Light,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            Grid.SetRow(statusRow, 0);
+            rightColumn.Children.Add(statusRow);
+
+            StackPanel actionRow = new()
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Margin = new Thickness(0, 4, 0, 0),
+                Spacing = 4
+            };
+            actionRow.Children.Add(CreateIconActionButton("Icon.Share", 11, 13, () => ShareConfig(config)));
+            actionRow.Children.Add(CreateIconActionButton("Icon.Delete", 12, 12, () => DeleteSelectedConfig(config)));
+            actionRow.Children.Add(CreateIconActionButton("Icon.Connection", 15, 11, () => _ = CheckConfigAsync(config)));
+            Grid.SetRow(actionRow, 1);
+            rightColumn.Children.Add(actionRow);
+
+            Grid.SetColumn(rightColumn, 2);
+            root.Children.Add(rightColumn);
+            border.Child = root;
+
+            border.PointerPressed += (_, e) =>
+            {
+                Control? sourceControl = e.Source as Control;
+                if (sourceControl is Button || sourceControl?.FindAncestorOfType<Button>() != null)
+                    return;
+
+                TrySelectConfigByPath(config.Path, showStatus: true);
+            };
+
+            return border;
+        }
+
+        private Button CreateIconActionButton(string iconKey, double iconWidth, double iconHeight, Action onClick)
+        {
+            Button button = new()
+            {
+                Width = 36,
+                Height = 32,
+                Theme = GetControlThemeResource("IconActionButton")
+            };
+            button.Click += (_, _) => onClick();
+            button.Content = new Rectangle
+            {
+                Fill = GetBrushResource(iconKey, Brushes.White),
+                Width = iconWidth,
+                Height = iconHeight,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            return button;
+        }
+
+        private (string Text, IBrush Brush) GetAvailabilityPresentation(int availability)
+        {
+            if (availability == InvisibleGorillaXRay.Values.Availability.NOT_CHECKED)
+                return (Localize("Lang.Config.Status.NotChecked"), AvailabilityPendingBrush);
+
+            if (availability == InvisibleGorillaXRay.Values.Availability.TIMEOUT)
+                return (Localize("Lang.Config.Status.Timeout"), AvailabilityErrorBrush);
+
+            if (availability == InvisibleGorillaXRay.Values.Availability.ERROR)
+                return (Localize("Lang.Config.Status.Error"), AvailabilityErrorBrush);
+
+            return ($"{availability} ms", AvailabilitySuccessBrush);
+        }
+
+        private void ApplyCachedAvailability(Config config)
+        {
+            if (configAvailability.TryGetValue(config.Path, out int availability))
+                config.SetAvailability(availability);
+        }
+
+        private void SetConfigAvailability(string path, int availability)
+        {
+            configAvailability[path] = availability;
+        }
+
+        private void SetServersViewMode(ServersViewMode mode)
+        {
+            currentServersViewMode = mode;
+            ServersBrowseContainer.IsVisible = mode == ServersViewMode.Browse;
+            AddConfigContainer.IsVisible = mode == ServersViewMode.AddConfig;
+            AddSubscriptionContainer.IsVisible = mode == ServersViewMode.AddSubscription;
+
+            if (mode == ServersViewMode.AddConfig && currentConfigImportMode == ConfigImportMode.Link)
+                RequestConfigLinkFocus();
+            else if (mode == ServersViewMode.AddSubscription)
+                RequestSubscriptionLinkFocus();
+        }
+
+        private void SetConfigImportMode(ConfigImportMode mode)
+        {
+            currentConfigImportMode = mode;
+            ConfigFileImportContainer.IsVisible = mode == ConfigImportMode.File;
+            ConfigLinkImportContainer.IsVisible = mode == ConfigImportMode.Link;
+
+            ConfigImportFileModeActionButton.Background = mode == ConfigImportMode.File
+                ? GetBrushResource("SurfaceBright", Brushes.Gray)
+                : GetBrushResource("SurfaceLight", Brushes.Transparent);
+            ConfigImportLinkModeActionButton.Background = mode == ConfigImportMode.Link
+                ? GetBrushResource("SurfaceBright", Brushes.Gray)
+                : GetBrushResource("SurfaceLight", Brushes.Transparent);
+
+            ConfigImportFileModeActionButton.FontWeight = mode == ConfigImportMode.File
+                ? FontWeight.SemiBold
+                : FontWeight.Normal;
+            ConfigImportLinkModeActionButton.FontWeight = mode == ConfigImportMode.Link
+                ? FontWeight.SemiBold
+                : FontWeight.Normal;
+
+            if (mode == ConfigImportMode.Link && currentServersViewMode == ServersViewMode.AddConfig)
+                RequestConfigLinkFocus();
+        }
+
+        private void ResetConfigImportState()
+        {
+            pendingConfigImportFile = null;
+            ConfigLinkInput.Text = string.Empty;
+            ConfigRemarkInput.Text = string.Empty;
+            RawConfigInput.Text = string.Empty;
+            SelectedConfigFileText.Text = Localize("Lang.Message.NoFileChoosen");
+            SetAdvancedImportVisible(false);
+            SetConfigImportMode(ConfigImportMode.Link);
         }
 
         private async Task LoadRemoteInfoAsync()
@@ -380,6 +662,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     Dispatcher.UIThread.Post(() =>
                     {
                         UpdateRuntimeSummary();
+                        UpdateNotificationIndicator.IsVisible = updateAvailable;
                         string statusMessage = updateAvailable || !string.IsNullOrWhiteSpace(broadcastMessage)
                             ? BuildAvailabilityMessage()
                             : string.Empty;
@@ -555,7 +838,6 @@ namespace InvisibleGorillaXRay.Android.Views
             SettingsSectionScroll.IsVisible = section == NavigationSection.Settings;
 
             HomeNavButton.IsEnabled = section != NavigationSection.Home;
-            ServersNavButton.IsEnabled = section != NavigationSection.Servers;
             SettingsNavButton.IsEnabled = section != NavigationSection.Settings;
         }
 
@@ -563,9 +845,18 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             ConfigurationsContentPanel.IsVisible = tab == ServerTab.Configurations;
             SubscriptionsContentPanel.IsVisible = tab == ServerTab.Subscriptions;
-
-            ConfigurationsTabNavButton.IsEnabled = tab != ServerTab.Configurations;
-            SubscriptionsTabNavButton.IsEnabled = tab != ServerTab.Subscriptions;
+            ConfigurationsTabNavButton.Background = tab == ServerTab.Configurations
+                ? GetBrushResource("SurfaceBright", Brushes.Gray)
+                : GetBrushResource("SurfaceLight", Brushes.Transparent);
+            SubscriptionsTabNavButton.Background = tab == ServerTab.Subscriptions
+                ? GetBrushResource("SurfaceBright", Brushes.Gray)
+                : GetBrushResource("SurfaceLight", Brushes.Transparent);
+            ConfigurationsTabNavButton.FontWeight = tab == ServerTab.Configurations
+                ? FontWeight.SemiBold
+                : FontWeight.Normal;
+            SubscriptionsTabNavButton.FontWeight = tab == ServerTab.Subscriptions
+                ? FontWeight.SemiBold
+                : FontWeight.Normal;
         }
 
         private void SetAdvancedImportVisible(bool isVisible)
@@ -577,16 +868,33 @@ namespace InvisibleGorillaXRay.Android.Views
                 : Localize("Lang.Android.Server.ShowAdvancedTools");
         }
 
-        private void PopulateSubscriptionEditor(Subscription subscription)
-        {
-            SubscriptionRemarkInput.Text = subscription.Directory.Name;
-            SubscriptionLinkInput.Text = subscription.Url;
-        }
-
         private void ClearSubscriptionEditor()
         {
             SubscriptionRemarkInput.Text = string.Empty;
             SubscriptionLinkInput.Text = string.Empty;
+        }
+
+        private void RequestConfigLinkFocus()
+        {
+            RequestControlFocus(ConfigLinkInput);
+        }
+
+        private void RequestSubscriptionLinkFocus()
+        {
+            RequestControlFocus(SubscriptionLinkInput);
+        }
+
+        private void RequestControlFocus(Control control)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!control.IsVisible)
+                    return;
+
+                control.Focus();
+                if (control is TextBox textBox)
+                    textBox.CaretIndex = textBox.Text?.Length ?? 0;
+            }, DispatcherPriority.Background);
         }
 
         private int FindSubscriptionGroupIndexForCurrentConfig()
@@ -599,46 +907,36 @@ namespace InvisibleGorillaXRay.Android.Views
                 string.Equals(group.Directory.FullName, currentDirectory, StringComparison.OrdinalIgnoreCase));
         }
 
-        private ConfigListItem? GetSelectedConfigItem()
-        {
-            int selectedIndex = ConfigList.SelectedIndex;
-            return selectedIndex >= 0 && selectedIndex < configItems.Count
-                ? configItems[selectedIndex]
-                : null;
-        }
-
-        private void UpdateConfigActionAvailability()
-        {
-            bool hasSelectedConfig = GetSelectedConfigItem() != null;
-            CheckSelectedConfigActionButton.IsEnabled = hasSelectedConfig && !isCheckWorkerBusy;
-            ShareSelectedConfigActionButton.IsEnabled = hasSelectedConfig;
-            DeleteSelectedConfigActionButton.IsEnabled = hasSelectedConfig;
-        }
-
         private void UpdateSubscriptionActionAvailability()
         {
             bool hasSelectedSubscription = selectedSubscription != null;
+            SubscriptionGroupSelector.IsEnabled = subscriptionGroups.Count > 0;
             RefreshSubscriptionActionButton.IsEnabled = hasSelectedSubscription;
             ShareSubscriptionActionButton.IsEnabled = hasSelectedSubscription;
             DeleteSubscriptionActionButton.IsEnabled = hasSelectedSubscription;
         }
 
-        private bool TrySelectConfigByPath(string path)
+        private bool TrySelectConfigByPath(string path, bool showStatus = false)
         {
-            int index = configItems.FindIndex(item =>
-                string.Equals(item.Config.Path, path, StringComparison.OrdinalIgnoreCase));
-
-            if (index < 0)
+            if (string.IsNullOrWhiteSpace(path))
                 return false;
 
-            suppressConfigSelectionChanged = true;
-            ConfigList.SelectedIndex = index;
-            suppressConfigSelectionChanged = false;
-
             settingsHandler.UpdateCurrentConfigPath(path);
+            Config? selectedConfig = configHandler.GetCurrentConfig();
+            if (selectedConfig == null)
+                return false;
+
             UpdateCurrentConfigSummary();
             UpdateRuntimeSummary();
-            UpdateConfigActionAvailability();
+            RefreshConfigs();
+            RefreshSubscriptions();
+            ShowServerTab(selectedConfig.Group == GroupType.SUBSCRIPTION
+                ? ServerTab.Subscriptions
+                : ServerTab.Configurations);
+
+            if (showStatus)
+                SetStatus(LocalizeFormat("Lang.Android.Status.SelectedConfig", selectedConfig.Name));
+
             return true;
         }
 
@@ -648,14 +946,32 @@ namespace InvisibleGorillaXRay.Android.Views
             if (string.IsNullOrWhiteSpace(normalizedName))
                 return false;
 
-            ConfigListItem? selectedItem = configItems.LastOrDefault(item =>
-                string.Equals(item.Config.Name, normalizedName, StringComparison.OrdinalIgnoreCase)
+            Config? generalConfig = generalConfigs.LastOrDefault(config =>
+                string.Equals(config.Name, normalizedName, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(
-                    System.IO.Path.GetFileNameWithoutExtension(item.Config.Name),
+                    System.IO.Path.GetFileNameWithoutExtension(config.Name),
                     normalizedName,
                     StringComparison.OrdinalIgnoreCase));
 
-            return selectedItem != null && TrySelectConfigByPath(selectedItem.Config.Path);
+            if (generalConfig != null)
+                return TrySelectConfigByPath(generalConfig.Path);
+
+            foreach (Subscription group in subscriptionGroups)
+            {
+                Config? subscriptionConfig = configHandler
+                    .GetAllSubscriptionConfigs(group.Directory.FullName)
+                    .LastOrDefault(config =>
+                        string.Equals(config.Name, normalizedName, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(
+                            System.IO.Path.GetFileNameWithoutExtension(config.Name),
+                            normalizedName,
+                            StringComparison.OrdinalIgnoreCase));
+
+                if (subscriptionConfig != null)
+                    return TrySelectConfigByPath(subscriptionConfig.Path);
+            }
+
+            return false;
         }
 
         private void EnsureCurrentConfigPathIsValid()
@@ -780,6 +1096,11 @@ namespace InvisibleGorillaXRay.Android.Views
             OpenExternalUrl(InvisibleGorillaXRay.Values.Route.REPOSITORY);
         }
 
+        private void OnOpenBugReportingClick(object? sender, RoutedEventArgs e)
+        {
+            OpenExternalUrl(InvisibleGorillaXRay.Values.Route.ISSUES);
+        }
+
         private void OnConfigurationsTabClick(object? sender, RoutedEventArgs e)
         {
             ShowServerTab(ServerTab.Configurations);
@@ -790,26 +1111,75 @@ namespace InvisibleGorillaXRay.Android.Views
             ShowServerTab(ServerTab.Subscriptions);
         }
 
+        private void OnAddConfigButtonClick(object? sender, RoutedEventArgs e)
+        {
+            ResetConfigImportState();
+            SetServersViewMode(ServersViewMode.AddConfig);
+        }
+
+        private void OnAddSubscriptionButtonClick(object? sender, RoutedEventArgs e)
+        {
+            ClearSubscriptionEditor();
+            SetServersViewMode(ServersViewMode.AddSubscription);
+        }
+
+        private void OnConfigFileModeClick(object? sender, RoutedEventArgs e)
+        {
+            SetConfigImportMode(ConfigImportMode.File);
+        }
+
+        private void OnConfigLinkModeClick(object? sender, RoutedEventArgs e)
+        {
+            SetConfigImportMode(ConfigImportMode.Link);
+        }
+
+        private void OnPasteConfigLinkClick(object? sender, RoutedEventArgs e)
+        {
+            PasteClipboardTextInto(ConfigLinkInput);
+        }
+
+        private async void OnChooseConfigFileClick(object? sender, RoutedEventArgs e)
+        {
+            TopLevel? topLevel = TopLevel.GetTopLevel(this);
+            if (topLevel?.StorageProvider == null || !topLevel.StorageProvider.CanOpen)
+            {
+                SetStatus("Lang.Android.Status.FilePickerUnavailable");
+                return;
+            }
+
+            IReadOnlyList<IStorageFile> files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = Localize("Lang.Window.Server.Import.File"),
+                AllowMultiple = false,
+                FileTypeFilter =
+                [
+                    new FilePickerFileType(Localize("Lang.Window.Server.Import.File"))
+                    {
+                        Patterns = ["*.json", "*.toml", "*.yaml", "*.yml"]
+                    },
+                    new FilePickerFileType("All files")
+                    {
+                        Patterns = ["*.*"]
+                    }
+                ]
+            });
+
+            if (files.Count == 0)
+                return;
+
+            pendingConfigImportFile = files[0];
+            SelectedConfigFileText.Text = files[0].Name;
+        }
+
         private void OnToggleAdvancedImportClick(object? sender, RoutedEventArgs e)
         {
             SetAdvancedImportVisible(!isShowingAdvancedImport);
         }
 
-        private void OnConfigSelectionChanged(object? sender, SelectionChangedEventArgs e)
+        private void OnCancelConfigImportClick(object? sender, RoutedEventArgs e)
         {
-            if (suppressConfigSelectionChanged)
-                return;
-
-            ConfigListItem? selectedItem = GetSelectedConfigItem();
-            UpdateConfigActionAvailability();
-            if (selectedItem == null)
-                return;
-
-            Config selectedConfig = selectedItem.Config;
-            settingsHandler.UpdateCurrentConfigPath(selectedConfig.Path);
-            UpdateCurrentConfigSummary();
-            UpdateRuntimeSummary();
-            SetStatus(LocalizeFormat("Lang.Android.Status.SelectedConfig", selectedConfig.Name));
+            ResetConfigImportState();
+            SetServersViewMode(ServersViewMode.Browse);
         }
 
         private void OnSubscriptionSelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -817,23 +1187,55 @@ namespace InvisibleGorillaXRay.Android.Views
             if (suppressSubscriptionSelectionChanged)
                 return;
 
-            int selectedIndex = SubscriptionGroupList.SelectedIndex;
+            int selectedIndex = SubscriptionGroupSelector.SelectedIndex;
             if (selectedIndex < 0 || selectedIndex >= subscriptionGroups.Count)
             {
                 selectedSubscription = null;
                 UpdateSubscriptionActionAvailability();
+                RefreshSubscriptionConfigs();
                 return;
             }
 
             selectedSubscription = subscriptionGroups[selectedIndex];
-            PopulateSubscriptionEditor(selectedSubscription);
             UpdateSubscriptionActionAvailability();
+            RefreshSubscriptionConfigs();
             SetStatus(LocalizeFormat("Lang.Android.Status.SelectedSubscription", selectedSubscription.Directory.Name));
         }
 
-        private void OnImportConfigLinkClick(object? sender, RoutedEventArgs e)
+        private async void OnImportConfigClick(object? sender, RoutedEventArgs e)
         {
-            TryImportConfigLink(ConfigLinkInput.Text, clearInputOnSuccess: true);
+            if (currentConfigImportMode == ConfigImportMode.Link)
+            {
+                if (TryImportConfigLink(ConfigLinkInput.Text, clearInputOnSuccess: true))
+                {
+                    ResetConfigImportState();
+                    SetServersViewMode(ServersViewMode.Browse);
+                }
+
+                return;
+            }
+
+            if (pendingConfigImportFile == null)
+            {
+                SetStatus(Localize("Lang.Message.NoFileChoosen"));
+                return;
+            }
+
+            try
+            {
+                await using var stream = await pendingConfigImportFile.OpenReadAsync();
+                using StreamReader reader = new(stream);
+                string content = await reader.ReadToEndAsync();
+                if (TryImportConfigFileContent(pendingConfigImportFile.Name, content))
+                {
+                    ResetConfigImportState();
+                    SetServersViewMode(ServersViewMode.Browse);
+                }
+            }
+            catch (Exception ex)
+            {
+                SetStatus(MapExceptionToStatus(ex));
+            }
         }
 
         private bool TryImportConfigLink(string? link, bool clearInputOnSuccess)
@@ -867,50 +1269,9 @@ namespace InvisibleGorillaXRay.Android.Views
             TrySelectConfigByName(payload[0]);
             ShowSection(NavigationSection.Servers);
             ShowServerTab(ServerTab.Configurations);
+            SetServersViewMode(ServersViewMode.Browse);
             SetStatus(LocalizeFormat("Lang.Android.Status.ImportedConfig", payload[0]));
             return true;
-        }
-
-        private async void OnImportConfigFileClick(object? sender, RoutedEventArgs e)
-        {
-            TopLevel? topLevel = TopLevel.GetTopLevel(this);
-            if (topLevel?.StorageProvider == null || !topLevel.StorageProvider.CanOpen)
-            {
-                SetStatus("Lang.Android.Status.FilePickerUnavailable");
-                return;
-            }
-
-            IReadOnlyList<IStorageFile> files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-            {
-                Title = Localize("Lang.Window.Server.AddConfig.FromFile"),
-                AllowMultiple = false,
-                FileTypeFilter =
-                [
-                    new FilePickerFileType(Localize("Lang.Window.Server.AddConfig.FromFile"))
-                    {
-                        Patterns = ["*.json", "*.toml", "*.yaml", "*.yml"]
-                    },
-                    new FilePickerFileType("All files")
-                    {
-                        Patterns = ["*.*"]
-                    }
-                ]
-            });
-
-            if (files.Count == 0)
-                return;
-
-            try
-            {
-                await using var stream = await files[0].OpenReadAsync();
-                using StreamReader reader = new(stream);
-                string content = await reader.ReadToEndAsync();
-                TryImportConfigFileContent(files[0].Name, content);
-            }
-            catch (Exception ex)
-            {
-                SetStatus(MapExceptionToStatus(ex));
-            }
         }
 
         private bool TryImportConfigFileContent(string fileName, string? content)
@@ -953,6 +1314,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 TrySelectConfigByName(remark);
                 ShowSection(NavigationSection.Servers);
                 ShowServerTab(ServerTab.Configurations);
+                SetServersViewMode(ServersViewMode.Browse);
                 SetStatus(LocalizeFormat("Lang.Android.Status.ImportedConfigFile", remark));
                 return true;
             }
@@ -976,7 +1338,22 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void OnImportSubscriptionClick(object? sender, RoutedEventArgs e)
         {
-            TryImportSubscription(SubscriptionRemarkInput.Text, SubscriptionLinkInput.Text);
+            if (TryImportSubscription(SubscriptionRemarkInput.Text, SubscriptionLinkInput.Text))
+            {
+                ClearSubscriptionEditor();
+                SetServersViewMode(ServersViewMode.Browse);
+            }
+        }
+
+        private void OnCancelSubscriptionClick(object? sender, RoutedEventArgs e)
+        {
+            ClearSubscriptionEditor();
+            SetServersViewMode(ServersViewMode.Browse);
+        }
+
+        private void OnPasteSubscriptionLinkClick(object? sender, RoutedEventArgs e)
+        {
+            PasteClipboardTextInto(SubscriptionLinkInput);
         }
 
         private bool TryImportSubscription(string? remark, string? link)
@@ -1022,35 +1399,46 @@ namespace InvisibleGorillaXRay.Android.Views
                 TrySelectConfigByPath(firstConfig.Path);
             }
 
+            ShowSection(NavigationSection.Servers);
             ShowServerTab(ServerTab.Subscriptions);
+            SetServersViewMode(ServersViewMode.Browse);
             SetStatus(LocalizeFormat("Lang.Android.Status.SavedSubscription", payload[0]));
             return true;
         }
 
         private async void OnCheckSelectedConfigClick(object? sender, RoutedEventArgs e)
         {
-            if (isCheckWorkerBusy)
-                return;
-
-            ConfigListItem? selectedItem = GetSelectedConfigItem();
-            if (selectedItem == null)
+            Config? currentConfig = configHandler.GetCurrentConfig();
+            if (currentConfig == null)
             {
                 SetStatus("Lang.Android.Status.SelectConfigFirst");
                 return;
             }
 
-            isCheckWorkerBusy = true;
-            UpdateConfigActionAvailability();
-            SetStatus(LocalizeFormat("Lang.Android.Status.CheckingConfig", selectedItem.Config.Name));
+            await CheckConfigAsync(currentConfig);
+        }
 
+        private async Task CheckConfigAsync(Config config)
+        {
+            if (isCheckWorkerBusy)
+                return;
+
+            isCheckWorkerBusy = true;
+            SetStatus(LocalizeFormat("Lang.Android.Status.CheckingConfig", config.Name));
             try
             {
                 await Task.Run(async () =>
                 {
-                    string configContent = System.IO.File.ReadAllText(selectedItem.Config.Path);
+                    string configContent = System.IO.File.ReadAllText(config.Path);
                     if (!TryExtractOutboundEndpoint(configContent, out string host, out int port))
                     {
-                        Dispatcher.UIThread.Post(() => SetStatus("Lang.Android.Status.CheckConfigUnsupported"));
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            SetConfigAvailability(config.Path, InvisibleGorillaXRay.Values.Availability.ERROR);
+                            RefreshConfigs();
+                            RefreshSubscriptions();
+                            SetStatus("Lang.Android.Status.CheckConfigUnsupported");
+                        });
                         return;
                     }
 
@@ -1064,65 +1452,77 @@ namespace InvisibleGorillaXRay.Android.Views
                         if (completedTask == connectTask && tcpClient.Connected)
                         {
                             stopwatch.Stop();
+                            SetConfigAvailability(config.Path, (int)stopwatch.ElapsedMilliseconds);
                             SetStatus(LocalizeFormat(
                                 "Lang.Android.Status.CheckedConfigSuccess",
-                                selectedItem.Config.Name,
+                                config.Name,
                                 stopwatch.ElapsedMilliseconds));
                         }
                         else
                         {
-                            SetStatus(LocalizeFormat("Lang.Android.Status.CheckedConfigTimeout", selectedItem.Config.Name));
+                            SetConfigAvailability(config.Path, InvisibleGorillaXRay.Values.Availability.TIMEOUT);
+                            SetStatus(LocalizeFormat("Lang.Android.Status.CheckedConfigTimeout", config.Name));
                         }
+
+                        RefreshConfigs();
+                        RefreshSubscriptions();
                     });
                 });
             }
             catch (Exception ex)
             {
+                SetConfigAvailability(config.Path, InvisibleGorillaXRay.Values.Availability.ERROR);
                 SetStatus(MapExceptionToStatus(ex));
             }
             finally
             {
                 isCheckWorkerBusy = false;
-                UpdateConfigActionAvailability();
+                RefreshConfigs();
+                RefreshSubscriptions();
             }
         }
 
         private void OnShareSelectedConfigClick(object? sender, RoutedEventArgs e)
         {
-            ConfigListItem? selectedItem = GetSelectedConfigItem();
-            if (selectedItem == null)
+            Config? currentConfig = configHandler.GetCurrentConfig();
+            if (currentConfig == null)
             {
                 SetStatus("Lang.Android.Status.SelectConfigFirst");
                 return;
             }
 
-            if (!System.IO.File.Exists(selectedItem.Config.Path))
+            ShareConfig(currentConfig);
+        }
+
+        private void ShareConfig(Config config)
+        {
+            if (!System.IO.File.Exists(config.Path))
             {
                 SetStatus("Lang.Message.FileDoesntExists");
                 return;
             }
 
-            string configContent = System.IO.File.ReadAllText(selectedItem.Config.Path).Trim();
+            string configContent = System.IO.File.ReadAllText(config.Path).Trim();
             if (string.IsNullOrWhiteSpace(configContent))
             {
                 SetStatus("Lang.Message.InvalidConfig");
                 return;
             }
 
-            ShareText(configContent, selectedItem.Config.Name);
-            SetStatus(LocalizeFormat("Lang.Android.Status.SharedConfig", selectedItem.Config.Name));
+            ShareText(configContent, config.Name);
+            SetStatus(LocalizeFormat("Lang.Android.Status.SharedConfig", config.Name));
         }
 
         private void OnDeleteSelectedConfigClick(object? sender, RoutedEventArgs e)
         {
-            ConfigListItem? selectedItem = GetSelectedConfigItem();
-            if (selectedItem == null)
+            Config? currentConfig = configHandler.GetCurrentConfig();
+            if (currentConfig == null)
             {
                 SetStatus("Lang.Android.Status.SelectConfigFirst");
                 return;
             }
 
-            DeleteSelectedConfig(selectedItem.Config);
+            DeleteSelectedConfig(currentConfig);
         }
 
         private void DeleteSelectedConfig(Config config)
@@ -1136,6 +1536,7 @@ namespace InvisibleGorillaXRay.Android.Views
             {
                 System.IO.File.Delete(config.Path);
                 CleanupEmptySubscriptionDirectory(config);
+                configAvailability.Remove(config.Path);
             }
             catch (Exception ex)
             {
@@ -1148,8 +1549,17 @@ namespace InvisibleGorillaXRay.Android.Views
 
             if (deletedCurrentConfig)
             {
-                if (configItems.Count > 0)
-                    TrySelectConfigByPath(configItems.Last().Config.Path);
+                string? fallbackPath = generalConfigs.LastOrDefault()?.Path;
+                if (string.IsNullOrWhiteSpace(fallbackPath))
+                {
+                    Subscription? fallbackGroup = subscriptionGroups.LastOrDefault();
+                    fallbackPath = fallbackGroup == null
+                        ? null
+                        : configHandler.GetAllSubscriptionConfigs(fallbackGroup.Directory.FullName).LastOrDefault()?.Path;
+                }
+
+                if (!string.IsNullOrWhiteSpace(fallbackPath))
+                    TrySelectConfigByPath(fallbackPath);
                 else
                     settingsHandler.UpdateCurrentConfigPath(string.Empty);
             }
@@ -1237,7 +1647,17 @@ namespace InvisibleGorillaXRay.Android.Views
             selectedSubscription = null;
 
             if (deletedCurrentConfig)
-                settingsHandler.UpdateCurrentConfigPath(string.Empty);
+            {
+                string? fallbackPath = configHandler.GetAllGeneralConfigs().LastOrDefault()?.Path;
+                if (string.IsNullOrWhiteSpace(fallbackPath))
+                {
+                    Subscription? fallbackGroup = configHandler.GetAllGroups().LastOrDefault();
+                    fallbackPath = fallbackGroup == null
+                        ? null
+                        : configHandler.GetAllSubscriptionConfigs(fallbackGroup.Directory.FullName).LastOrDefault()?.Path;
+                }
+                settingsHandler.UpdateCurrentConfigPath(fallbackPath ?? string.Empty);
+            }
 
             RefreshSubscriptions();
             RefreshConfigs();
@@ -1267,6 +1687,10 @@ namespace InvisibleGorillaXRay.Android.Views
             RawConfigInput.Text = string.Empty;
             RefreshConfigs();
             TrySelectConfigByName(remark);
+            ShowSection(NavigationSection.Servers);
+            ShowServerTab(ServerTab.Configurations);
+            SetServersViewMode(ServersViewMode.Browse);
+            SetAdvancedImportVisible(false);
             SetStatus(LocalizeFormat("Lang.Android.Status.SavedRawConfig", remark));
         }
 
@@ -1424,6 +1848,45 @@ namespace InvisibleGorillaXRay.Android.Views
                 : fallback;
         }
 
+        private void PasteClipboardTextInto(TextBox target)
+        {
+            try
+            {
+                if (global::Android.App.Application.Context?.GetSystemService(Context.ClipboardService) is not ClipboardManager clipboardManager)
+                {
+                    SetStatus("Lang.Android.Status.ClipboardEmpty");
+                    return;
+                }
+
+                ClipData? primaryClip = clipboardManager.PrimaryClip;
+                if (primaryClip == null || primaryClip.ItemCount == 0)
+                {
+                    SetStatus("Lang.Android.Status.ClipboardEmpty");
+                    return;
+                }
+
+                ClipData.Item? item = primaryClip.GetItemAt(0);
+                string? text = item?.Text;
+
+                if (string.IsNullOrWhiteSpace(text))
+                    text = item?.CoerceToText(global::Android.App.Application.Context)?.ToString();
+
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    SetStatus("Lang.Android.Status.ClipboardEmpty");
+                    return;
+                }
+
+                target.Text = text.Trim();
+                RequestControlFocus(target);
+                SetStatus("Lang.Android.Status.PastedFromClipboard");
+            }
+            catch
+            {
+                SetStatus("Lang.Android.Status.ClipboardEmpty");
+            }
+        }
+
         private string NormalizeStatusMessage(string? message)
         {
             if (string.IsNullOrWhiteSpace(message))
@@ -1438,7 +1901,7 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             try
             {
-                if (Application.Context?.GetSystemService(Context.ClipboardService) is ClipboardManager clipboardManager)
+                if (global::Android.App.Application.Context?.GetSystemService(Context.ClipboardService) is ClipboardManager clipboardManager)
                     clipboardManager.PrimaryClip = ClipData.NewPlainText(title, text);
 
                 Intent shareIntent = new Intent(Intent.ActionSend);
@@ -1451,7 +1914,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     return;
 
                 chooserIntent.AddFlags(ActivityFlags.NewTask);
-                Application.Context?.StartActivity(chooserIntent);
+                global::Android.App.Application.Context?.StartActivity(chooserIntent);
             }
             catch
             {
@@ -1465,23 +1928,12 @@ namespace InvisibleGorillaXRay.Android.Views
                 Intent intent = new Intent(Intent.ActionView);
                 intent.SetData(global::Android.Net.Uri.Parse(url));
                 intent.AddFlags(ActivityFlags.NewTask);
-                Application.Context?.StartActivity(intent);
+                global::Android.App.Application.Context?.StartActivity(intent);
             }
             catch
             {
             }
         }
 
-        private sealed class ConfigListItem
-        {
-            public ConfigListItem(string label, Config config)
-            {
-                Label = label;
-                Config = config;
-            }
-
-            public string Label { get; }
-            public Config Config { get; }
-        }
     }
 }

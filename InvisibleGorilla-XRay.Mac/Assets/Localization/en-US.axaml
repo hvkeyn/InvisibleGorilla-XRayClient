@@ -5,6 +5,10 @@
     <x:String x:Key="Lang.Run">RUN</x:String>
     <x:String x:Key="Lang.Stop">STOP</x:String>
     <x:String x:Key="Lang.Cancel">CANCEL</x:String>
+    <x:String x:Key="Lang.Button.Import">IMPORT</x:String>
+    <x:String x:Key="Lang.Button.Cancel">CANCEL</x:String>
+    <x:String x:Key="Lang.Button.ChooseFile">CHOOSE FILE</x:String>
+    <x:String x:Key="Lang.Button.Paste">PASTE</x:String>
 
     <x:String x:Key="Lang.Status.Stopped">Stopped</x:String>
     <x:String x:Key="Lang.Status.Running">Running</x:String>
@@ -24,6 +28,11 @@
     <x:String x:Key="Lang.Window.Server.AddConfig.Placeholder">Paste or type config link</x:String>
     <x:String x:Key="Lang.Window.Server.AddSub.FromLink">Import from link</x:String>
     <x:String x:Key="Lang.Window.Server.AddSub.Placeholder">Paste or type subscription link</x:String>
+    <x:String x:Key="Lang.Window.Server.Tab.Configuration">Configuration</x:String>
+    <x:String x:Key="Lang.Window.Server.Tab.Subscription">Subscription</x:String>
+    <x:String x:Key="Lang.Window.Server.Import.File">Import config file</x:String>
+    <x:String x:Key="Lang.Window.Server.Import.Link">Import from link</x:String>
+    <x:String x:Key="Lang.Window.Server.Import.Remarks">Remarks</x:String>
 
     <x:String x:Key="Lang.Window.Settings.Title">Settings</x:String>
     <x:String x:Key="Lang.Window.Settings.WindowTitle">Settings</x:String>
@@ -135,9 +144,12 @@
     <x:String x:Key="Lang.Android.Home.UpdateAvailable">Update available on GitHub Releases.</x:String>
 
     <x:String x:Key="Lang.Android.Server.Description">Choose the active configuration, import links, and manage subscriptions separately from the main connection screen.</x:String>
+    <x:String x:Key="Lang.Android.Server.HeaderTitle">SERVER CONFIG</x:String>
     <x:String x:Key="Lang.Android.Server.ConfigItemPrefix">Config</x:String>
     <x:String x:Key="Lang.Android.Server.SubscriptionItemPrefix">Subscription</x:String>
     <x:String x:Key="Lang.Android.Server.AvailableConfigurations">Available configurations</x:String>
+    <x:String x:Key="Lang.Android.Server.AddConfigTitle">Add configuration</x:String>
+    <x:String x:Key="Lang.Android.Server.AddConfigDescription">Choose a file or paste a link, just like in the desktop client.</x:String>
     <x:String x:Key="Lang.Android.Server.ImportConfigButton">Import config link</x:String>
     <x:String x:Key="Lang.Android.Server.ShowAdvancedTools">Show advanced import tools</x:String>
     <x:String x:Key="Lang.Android.Server.HideAdvancedTools">Hide advanced import tools</x:String>
@@ -150,6 +162,8 @@
     <x:String x:Key="Lang.Android.Server.DeleteSelected">Delete selected</x:String>
     <x:String x:Key="Lang.Android.Server.AddOrReplaceSubscription">Add or replace subscription</x:String>
     <x:String x:Key="Lang.Android.Server.AddOrReplaceSubscriptionDescription">Save a subscription by name and URL. If the name matches an existing group, it will be refreshed in place.</x:String>
+    <x:String x:Key="Lang.Android.Server.NoSubscriptions">No subscriptions yet. Tap the plus button to add one.</x:String>
+    <x:String x:Key="Lang.Android.Server.NoSubscriptionConfigs">This subscription does not contain any configurations.</x:String>
     <x:String x:Key="Lang.Android.Server.SubscriptionName">Subscription name</x:String>
     <x:String x:Key="Lang.Android.Server.SaveSubscription">Save subscription</x:String>
 
@@ -198,6 +212,8 @@
     <x:String x:Key="Lang.Android.Status.SharedConfig">Shared config: {0}</x:String>
     <x:String x:Key="Lang.Android.Status.SharedSubscription">Shared subscription link: {0}</x:String>
     <x:String x:Key="Lang.Android.Status.DeletedConfig">Deleted config: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.PastedFromClipboard">Pasted text from clipboard.</x:String>
+    <x:String x:Key="Lang.Android.Status.ClipboardEmpty">Clipboard is empty.</x:String>
     <x:String x:Key="Lang.Android.Status.EnterConfigName">Enter a config name.</x:String>
     <x:String x:Key="Lang.Android.Status.RawConfigInvalidJson">Raw config is not valid JSON.</x:String>
     <x:String x:Key="Lang.Android.Status.SavedRawConfig">Saved raw config: {0}</x:String>
