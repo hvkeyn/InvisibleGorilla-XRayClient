@@ -14,6 +14,26 @@
         <SolidColorBrush x:Key="AccentRedDark" Color="#CB5A5A" />
         <SolidColorBrush x:Key="AccentBlue" Color="#19B3E4" />
 
+        <DrawingBrush x:Key="Icon.InvisibleGorilla" Stretch="Uniform">
+            <DrawingBrush.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="#6dcc8e" Geometry="M698,349c0,192.75-156.25,349-349,349S0,541.75,0,349,156.25,0,349,0,698,156.25,698,349Z"/>
+                    <GeometryDrawing Brush="#4a8c62" Geometry="M349,100 C290,100 240,120 210,160 C180,200 165,255 163,320 C161,385 175,440 205,485 C235,525 283,555 349,555 C415,555 463,525 493,485 C523,440 537,385 535,320 C533,255 518,200 488,160 C458,120 408,100 349,100Z"/>
+                    <GeometryDrawing Brush="#3d7a55" Geometry="M170,260 C155,250 140,260 138,285 C136,310 145,330 160,325 C175,320 178,290 170,260Z"/>
+                    <GeometryDrawing Brush="#3d7a55" Geometry="M528,260 C543,250 558,260 560,285 C562,310 553,330 538,325 C523,320 520,290 528,260Z"/>
+                    <GeometryDrawing Brush="#3d7a55" Geometry="M310,130 C320,95 340,80 349,78 C358,80 378,95 388,130 C378,115 360,108 349,108 C338,108 320,115 310,130Z"/>
+                    <GeometryDrawing Brush="#1e3e2a" Geometry="M225,265 C235,238 280,220 349,220 C418,220 463,238 473,265 C480,282 474,305 462,318 C445,335 410,345 349,345 C288,345 253,335 236,318 C224,305 218,282 225,265Z"/>
+                    <GeometryDrawing Brush="#6dcc8e" Geometry="M258,278 A32,20 0 1,0 322,278 A32,20 0 1,0 258,278Z"/>
+                    <GeometryDrawing Brush="#6dcc8e" Geometry="M376,278 A32,20 0 1,0 440,278 A32,20 0 1,0 376,278Z"/>
+                    <GeometryDrawing Brush="#1e3e2a" Geometry="M278,278 A12,10 0 1,0 302,278 A12,10 0 1,0 278,278Z"/>
+                    <GeometryDrawing Brush="#1e3e2a" Geometry="M396,278 A12,10 0 1,0 420,278 A12,10 0 1,0 396,278Z"/>
+                    <GeometryDrawing Brush="#1e3e2a" Geometry="M290,350 C272,375 268,415 282,448 C294,475 318,492 349,492 C380,492 404,475 416,448 C430,415 426,375 408,350Z"/>
+                    <GeometryDrawing Brush="#6dcc8e" Geometry="M303,405 A16,19 0 1,0 335,405 A16,19 0 1,0 303,405Z"/>
+                    <GeometryDrawing Brush="#6dcc8e" Geometry="M363,405 A16,19 0 1,0 395,405 A16,19 0 1,0 363,405Z"/>
+                </DrawingGroup>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+
         <DrawingBrush x:Key="Icon.Server.MintyGreen" Stretch="Uniform">
             <DrawingBrush.Drawing>
                 <GeometryDrawing Brush="#6dcc8e" Geometry="M64 32C28.7 32 0 60.7 0 96v64c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V96c0-35.3-28.7-64-64-64H64zM344 152c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24zm96-24c0 13.3-10.7 24-24 24s-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24zM64 288c-35.3 0-64 28.7-64 64v64c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V352c0-35.3-28.7-64-64-64H64zM344 408c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24zm104-24c0 13.3-10.7 24-24 24s-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24z"/>
@@ -294,56 +314,28 @@
         </Grid.RowDefinitions>
 
         <Border Grid.Row="0"
-                Background="{StaticResource SurfaceLight}">
+                Background="{StaticResource SurfaceLight}"
+                BoxShadow="0 2 4 0 #66000000">
             <Grid ColumnDefinitions="75,*">
-                <Grid Grid.Column="0"
-                      Width="58"
-                      Height="58"
-                      HorizontalAlignment="Right"
-                      VerticalAlignment="Center">
-                    <Ellipse Fill="{StaticResource AccentMint}" />
-                    <Ellipse Width="34"
-                             Height="38"
-                             Margin="0,5,0,0"
-                             Fill="#4A8C62"
-                             VerticalAlignment="Center" />
-                    <Ellipse Width="7"
-                             Height="9"
-                             Margin="-8,2,0,0"
-                             Fill="#3D7A55"
-                             VerticalAlignment="Center" />
-                    <Ellipse Width="7"
-                             Height="9"
-                             Margin="8,2,0,0"
-                             Fill="#3D7A55"
-                             VerticalAlignment="Center" />
-                    <Ellipse Width="22"
-                             Height="8"
-                             Margin="0,6,0,0"
-                             Fill="#1E3E2A"
-                             VerticalAlignment="Center" />
-                    <Ellipse Width="12"
-                             Height="4"
-                             Margin="0,6,0,0"
-                             Fill="{StaticResource AccentMint}"
-                             VerticalAlignment="Center" />
-                    <Ellipse Width="12"
-                             Height="12"
-                             Margin="0,20,0,0"
-                             Fill="#1E3E2A"
-                             VerticalAlignment="Center" />
-                </Grid>
+                <Rectangle Grid.Column="0"
+                           Width="60"
+                           Height="60"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Center"
+                           Fill="{StaticResource Icon.InvisibleGorilla}" />
 
                 <StackPanel Grid.Column="1"
                             VerticalAlignment="Center"
                             Spacing="0">
                     <TextBlock Margin="15,7,0,0"
                                Text="INVISIBLE GORILLA"
+                               VerticalAlignment="Bottom"
                                FontWeight="Light"
                                FontSize="14"
                                Foreground="White" />
                     <TextBlock Margin="15,-4,0,0"
                                Text="XRAY"
+                               VerticalAlignment="Top"
                                FontWeight="Light"
                                FontSize="42"
                                Foreground="White" />

@@ -26,6 +26,7 @@ namespace InvisibleGorillaXRay.Android.Views
 {
     using InvisibleGorillaXRay.Android.Handlers.DeepLinks;
     using InvisibleGorillaXRay.Android.Managers;
+    using InvisibleGorillaXRay.Android.Services;
     using InvisibleGorillaXRay.Core;
     using InvisibleGorillaXRay.Handlers;
     using InvisibleGorillaXRay.Models;
@@ -252,6 +253,7 @@ namespace InvisibleGorillaXRay.Android.Views
             SetServersViewMode(ServersViewMode.Browse);
             SetConfigImportMode(ConfigImportMode.Link);
             UpdateNotificationIndicator.IsVisible = false;
+            AndroidConnectionNotificationManager.Stop();
         }
 
         private void ApplyLocalizedText()
@@ -323,6 +325,64 @@ namespace InvisibleGorillaXRay.Android.Views
         private string LocalizeFormat(string key, params object?[] args)
         {
             return string.Format(Localize(key), args);
+        }
+
+        private AndroidConnectionNotificationText CreateConnectionNotificationText()
+        {
+            return new AndroidConnectionNotificationText
+            {
+                AppName = "Invisible Gorilla XRay",
+                ChannelName = Localize("Lang.Android.Notification.ChannelName"),
+                ChannelDescription = Localize("Lang.Android.Notification.ChannelDescription"),
+                StateStarting = Localize("Lang.Status.WaitForRun"),
+                StateRunning = Localize("Lang.Status.Running"),
+                StateStopping = Localize("Lang.Android.Notification.State.Stopping"),
+                ConfigLabel = Localize("Lang.Android.Notification.Config"),
+                EndpointLabel = Localize("Lang.Android.Notification.Endpoint"),
+                ListenerLabel = Localize("Lang.Android.Runtime.ProxyListener"),
+                ProtocolLabel = Localize("Lang.Window.Settings.Protocol"),
+                TrafficLabel = Localize("Lang.Android.Notification.Traffic"),
+                SpeedLabel = Localize("Lang.Android.Notification.Speed"),
+                UptimeLabel = Localize("Lang.Android.Notification.Uptime"),
+                UnknownEndpoint = Localize("Lang.Android.Notification.UnknownEndpoint")
+            };
+        }
+
+        private AndroidConnectionNotificationSession BuildConnectionNotificationSession(
+            string configContent,
+            AndroidConnectionNotificationText notificationText)
+        {
+            Config? currentConfig = configHandler.GetCurrentConfig();
+
+            string endpoint = notificationText.UnknownEndpoint;
+            if (TryExtractOutboundEndpoint(configContent, out string host, out int port))
+            {
+                endpoint = port > 0 ? $"{host}:{port}" : host;
+            }
+            else
+            {
+                string? fallbackHost = JsonUtility.Find("address", "outbounds", configContent)
+                    ?? JsonUtility.Find("server", "outbounds", configContent)
+                    ?? JsonUtility.Find("host", "outbounds", configContent);
+                string? fallbackPort = JsonUtility.Find("port", "outbounds", configContent)
+                    ?? JsonUtility.Find("server_port", "outbounds", configContent);
+
+                if (!string.IsNullOrWhiteSpace(fallbackHost))
+                {
+                    endpoint = int.TryParse(fallbackPort, out int parsedFallbackPort) && parsedFallbackPort > 0
+                        ? $"{fallbackHost}:{parsedFallbackPort}"
+                        : fallbackHost;
+                }
+            }
+
+            return new AndroidConnectionNotificationSession
+            {
+                ConfigName = currentConfig?.Name ?? Localize("Lang.Message.NoServerConfiguration"),
+                Endpoint = endpoint,
+                Listener = $"127.0.0.1:{settingsHandler.UserSettings.GetProxyPort()}",
+                Protocol = settingsHandler.UserSettings.GetProtocol().ToString(),
+                Text = notificationText
+            };
         }
 
         private void EnsureServersSectionInitialized()
@@ -998,6 +1058,8 @@ namespace InvisibleGorillaXRay.Android.Views
             SetConnectionState(ConnectionState.Starting);
             SetStatus("Lang.Android.Status.LoadingConfig");
 
+            AndroidConnectionNotificationText notificationText = CreateConnectionNotificationText();
+
             await Task.Run(() =>
             {
                 bool started = false;
@@ -1011,6 +1073,10 @@ namespace InvisibleGorillaXRay.Android.Views
                         failureMessage = configStatus.Content?.ToString() ?? "Lang.Message.NoConfig";
                         return;
                     }
+
+                    string activeConfig = configStatus.Content?.ToString() ?? string.Empty;
+                    AndroidConnectionNotificationManager.ShowStarting(
+                        BuildConnectionNotificationSession(activeConfig, notificationText));
 
                     Status modeStatus = core.EnableMode();
                     if (modeStatus.Code == Code.ERROR)
@@ -1026,13 +1092,14 @@ namespace InvisibleGorillaXRay.Android.Views
                     }
 
                     started = true;
+                    AndroidConnectionNotificationManager.MarkRunning();
                     Dispatcher.UIThread.Post(() =>
                     {
                         SetConnectionState(ConnectionState.Running);
                         SetStatus("Lang.Android.Status.RunningProxy");
                     });
 
-                    core.Run(configStatus.Content?.ToString() ?? string.Empty);
+                    core.Run(activeConfig);
                 }
                 catch (Exception ex)
                 {
@@ -1041,6 +1108,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 finally
                 {
                     isRunWorkerBusy = false;
+                    AndroidConnectionNotificationManager.Stop();
 
                     Dispatcher.UIThread.Post(() =>
                     {
@@ -1061,6 +1129,7 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             core.Stop();
             _ = Task.Run(() => core.DisableMode());
+            AndroidConnectionNotificationManager.MarkStopping();
             SetStatus("Lang.Android.Status.StopRequested");
         }
 
@@ -1764,6 +1833,9 @@ namespace InvisibleGorillaXRay.Android.Views
 
                 if (TryExtractFromServers(outbound, out host, out port))
                     return true;
+
+                if (TryExtractRecursively(outbound, out host, out port))
+                    return true;
             }
 
             return false;
@@ -1815,22 +1887,16 @@ namespace InvisibleGorillaXRay.Android.Views
                 extractedHost = string.Empty;
                 extractedPort = 0;
 
-                if (!endpoint.TryGetProperty("address", out JsonElement addressElement))
-                    return false;
+                string? address = TryGetString(endpoint, "address")
+                    ?? TryGetString(endpoint, "server")
+                    ?? TryGetString(endpoint, "host");
 
-                string? address = addressElement.GetString();
                 if (string.IsNullOrWhiteSpace(address))
                     return false;
 
-                if (!endpoint.TryGetProperty("port", out JsonElement portElement))
-                    return false;
-
-                int parsedPort = portElement.ValueKind switch
-                {
-                    JsonValueKind.Number when portElement.TryGetInt32(out int numericPort) => numericPort,
-                    JsonValueKind.String when int.TryParse(portElement.GetString(), out int stringPort) => stringPort,
-                    _ => 0
-                };
+                int parsedPort = TryGetInt(endpoint, "port");
+                if (parsedPort <= 0)
+                    parsedPort = TryGetInt(endpoint, "server_port");
 
                 if (parsedPort <= 0)
                     return false;
@@ -1838,6 +1904,59 @@ namespace InvisibleGorillaXRay.Android.Views
                 extractedHost = address;
                 extractedPort = parsedPort;
                 return true;
+
+                static string? TryGetString(JsonElement element, string propertyName)
+                {
+                    if (!element.TryGetProperty(propertyName, out JsonElement property))
+                        return null;
+
+                    return property.ValueKind == JsonValueKind.String
+                        ? property.GetString()
+                        : null;
+                }
+
+                static int TryGetInt(JsonElement element, string propertyName)
+                {
+                    if (!element.TryGetProperty(propertyName, out JsonElement property))
+                        return 0;
+
+                    return property.ValueKind switch
+                    {
+                        JsonValueKind.Number when property.TryGetInt32(out int numericValue) => numericValue,
+                        JsonValueKind.String when int.TryParse(property.GetString(), out int stringValue) => stringValue,
+                        _ => 0
+                    };
+                }
+            }
+
+            static bool TryExtractRecursively(JsonElement element, out string extractedHost, out int extractedPort)
+            {
+                extractedHost = string.Empty;
+                extractedPort = 0;
+
+                if (TryReadEndpoint(element, out extractedHost, out extractedPort))
+                    return true;
+
+                switch (element.ValueKind)
+                {
+                    case JsonValueKind.Object:
+                        foreach (JsonProperty property in element.EnumerateObject())
+                        {
+                            if (TryExtractRecursively(property.Value, out extractedHost, out extractedPort))
+                                return true;
+                        }
+                        break;
+
+                    case JsonValueKind.Array:
+                        foreach (JsonElement item in element.EnumerateArray())
+                        {
+                            if (TryExtractRecursively(item, out extractedHost, out extractedPort))
+                                return true;
+                        }
+                        break;
+                }
+
+                return false;
             }
         }
 

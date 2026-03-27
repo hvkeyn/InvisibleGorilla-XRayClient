@@ -217,5 +217,14 @@
     <x:String x:Key="Lang.Android.Status.EnterConfigName">Введите название конфигурации.</x:String>
     <x:String x:Key="Lang.Android.Status.RawConfigInvalidJson">Сырой JSON конфигурации некорректен.</x:String>
     <x:String x:Key="Lang.Android.Status.SavedRawConfig">JSON-конфигурация сохранена: {0}</x:String>
+    <x:String x:Key="Lang.Android.Notification.ChannelName">Статус соединения</x:String>
+    <x:String x:Key="Lang.Android.Notification.ChannelDescription">Показывает текущее состояние прокси-соединения и живые данные по трафику.</x:String>
+    <x:String x:Key="Lang.Android.Notification.State.Stopping">Остановка</x:String>
+    <x:String x:Key="Lang.Android.Notification.Config">Конфигурация</x:String>
+    <x:String x:Key="Lang.Android.Notification.Endpoint">Endpoint</x:String>
+    <x:String x:Key="Lang.Android.Notification.Traffic">Трафик</x:String>
+    <x:String x:Key="Lang.Android.Notification.Speed">Скорость</x:String>
+    <x:String x:Key="Lang.Android.Notification.Uptime">Время работы</x:String>
+    <x:String x:Key="Lang.Android.Notification.UnknownEndpoint">Endpoint не определен</x:String>
 
 </ResourceDictionary>

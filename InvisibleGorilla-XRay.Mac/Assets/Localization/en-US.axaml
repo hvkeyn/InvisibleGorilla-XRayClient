@@ -217,5 +217,14 @@
     <x:String x:Key="Lang.Android.Status.EnterConfigName">Enter a config name.</x:String>
     <x:String x:Key="Lang.Android.Status.RawConfigInvalidJson">Raw config is not valid JSON.</x:String>
     <x:String x:Key="Lang.Android.Status.SavedRawConfig">Saved raw config: {0}</x:String>
+    <x:String x:Key="Lang.Android.Notification.ChannelName">Connection status</x:String>
+    <x:String x:Key="Lang.Android.Notification.ChannelDescription">Shows the current proxy connection state and live traffic details.</x:String>
+    <x:String x:Key="Lang.Android.Notification.State.Stopping">Stopping</x:String>
+    <x:String x:Key="Lang.Android.Notification.Config">Config</x:String>
+    <x:String x:Key="Lang.Android.Notification.Endpoint">Endpoint</x:String>
+    <x:String x:Key="Lang.Android.Notification.Traffic">Traffic</x:String>
+    <x:String x:Key="Lang.Android.Notification.Speed">Speed</x:String>
+    <x:String x:Key="Lang.Android.Notification.Uptime">Uptime</x:String>
+    <x:String x:Key="Lang.Android.Notification.UnknownEndpoint">Unknown endpoint</x:String>
 
 </ResourceDictionary>

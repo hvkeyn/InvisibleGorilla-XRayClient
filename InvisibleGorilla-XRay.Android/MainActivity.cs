@@ -51,9 +51,12 @@ namespace InvisibleGorillaXRay.Android
         DataMimeType = "text/plain")]
     public class MainActivity : AvaloniaMainActivity<App>
     {
+        private const int NotificationPermissionRequestCode = 1001;
+
         protected override void OnCreate(Bundle? savedInstanceState)
         {
             base.OnCreate(savedInstanceState);
+            RequestNotificationPermissionIfNeeded();
             DispatchIncomingIntent(Intent);
         }
 
@@ -107,6 +110,19 @@ namespace InvisibleGorillaXRay.Android
 
             string? sharedText = intent.GetStringExtra(Intent.ExtraText);
             return AndroidDeepLinkDispatcher.DispatchExternalValue(sharedText);
+        }
+
+        private void RequestNotificationPermissionIfNeeded()
+        {
+            if (Build.VERSION.SdkInt < BuildVersionCodes.Tiramisu)
+                return;
+
+            if (CheckSelfPermission(global::Android.Manifest.Permission.PostNotifications) == Permission.Granted)
+                return;
+
+            RequestPermissions(
+                new[] { global::Android.Manifest.Permission.PostNotifications },
+                NotificationPermissionRequestCode);
         }
     }
 }
