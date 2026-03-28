@@ -1,10 +1,13 @@
 using System;
+using System.Linq;
 using System.Net;
+using System.Text;
 
 namespace InvisibleGorillaXRay.Handlers.Tunnels
 {
     using Core;
     using Foundation;
+    using Handlers;
     using InvisibleGorillaXRay.Services;
     using Models;
     using Values;
@@ -89,7 +92,8 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
                         $"-proxy={ip}:{port} " +
                         $"-address={address} " +
                         $"-server={server} " + 
-                        $"-dns={dns}"
+                        $"-dns={dns}" +
+                        BuildBypassAppsCommandSuffix()
                 );
                 DiagnosticLog.Write("WindowsTunnel", "Sending enable command to TUN service");
                 
@@ -209,5 +213,26 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
         }
 
         private Status ExecuteCommand(string command) => executeCommand.Invoke(command);
+
+        private static string BuildBypassAppsCommandSuffix()
+        {
+            SettingsHandler settingsHandler = new();
+            UserSettings settings = settingsHandler.UserSettings;
+            if (settings.GetAppRulesMode() != AppRulesMode.BYPASS_SELECTED_APPS)
+                return string.Empty;
+
+            string[] appPaths = settings.GetEnabledAppRules()
+                .Select(rule => rule.AppId?.Trim())
+                .Where(appId => !string.IsNullOrWhiteSpace(appId) && System.IO.File.Exists(appId))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray()!;
+
+            if (appPaths.Length == 0)
+                return string.Empty;
+
+            string payload = Convert.ToBase64String(Encoding.UTF8.GetBytes(string.Join('\n', appPaths)));
+            DiagnosticLog.Write("WindowsTunnel", $"Passing bypass rules payload with {appPaths.Length} apps");
+            return $" -bypassApps={payload}";
+        }
     }
 }

@@ -9,9 +9,9 @@ namespace InvisibleGorillaXRay.Mac.Views
 {
     using Models;
     using Values;
-    using Services;
-    using Services.Analytics.General;
-    using Services.Analytics.MainWindow;
+    using InvisibleGorillaXRay.Services;
+    using InvisibleGorillaXRay.Services.Analytics.General;
+    using InvisibleGorillaXRay.Services.Analytics.MainWindow;
 
     public partial class MainWindow : Window
     {

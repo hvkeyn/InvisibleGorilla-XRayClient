@@ -15,10 +15,10 @@ namespace InvisibleGorillaXRay.Mac.Views
 {
     using Models;
     using Values;
-    using Services;
+    using InvisibleGorillaXRay.Services;
     using Utilities;
-    using Services.Analytics.ServerWindow;
-    using Services.Analytics.Configuration;
+    using InvisibleGorillaXRay.Services.Analytics.ServerWindow;
+    using InvisibleGorillaXRay.Services.Analytics.Configuration;
 
     public partial class ServerWindow : Window
     {

@@ -173,6 +173,18 @@
     <x:String x:Key="Lang.Android.Settings.Network">Сеть</x:String>
     <x:String x:Key="Lang.Android.Settings.TunDescription">Android VPN/TUN уже активен. Сервис создаёт системный VPN-интерфейс и направляет трафик через выбранную Xray-конфигурацию.</x:String>
     <x:String x:Key="Lang.Android.Settings.LogsAndDiagnostics">Журналы и диагностика</x:String>
+    <x:String x:Key="Lang.AppRules.Title">Правила приложений</x:String>
+    <x:String x:Key="Lang.AppRules.Description.Android">Выбранные приложения обходят Android VPN, а остальной трафик устройства продолжает идти через XRay.</x:String>
+    <x:String x:Key="Lang.AppRules.Description.Desktop">Выбранные приложения обходят XRay, а остальной системный трафик продолжает идти через туннель.</x:String>
+    <x:String x:Key="Lang.AppRules.EnableBypass">Обходить выбранные приложения</x:String>
+    <x:String x:Key="Lang.AppRules.RefreshApps">Обновить список приложений</x:String>
+    <x:String x:Key="Lang.AppRules.NoAppsFound">Launchable-приложения не найдены.</x:String>
+    <x:String x:Key="Lang.AppRules.SystemBadge">Системное</x:String>
+    <x:String x:Key="Lang.AppRules.RuntimeEnabled">обход включён для {0} приложений</x:String>
+    <x:String x:Key="Lang.AppRules.RuntimeDisabled">обход выключен</x:String>
+    <x:String x:Key="Lang.AppRules.RestartingVpn">Правила приложений сохранены. Android VPN перезапускается для применения изменений...</x:String>
+    <x:String x:Key="Lang.AppRules.RestartRequired">Правила приложений сохранены, но Android VPN нужно перезапустить вручную для применения.</x:String>
+    <x:String x:Key="Lang.AppRules.AppsRefreshed">Список установленных приложений обновлён.</x:String>
 
     <x:String x:Key="Lang.Android.Runtime.NoneSelected">Не выбрано</x:String>
     <x:String x:Key="Lang.Android.Runtime.AppRoot">Корень приложения</x:String>

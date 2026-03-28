@@ -1,8 +1,11 @@
 using System;
+using System.Linq;
 
 namespace InvisibleGorillaXRay.Android.Handlers.Tunnels
 {
     using InvisibleGorillaXRay.Core;
+    using InvisibleGorillaXRay.Handlers;
+    using InvisibleGorillaXRay.Android.Handlers.Settings;
     using InvisibleGorillaXRay.Android.Services;
     using InvisibleGorillaXRay.Handlers.Tunnels;
     using InvisibleGorillaXRay.Models;
@@ -25,7 +28,8 @@ namespace InvisibleGorillaXRay.Android.Handlers.Tunnels
                 UdpEnabled = true,
                 TunAddress = address,
                 Dns = dns,
-                SessionName = "Invisible Gorilla XRay"
+                SessionName = "Invisible Gorilla XRay",
+                BypassPackages = GetBypassPackages()
             });
 
             if (startStatus.Code == Code.ERROR)
@@ -66,6 +70,20 @@ namespace InvisibleGorillaXRay.Android.Handlers.Tunnels
         {
             DiagnosticLog.Write("AndroidTunnel", "Cancel requested");
             AndroidVpnServiceController.Stop();
+        }
+
+        private static string[] GetBypassPackages()
+        {
+            SettingsHandler settingsHandler = new(() => new AndroidStartup());
+            UserSettings settings = settingsHandler.UserSettings;
+            if (settings.GetAppRulesMode() != AppRulesMode.BYPASS_SELECTED_APPS)
+                return Array.Empty<string>();
+
+            return settings.GetEnabledAppRules()
+                .Select(rule => rule.AppId?.Trim())
+                .Where(appId => !string.IsNullOrWhiteSpace(appId))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray()!;
         }
     }
 }

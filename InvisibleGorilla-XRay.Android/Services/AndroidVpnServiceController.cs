@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Android.Content;
 using Android.OS;
@@ -13,6 +14,7 @@ namespace InvisibleGorillaXRay.Android.Services
         public string TunAddress { get; init; } = string.Empty;
         public string Dns { get; init; } = string.Empty;
         public string SessionName { get; init; } = "Invisible Gorilla XRay";
+        public IReadOnlyList<string> BypassPackages { get; init; } = Array.Empty<string>();
     }
 
     internal static class AndroidVpnServiceController

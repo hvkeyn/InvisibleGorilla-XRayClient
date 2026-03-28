@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -28,6 +29,7 @@ namespace InvisibleGorillaXRay.Android.Services
         private const string ExtraTunAddress = "tun_address";
         private const string ExtraDns = "dns";
         private const string ExtraSessionName = "session_name";
+        private const string ExtraBypassPackages = "bypass_packages";
         private const int DefaultMtu = 1500;
         private const string DefaultIpv6Address = "fdfe:dcba:9876::1";
         private const int DefaultIpv6PrefixLength = 126;
@@ -44,6 +46,8 @@ namespace InvisibleGorillaXRay.Android.Services
             intent.PutExtra(ExtraTunAddress, options.TunAddress);
             intent.PutExtra(ExtraDns, options.Dns);
             intent.PutExtra(ExtraSessionName, options.SessionName);
+            if (options.BypassPackages.Count > 0)
+                intent.PutStringArrayListExtra(ExtraBypassPackages, new List<string>(options.BypassPackages));
             return intent;
         }
 
@@ -137,6 +141,11 @@ namespace InvisibleGorillaXRay.Android.Services
             string tunAddress = intent.GetStringExtra(ExtraTunAddress)?.Trim() ?? "10.0.236.10";
             string dns = intent.GetStringExtra(ExtraDns)?.Trim() ?? "8.8.8.8";
             string sessionName = intent.GetStringExtra(ExtraSessionName)?.Trim() ?? "Invisible Gorilla XRay";
+            string[] bypassPackages = intent.GetStringArrayListExtra(ExtraBypassPackages)?
+                .Where(packageName => !string.IsNullOrWhiteSpace(packageName))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+                ?? Array.Empty<string>();
 
             lock (SyncRoot)
             {
@@ -156,6 +165,7 @@ namespace InvisibleGorillaXRay.Android.Services
 
                 TryEnableIpv6(builder);
                 TryExcludeOwnProcess(builder);
+                TryExcludeUserSelectedApplications(builder, bypassPackages);
 
                 ParcelFileDescriptor? tunInterface = builder.Establish();
                 if (tunInterface == null)
@@ -176,7 +186,7 @@ namespace InvisibleGorillaXRay.Android.Services
 
             DiagnosticLog.Write(
                 "AndroidVpnService",
-                $"Android VPN established with proxyPort={proxyPort}, tunAddress={tunAddress}, dns={dns}, udpEnabled={udpEnabled}");
+                $"Android VPN established with proxyPort={proxyPort}, tunAddress={tunAddress}, dns={dns}, udpEnabled={udpEnabled}, bypassPackages={string.Join(",", bypassPackages)}");
         }
 
         private void StartForegroundCompat()
@@ -290,6 +300,28 @@ namespace InvisibleGorillaXRay.Android.Services
             catch (Exception ex)
             {
                 DiagnosticLog.WriteException("AndroidVpnService.AddDisallowedApplication", ex);
+            }
+        }
+
+        private void TryExcludeUserSelectedApplications(Builder builder, IEnumerable<string> packages)
+        {
+            foreach (string packageName in packages)
+            {
+                try
+                {
+                    if (string.Equals(packageName, PackageName, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    builder.AddDisallowedApplication(packageName);
+                }
+                catch (PackageManager.NameNotFoundException ex)
+                {
+                    DiagnosticLog.WriteException($"AndroidVpnService.AddDisallowedApplication.{packageName}", ex);
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException($"AndroidVpnService.AddDisallowedApplication.{packageName}", ex);
+                }
             }
         }
 

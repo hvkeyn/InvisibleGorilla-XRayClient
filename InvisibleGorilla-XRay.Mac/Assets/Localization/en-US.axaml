@@ -173,6 +173,18 @@
     <x:String x:Key="Lang.Android.Settings.Network">Network</x:String>
     <x:String x:Key="Lang.Android.Settings.TunDescription">Android VPN/TUN is active. The service creates a system VPN interface and routes traffic through the selected Xray configuration.</x:String>
     <x:String x:Key="Lang.Android.Settings.LogsAndDiagnostics">Logs and diagnostics</x:String>
+    <x:String x:Key="Lang.AppRules.Title">App rules</x:String>
+    <x:String x:Key="Lang.AppRules.Description.Android">Selected apps bypass the Android VPN while all other device traffic continues through XRay.</x:String>
+    <x:String x:Key="Lang.AppRules.Description.Desktop">Selected apps bypass XRay while the rest of the system traffic continues through the tunnel.</x:String>
+    <x:String x:Key="Lang.AppRules.EnableBypass">Bypass selected apps</x:String>
+    <x:String x:Key="Lang.AppRules.RefreshApps">Refresh installed apps</x:String>
+    <x:String x:Key="Lang.AppRules.NoAppsFound">No launchable apps found.</x:String>
+    <x:String x:Key="Lang.AppRules.SystemBadge">System</x:String>
+    <x:String x:Key="Lang.AppRules.RuntimeEnabled">bypass enabled for {0} apps</x:String>
+    <x:String x:Key="Lang.AppRules.RuntimeDisabled">bypass disabled</x:String>
+    <x:String x:Key="Lang.AppRules.RestartingVpn">App rules saved. Restarting Android VPN to apply bypass changes...</x:String>
+    <x:String x:Key="Lang.AppRules.RestartRequired">App rules were saved, but Android VPN must be restarted manually to apply them.</x:String>
+    <x:String x:Key="Lang.AppRules.AppsRefreshed">Installed apps list refreshed.</x:String>
 
     <x:String x:Key="Lang.Android.Runtime.NoneSelected">None selected</x:String>
     <x:String x:Key="Lang.Android.Runtime.AppRoot">App root</x:String>

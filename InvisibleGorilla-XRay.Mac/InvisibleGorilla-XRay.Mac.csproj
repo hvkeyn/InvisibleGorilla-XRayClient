@@ -22,4 +22,10 @@
     <ProjectReference Include="..\InvisibleGorilla.Core\InvisibleGorilla.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="Native\TransparentProxyExtension\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

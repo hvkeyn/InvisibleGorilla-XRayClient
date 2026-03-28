@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using Newtonsoft.Json;
 
 namespace InvisibleGorillaXRay.Models
@@ -65,6 +67,12 @@ namespace InvisibleGorillaXRay.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue("./Logs")]
         public string LogPath;
 
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(AppRulesMode.DISABLED)]
+        public AppRulesMode AppRulesMode;
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public List<AppRule> AppRules;
+
         public UserSettings()
         {
             this.ClientId = "";
@@ -85,6 +93,8 @@ namespace InvisibleGorillaXRay.Models
             this.Dns = "8.8.8.8";
             this.LogLevel = LogLevel.NONE;
             this.LogPath = Values.Directory.LOGS;
+            this.AppRulesMode = AppRulesMode.DISABLED;
+            this.AppRules = new List<AppRule>();
         }
 
         public UserSettings(
@@ -103,7 +113,9 @@ namespace InvisibleGorillaXRay.Models
             int testPort,
             string tunIp,
             string dns,
-            string logPath
+            string logPath,
+            AppRulesMode appRulesMode = AppRulesMode.DISABLED,
+            List<AppRule>? appRules = null
         )
         {
             this.Language = language;
@@ -122,6 +134,8 @@ namespace InvisibleGorillaXRay.Models
             this.TunIp = tunIp;
             this.Dns = dns;
             this.LogPath = logPath;
+            this.AppRulesMode = appRulesMode;
+            this.AppRules = NormalizeAppRules(appRules);
         }
 
         public string GetClientId() => ClientId;
@@ -159,5 +173,22 @@ namespace InvisibleGorillaXRay.Models
         public LogLevel GetLogLevel() => LogLevel;
 
         public string GetLogPath() => LogPath;
+
+        public AppRulesMode GetAppRulesMode() => AppRulesMode;
+
+        public List<AppRule> GetAppRules() => NormalizeAppRules(AppRules);
+
+        public List<AppRule> GetEnabledAppRules() => NormalizeAppRules(AppRules).Where(rule => rule.Enabled).ToList();
+
+        private static List<AppRule> NormalizeAppRules(List<AppRule>? appRules)
+        {
+            if (appRules == null)
+                return new List<AppRule>();
+
+            return appRules
+                .Where(rule => rule != null && !string.IsNullOrWhiteSpace(rule.AppId))
+                .Select(rule => rule.Clone())
+                .ToList();
+        }
     }
 }

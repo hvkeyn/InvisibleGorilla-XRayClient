@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 
 namespace InvisibleGorillaXRay.Factories
 {
@@ -90,6 +90,8 @@ namespace InvisibleGorillaXRay.Factories
                 getDns: settingsHandler.UserSettings.GetDns,
                 getLogLevel: settingsHandler.UserSettings.GetLogLevel,
                 getLogPath: settingsHandler.UserSettings.GetLogPath,
+                getAppRulesMode: settingsHandler.UserSettings.GetAppRulesMode,
+                getAppRules: settingsHandler.UserSettings.GetAppRules,
                 openPolicyWindow: CreatePolicyWindow,
                 onUpdateUserSettings: UpdateUserSettings
             );

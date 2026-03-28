@@ -4,8 +4,8 @@ using Avalonia.Input;
 
 namespace InvisibleGorillaXRay.Mac.Views
 {
-    using Services;
-    using Services.Analytics.AboutWindow;
+    using InvisibleGorillaXRay.Services;
+    using InvisibleGorillaXRay.Services.Analytics.AboutWindow;
 
     public partial class AboutWindow : Window
     {

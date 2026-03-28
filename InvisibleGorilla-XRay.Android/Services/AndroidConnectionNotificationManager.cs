@@ -265,10 +265,6 @@ namespace InvisibleGorillaXRay.Android.Services
             lastTxBytes = currentTxBytes;
 
             string stateText = GetStateText(session.Text);
-            string endpoint = string.IsNullOrWhiteSpace(session.Endpoint)
-                ? session.Text.UnknownEndpoint
-                : session.Endpoint;
-
             string contentText = currentState == AndroidConnectionNotificationState.Running
                 ? $"{stateText} - {session.ConfigName} - RX {FormatBytes(rxSpeedBytes)}/s TX {FormatBytes(txSpeedBytes)}/s"
                 : $"{stateText} - {session.ConfigName}";
@@ -276,8 +272,6 @@ namespace InvisibleGorillaXRay.Android.Services
             StringBuilder expandedText = new();
             expandedText.AppendLine(stateText);
             expandedText.AppendLine($"{session.Text.ConfigLabel}: {session.ConfigName}");
-            expandedText.AppendLine($"{session.Text.EndpointLabel}: {endpoint}");
-            expandedText.AppendLine($"{session.Text.ProtocolLabel}: {session.Protocol}");
             expandedText.AppendLine($"{session.Text.ListenerLabel}: {session.Listener}");
             expandedText.AppendLine($"{session.Text.TrafficLabel}: RX {FormatBytes(totalRxBytes)} / TX {FormatBytes(totalTxBytes)}");
             expandedText.AppendLine($"{session.Text.SpeedLabel}: RX {FormatBytes(rxSpeedBytes)}/s / TX {FormatBytes(txSpeedBytes)}/s");

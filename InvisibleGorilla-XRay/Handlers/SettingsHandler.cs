@@ -1,4 +1,5 @@
-﻿using System.IO;
+using System.IO;
+using System.Linq;
 using Newtonsoft.Json;
 
 namespace InvisibleGorillaXRay.Handlers
@@ -37,6 +38,8 @@ namespace InvisibleGorillaXRay.Handlers
             this.userSettings.TunIp = userSettings.TunIp;
             this.userSettings.Dns = userSettings.Dns;
             this.userSettings.LogPath = userSettings.LogPath;
+            this.userSettings.AppRulesMode = userSettings.AppRulesMode;
+            this.userSettings.AppRules = CloneAppRules(userSettings.AppRules);
 
             UpdateStartupSetting();
             SaveUserSettings();
@@ -73,19 +76,37 @@ namespace InvisibleGorillaXRay.Handlers
         private UserSettings LoadUserSettings()
         {
             if (!File.Exists(Path.USER_SETTINGS))
-                return new UserSettings();
+                return NormalizeRules(new UserSettings());
 
             string rawSettings = File.ReadAllText(Path.USER_SETTINGS);
             if (!JsonUtility.IsJsonValid(rawSettings))
-                return new UserSettings();
+                return NormalizeRules(new UserSettings());
 
-            return JsonConvert.DeserializeObject<UserSettings>(rawSettings);
+            return NormalizeRules(JsonConvert.DeserializeObject<UserSettings>(rawSettings));
+
+            UserSettings NormalizeRules(UserSettings settings)
+            {
+                settings.AppRules ??= new System.Collections.Generic.List<AppRule>();
+                settings.AppRules = CloneAppRules(settings.AppRules);
+                return settings;
+            }
         }
 
         private void SaveUserSettings()
         {
             string rawSettings = JsonConvert.SerializeObject(userSettings);
             File.WriteAllText(Path.USER_SETTINGS, rawSettings);
+        }
+
+        private static System.Collections.Generic.List<AppRule> CloneAppRules(System.Collections.Generic.IEnumerable<AppRule>? appRules)
+        {
+            if (appRules == null)
+                return new System.Collections.Generic.List<AppRule>();
+
+            return appRules
+                .Where(rule => rule != null && !string.IsNullOrWhiteSpace(rule.AppId))
+                .Select(rule => rule.Clone())
+                .ToList();
         }
     }
 }

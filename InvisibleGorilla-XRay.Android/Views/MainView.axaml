@@ -1047,6 +1047,51 @@
                             BorderBrush="{StaticResource SurfaceBright}"
                             BorderThickness="1"
                             Background="{StaticResource SurfaceLight}">
+                        <StackPanel Spacing="10">
+                            <TextBlock x:Name="AppRulesTitleTextBlock"
+                                       Text="App Rules"
+                                       FontSize="18"
+                                       FontWeight="SemiBold" />
+                            <TextBlock x:Name="AppRulesDescriptionTextBlock"
+                                       Text="Selected apps will bypass the VPN while the rest of the device traffic continues through XRay."
+                                       TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextMuted}" />
+                            <CheckBox x:Name="AppRulesEnabledCheckBox"
+                                      Content="Exclude selected apps from VPN" />
+                            <Button x:Name="RefreshInstalledAppsButton"
+                                    Height="36"
+                                    HorizontalAlignment="Left"
+                                    Padding="12,0"
+                                    Theme="{StaticResource GrayActionButton}"
+                                    Click="OnRefreshInstalledAppsClick">
+                                <TextBlock Text="Refresh installed apps"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center" />
+                            </Button>
+                            <Border Padding="10"
+                                    CornerRadius="10"
+                                    BorderBrush="{StaticResource SurfaceBright}"
+                                    BorderThickness="1"
+                                    Background="{StaticResource SurfaceDark}">
+                                <ScrollViewer MaxHeight="260"
+                                              HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel x:Name="AppRulesItemsPanel"
+                                                Spacing="6" />
+                                </ScrollViewer>
+                            </Border>
+                            <TextBlock x:Name="NoDiscoveredAppsTextBlock"
+                                       Text="No launchable apps were found."
+                                       TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextMuted}"
+                                       IsVisible="False" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Padding="14"
+                            CornerRadius="12"
+                            BorderBrush="{StaticResource SurfaceBright}"
+                            BorderThickness="1"
+                            Background="{StaticResource SurfaceLight}">
                         <StackPanel Spacing="8">
                             <TextBlock x:Name="TunTitleTextBlock"
                                        Text="VPN/TUN"

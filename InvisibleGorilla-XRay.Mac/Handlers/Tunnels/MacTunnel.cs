@@ -5,7 +5,9 @@ using System.Threading;
 
 namespace InvisibleGorillaXRay.Mac.Handlers.Tunnels
 {
+    using InvisibleGorillaXRay.Mac.Handlers.Settings;
     using InvisibleGorillaXRay.Handlers.Tunnels;
+    using InvisibleGorillaXRay.Handlers;
     using InvisibleGorillaXRay.Models;
 
     /// <summary>
@@ -37,6 +39,10 @@ namespace InvisibleGorillaXRay.Mac.Handlers.Tunnels
 
             try
             {
+                Status appRulesStatus = PrepareAppRulesBridge(port, address, dns);
+                if (appRulesStatus.Code == Code.ERROR)
+                    return appRulesStatus;
+
                 SaveOriginalRoutes();
 
                 StartTun2Socks(ip, port);
@@ -65,12 +71,26 @@ namespace InvisibleGorillaXRay.Mac.Handlers.Tunnels
             try { StopTun2Socks(); } catch { }
             try { RestoreRoutes(); } catch { }
             try { RestoreDns(); } catch { }
+            try { MacAppRulesBridge.Clear(); } catch { }
         }
 
         public void Cancel()
         {
             isCancelled = true;
             Disable();
+        }
+
+        private static Status PrepareAppRulesBridge(int socksPort, string tunnelAddress, string dns)
+        {
+            SettingsHandler settingsHandler = new(() => new MacStartup());
+            UserSettings settings = settingsHandler.UserSettings;
+            if (settings.GetAppRulesMode() != AppRulesMode.BYPASS_SELECTED_APPS)
+            {
+                MacAppRulesBridge.Clear();
+                return new Status(Code.SUCCESS, SubCode.SUCCESS, null);
+            }
+
+            return MacAppRulesBridge.Prepare(settings, socksPort, tunnelAddress, dns);
         }
 
         private void StartTun2Socks(string tunIp, int socksPort)

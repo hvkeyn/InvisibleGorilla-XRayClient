@@ -8,8 +8,8 @@ namespace InvisibleGorillaXRay.Mac.Views
 {
     using Models;
     using Values;
-    using Services;
-    using Services.Analytics.UpdateWindow;
+    using InvisibleGorillaXRay.Services;
+    using InvisibleGorillaXRay.Services.Analytics.UpdateWindow;
 
     public partial class UpdateWindow : Window
     {

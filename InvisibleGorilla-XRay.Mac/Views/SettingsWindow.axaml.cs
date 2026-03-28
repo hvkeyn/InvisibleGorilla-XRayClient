@@ -2,14 +2,19 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Media;
+using Avalonia.Input;
 
 namespace InvisibleGorillaXRay.Mac.Views
 {
     using Models;
-    using Services;
-    using Services.Analytics.SettingsWindow;
+    using InvisibleGorillaXRay.Mac.Services;
+    using InvisibleGorillaXRay.Services;
+    using InvisibleGorillaXRay.Services.Analytics.SettingsWindow;
 
     public partial class SettingsWindow : Window
     {
@@ -56,9 +61,13 @@ namespace InvisibleGorillaXRay.Mac.Views
         private Func<string> getDns;
         private Func<LogLevel> getLogLevel;
         private Func<string> getLogPath;
+        private Func<AppRulesMode> getAppRulesMode;
+        private Func<List<AppRule>> getAppRules;
         private Func<PolicyWindow> openPolicyWindow;
 
         private Action<UserSettings> onUpdateUserSettings;
+        private readonly List<MacInstalledAppInfo> discoveredMacApps = new();
+        private readonly Dictionary<string, CheckBox> appRuleToggles = new(StringComparer.OrdinalIgnoreCase);
 
         private AnalyticsService AnalyticsService => ServiceLocator.Get<AnalyticsService>();
 
@@ -104,6 +113,8 @@ namespace InvisibleGorillaXRay.Mac.Views
             Func<string> getDns,
             Func<LogLevel> getLogLevel,
             Func<string> getLogPath,
+            Func<AppRulesMode> getAppRulesMode,
+            Func<List<AppRule>> getAppRules,
             Func<PolicyWindow> openPolicyWindow,
             Action<UserSettings> onUpdateUserSettings)
         {
@@ -123,6 +134,8 @@ namespace InvisibleGorillaXRay.Mac.Views
             this.getDns = getDns;
             this.getLogLevel = getLogLevel;
             this.getLogPath = getLogPath;
+            this.getAppRulesMode = getAppRulesMode;
+            this.getAppRules = getAppRules;
             this.openPolicyWindow = openPolicyWindow;
             this.onUpdateUserSettings = onUpdateUserSettings;
 
@@ -141,6 +154,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             checkBoxStartHidden.IsChecked = getStartHiddenEnabled.Invoke();
             checkBoxAutoConnect.IsChecked = getAutoConnectEnabled.Invoke();
             checkBoxSendAnalytics.IsChecked = getSendingAnalyticsEnabled.Invoke();
+            checkBoxEnableAppRules.IsChecked = getAppRulesMode.Invoke() == AppRulesMode.BYPASS_SELECTED_APPS;
 
             textBoxProxyPort.Text = getProxyPort.Invoke().ToString();
             textBoxTunPort.Text = getTunPort.Invoke().ToString();
@@ -151,6 +165,7 @@ namespace InvisibleGorillaXRay.Mac.Views
 
             SelectComboBoxItem(comboBoxLogLevel, getLogLevel.Invoke());
             textBoxLogPath.Text = Path.GetFullPath(getLogPath.Invoke());
+            ReloadDiscoveredApps();
         }
 
         private void SelectComboBoxItem<T>(ComboBox comboBox, T key)
@@ -175,6 +190,132 @@ namespace InvisibleGorillaXRay.Mac.Views
             if (comboBox.SelectedItem is KeyValuePair<T, string> kvp)
                 return kvp.Key;
             return default;
+        }
+
+        private void ReloadDiscoveredApps()
+        {
+            HashSet<string> selectedIds = GetCurrentSelectedAppIdSet();
+            discoveredMacApps.Clear();
+            discoveredMacApps.AddRange(MacInstalledAppDiscovery.GetApps());
+            RenderMacAppRules(selectedIds);
+        }
+
+        private void RenderMacAppRules(ISet<string> selectedIds)
+        {
+            panelAppRulesItems.Children.Clear();
+            appRuleToggles.Clear();
+
+            foreach (MacInstalledAppInfo app in discoveredMacApps)
+            {
+                CheckBox toggle = new()
+                {
+                    IsChecked = selectedIds.Contains(app.AppId),
+                    VerticalAlignment = VerticalAlignment.Top,
+                    Margin = new Thickness(0, 2, 0, 0),
+                    Foreground = Brushes.White
+                };
+
+                appRuleToggles[app.AppId] = toggle;
+
+                StackPanel textPanel = new()
+                {
+                    Spacing = 2
+                };
+                textPanel.Children.Add(new TextBlock
+                {
+                    Text = app.DisplayName,
+                    Foreground = Brushes.White,
+                    FontWeight = FontWeight.SemiBold,
+                    TextWrapping = TextWrapping.Wrap
+                });
+                textPanel.Children.Add(new TextBlock
+                {
+                    Text = app.AppId,
+                    Foreground = new SolidColorBrush(Color.Parse("#C9C9C9")),
+                    FontSize = 11,
+                    TextWrapping = TextWrapping.Wrap
+                });
+
+                Grid contentGrid = new();
+                contentGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+                contentGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+                Grid.SetColumn(toggle, 0);
+                Grid.SetColumn(textPanel, 1);
+                contentGrid.Children.Add(toggle);
+                contentGrid.Children.Add(textPanel);
+
+                Border card = new()
+                {
+                    Padding = new Thickness(10, 8),
+                    BorderBrush = new SolidColorBrush(Color.Parse("#6E6E6E")),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(8),
+                    Child = contentGrid
+                };
+
+                card.PointerPressed += (_, args) =>
+                {
+                    if (args.Source is CheckBox)
+                        return;
+
+                    toggle.IsChecked = !(toggle.IsChecked ?? false);
+                };
+
+                panelAppRulesItems.Children.Add(card);
+            }
+
+            textBlockNoDiscoveredApps.IsVisible = discoveredMacApps.Count == 0;
+        }
+
+        private HashSet<string> GetSavedSelectedAppIdSet()
+        {
+            return getAppRules.Invoke()
+                .Where(rule => rule.Enabled && !string.IsNullOrWhiteSpace(rule.AppId))
+                .Select(rule => rule.AppId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
+        private HashSet<string> GetCurrentSelectedAppIdSet()
+        {
+            if (appRuleToggles.Count == 0)
+                return GetSavedSelectedAppIdSet();
+
+            return appRuleToggles
+                .Where(pair => pair.Value.IsChecked == true)
+                .Select(pair => pair.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
+        private List<AppRule> BuildSelectedDesktopAppRules()
+        {
+            if (appRuleToggles.Count == 0)
+                return getAppRules.Invoke();
+
+            HashSet<string> selectedIds = GetCurrentSelectedAppIdSet();
+            List<AppRule> rules = discoveredMacApps
+                .Where(app => selectedIds.Contains(app.AppId))
+                .Select(app => new AppRule(
+                    appId: app.AppId,
+                    displayName: app.DisplayName,
+                    iconRef: app.IconRef,
+                    enabled: true))
+                .ToList();
+
+            foreach (AppRule existingRule in getAppRules.Invoke())
+            {
+                if (!existingRule.Enabled || string.IsNullOrWhiteSpace(existingRule.AppId))
+                    continue;
+
+                if (!selectedIds.Contains(existingRule.AppId))
+                    continue;
+
+                if (rules.Any(rule => string.Equals(rule.AppId, existingRule.AppId, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                rules.Add(existingRule.Clone());
+            }
+
+            return rules;
         }
 
         private void OnBasicTabClick(object sender, RoutedEventArgs e)
@@ -235,7 +376,11 @@ namespace InvisibleGorillaXRay.Mac.Views
                 testPort: int.TryParse(textBoxTestPort.Text, out int tep) ? tep : 10803,
                 tunIp: textBoxTunDeviceIp.Text ?? "10.0.236.10",
                 dns: textBoxTunDns.Text ?? "8.8.8.8",
-                logPath: textBoxLogPath.Text ?? "./Logs"
+                logPath: textBoxLogPath.Text ?? "./Logs",
+                appRulesMode: checkBoxEnableAppRules.IsChecked == true
+                    ? AppRulesMode.BYPASS_SELECTED_APPS
+                    : AppRulesMode.DISABLED,
+                appRules: BuildSelectedDesktopAppRules()
             );
 
             SendRunAtStartupActivationEvent(userSettings);
@@ -270,6 +415,11 @@ namespace InvisibleGorillaXRay.Mac.Views
         private void OnCancelButtonClick(object sender, RoutedEventArgs e)
         {
             Close();
+        }
+
+        private void OnRefreshAppRulesClick(object sender, RoutedEventArgs e)
+        {
+            ReloadDiscoveredApps();
         }
 
         private void HideAllPanels()

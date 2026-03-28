@@ -141,6 +141,61 @@
                         <CheckBox x:Name="checkBoxSendAnalytics" Margin="5,15,0,0" Foreground="White" 
                             Content="{DynamicResource Lang.Window.Settings.SendAnalytics}"
                             FontWeight="Normal" FontSize="14"/>
+
+                        <Border Margin="0,22,0,0"
+                                Padding="12"
+                                CornerRadius="10"
+                                BorderBrush="{StaticResource Color.LightGray}"
+                                BorderThickness="1">
+                            <StackPanel Spacing="8">
+                                <TextBlock Foreground="White"
+                                           Text="{DynamicResource Lang.AppRules.Title}"
+                                           FontWeight="SemiBold"
+                                           FontSize="15"/>
+
+                                <TextBlock Foreground="#C9C9C9"
+                                           Text="{DynamicResource Lang.AppRules.Description.Desktop}"
+                                           TextWrapping="Wrap"
+                                           FontSize="12"/>
+
+                                <CheckBox x:Name="checkBoxEnableAppRules"
+                                          Margin="0,4,0,0"
+                                          Foreground="White"
+                                          Content="{DynamicResource Lang.AppRules.EnableBypass}"
+                                          FontWeight="Normal"
+                                          FontSize="14"/>
+
+                                <Button x:Name="buttonRefreshDesktopApps"
+                                        Width="165"
+                                        Height="30"
+                                        HorizontalAlignment="Left"
+                                        Content="{DynamicResource Lang.AppRules.RefreshApps}"
+                                        Theme="{StaticResource Button.Rectangle.Gray}"
+                                        FontWeight="Normal"
+                                        FontSize="12"
+                                        Foreground="White"
+                                        Click="OnRefreshAppRulesClick"/>
+
+                                <Border Padding="8"
+                                        CornerRadius="8"
+                                        BorderBrush="{StaticResource Color.LightGray}"
+                                        BorderThickness="1">
+                                    <ScrollViewer MaxHeight="190"
+                                                  HorizontalScrollBarVisibility="Disabled"
+                                                  VerticalScrollBarVisibility="Auto">
+                                        <StackPanel x:Name="panelAppRulesItems"
+                                                    Spacing="6"/>
+                                    </ScrollViewer>
+                                </Border>
+
+                                <TextBlock x:Name="textBlockNoDiscoveredApps"
+                                           Foreground="#C9C9C9"
+                                           Text="{DynamicResource Lang.AppRules.NoAppsFound}"
+                                           TextWrapping="Wrap"
+                                           IsVisible="False"
+                                           FontSize="12"/>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
 

@@ -1,4 +1,4 @@
-﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:system="clr-namespace:System;assembly=System.Runtime">
     
@@ -92,6 +92,11 @@
     <system:String x:Key="Lang.Window.Settings.Tun.Dns">DNS</system:String>
     <system:String x:Key="Lang.Window.Settings.Log.Level">Log level</system:String>
     <system:String x:Key="Lang.Window.Settings.Log.Path">Log path</system:String>
+    <system:String x:Key="Lang.AppRules.Title">App rules</system:String>
+    <system:String x:Key="Lang.AppRules.Description.Desktop">Selected apps bypass XRay while the rest of the system traffic continues through the tunnel.</system:String>
+    <system:String x:Key="Lang.AppRules.EnableBypass">Bypass selected apps</system:String>
+    <system:String x:Key="Lang.AppRules.RefreshApps">Refresh installed apps</system:String>
+    <system:String x:Key="Lang.AppRules.NoAppsFound">No installed desktop apps found.</system:String>
 
     <system:String x:Key="Lang.Window.Update.WindowTitle">Update</system:String>
     <system:String x:Key="Lang.Window.Update.Title">UPDATE</system:String>

@@ -60,8 +60,10 @@ namespace InvisibleGorillaXRay.Android.Views
         private List<Config> generalConfigs = new();
         private List<Config> subscriptionConfigs = new();
         private List<Subscription> subscriptionGroups = new();
+        private List<AndroidInstalledAppInfo> discoveredAndroidApps = new();
         private Subscription? selectedSubscription;
         private readonly Dictionary<string, int> configAvailability = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, CheckBox> appRuleToggles = new(StringComparer.OrdinalIgnoreCase);
         private bool isCheckWorkerBusy;
         private bool isRunWorkerBusy;
         private bool isStopWorkerBusy;
@@ -204,6 +206,9 @@ namespace InvisibleGorillaXRay.Android.Views
         private TextBlock NetworkTitleText => GetRequiredControl<TextBlock>("NetworkTitleTextBlock");
         private TextBlock ProxyPortTitleText => GetRequiredControl<TextBlock>("ProxyPortTitleTextBlock");
         private TextBlock DnsTitleText => GetRequiredControl<TextBlock>("DnsTitleTextBlock");
+        private TextBlock AppRulesTitleText => GetRequiredControl<TextBlock>("AppRulesTitleTextBlock");
+        private TextBlock AppRulesDescriptionText => GetRequiredControl<TextBlock>("AppRulesDescriptionTextBlock");
+        private TextBlock NoDiscoveredAppsText => GetRequiredControl<TextBlock>("NoDiscoveredAppsTextBlock");
         private TextBlock TunTitleText => GetRequiredControl<TextBlock>("TunTitleTextBlock");
         private TextBlock TunDescriptionText => GetRequiredControl<TextBlock>("TunDescriptionTextBlock");
         private TextBlock LogsAndDiagnosticsTitleText => GetRequiredControl<TextBlock>("LogsAndDiagnosticsTitleTextBlock");
@@ -212,6 +217,9 @@ namespace InvisibleGorillaXRay.Android.Views
         private TextBox DnsInput => GetRequiredControl<TextBox>("DnsTextBox");
         private CheckBox UdpEnabledToggle => GetRequiredControl<CheckBox>("UdpEnabledCheckBox");
         private CheckBox AnalyticsToggle => GetRequiredControl<CheckBox>("AnalyticsCheckBox");
+        private CheckBox AppRulesEnabledToggle => GetRequiredControl<CheckBox>("AppRulesEnabledCheckBox");
+        private StackPanel AppRulesItemsHost => GetRequiredControl<StackPanel>("AppRulesItemsPanel");
+        private Button RefreshInstalledAppsActionButton => GetRequiredControl<Button>("RefreshInstalledAppsButton");
         private TextBox ConfigLinkInput => GetRequiredControl<TextBox>("ConfigLinkTextBox");
         private TextBox SubscriptionRemarkInput => GetRequiredControl<TextBox>("SubscriptionRemarkTextBox");
         private TextBox SubscriptionLinkInput => GetRequiredControl<TextBox>("SubscriptionLinkTextBox");
@@ -316,6 +324,11 @@ namespace InvisibleGorillaXRay.Android.Views
             NetworkTitleText.Text = Localize("Lang.Android.Settings.Network");
             ProxyPortTitleText.Text = Localize("Lang.Window.Settings.ProxyPort");
             DnsTitleText.Text = Localize("Lang.Window.Settings.Dns");
+            AppRulesTitleText.Text = Localize("Lang.AppRules.Title");
+            AppRulesDescriptionText.Text = Localize("Lang.AppRules.Description.Android");
+            AppRulesEnabledToggle.Content = Localize("Lang.AppRules.EnableBypass");
+            RefreshInstalledAppsActionButton.Content = Localize("Lang.AppRules.RefreshApps");
+            NoDiscoveredAppsText.Text = Localize("Lang.AppRules.NoAppsFound");
             TunTitleText.Text = Localize("Lang.Window.Settings.TUN");
             TunDescriptionText.Text = Localize("Lang.Android.Settings.TunDescription");
             LogsAndDiagnosticsTitleText.Text = Localize("Lang.Android.Settings.LogsAndDiagnostics");
@@ -418,6 +431,7 @@ namespace InvisibleGorillaXRay.Android.Views
             if (!isSettingsSectionInitialized)
             {
                 ProtocolSelector.ItemsSource = Enum.GetNames(typeof(Protocol));
+                discoveredAndroidApps = AndroidInstalledAppDiscovery.GetLaunchableApps().ToList();
                 isSettingsSectionInitialized = true;
             }
 
@@ -435,6 +449,113 @@ namespace InvisibleGorillaXRay.Android.Views
             DnsInput.Text = settings.GetDns();
             UdpEnabledToggle.IsChecked = settings.GetUdpEnabled();
             AnalyticsToggle.IsChecked = settings.GetSendingAnalyticsEnabled();
+            AppRulesEnabledToggle.IsChecked = settings.GetAppRulesMode() == AppRulesMode.BYPASS_SELECTED_APPS;
+            RenderAndroidAppRuleCards(GetSelectedBypassPackageSet(settings));
+        }
+
+        private void ReloadDiscoveredAndroidApps()
+        {
+            HashSet<string> selectedPackages = GetCurrentlySelectedBypassPackageSet();
+            discoveredAndroidApps = AndroidInstalledAppDiscovery.GetLaunchableApps().ToList();
+            RenderAndroidAppRuleCards(selectedPackages);
+        }
+
+        private void RenderAndroidAppRuleCards(ISet<string> selectedPackages)
+        {
+            AppRulesItemsHost.Children.Clear();
+            appRuleToggles.Clear();
+
+            foreach (AndroidInstalledAppInfo app in discoveredAndroidApps)
+            {
+                CheckBox toggle = new()
+                {
+                    IsChecked = selectedPackages.Contains(app.PackageName),
+                    VerticalAlignment = VerticalAlignment.Top,
+                    Margin = new Thickness(0, 2, 0, 0)
+                };
+
+                appRuleToggles[app.PackageName] = toggle;
+
+                StackPanel textPanel = new()
+                {
+                    Spacing = 2
+                };
+                textPanel.Children.Add(new TextBlock
+                {
+                    Text = app.DisplayName,
+                    Foreground = Brushes.White,
+                    FontWeight = FontWeight.SemiBold,
+                    TextWrapping = TextWrapping.Wrap
+                });
+
+                StringBuilder metaBuilder = new(app.PackageName);
+                if (app.IsSystemApp)
+                {
+                    metaBuilder.Append(" • ")
+                        .Append(Localize("Lang.AppRules.SystemBadge"));
+                }
+
+                textPanel.Children.Add(new TextBlock
+                {
+                    Text = metaBuilder.ToString(),
+                    Foreground = GetBrushResource("TextMuted", Brushes.Gray),
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap
+                });
+
+                Grid root = new();
+                root.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+                root.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+                root.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+
+                Grid.SetColumn(toggle, 0);
+                root.Children.Add(toggle);
+
+                Grid.SetColumn(textPanel, 1);
+                root.Children.Add(textPanel);
+
+                Border card = new()
+                {
+                    Padding = new Thickness(12, 10),
+                    Margin = new Thickness(0, 0, 0, 6),
+                    Background = GetBrushResource("SurfaceDark", Brushes.Transparent),
+                    BorderBrush = GetBrushResource("SurfaceBright", IdleMarkerBrush),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(10),
+                    Child = root
+                };
+
+                card.PointerPressed += (_, e) =>
+                {
+                    if (e.Source is Button || e.Source is CheckBox)
+                        return;
+
+                    toggle.IsChecked = !(toggle.IsChecked ?? false);
+                };
+
+                AppRulesItemsHost.Children.Add(card);
+            }
+
+            NoDiscoveredAppsText.IsVisible = discoveredAndroidApps.Count == 0;
+        }
+
+        private static HashSet<string> GetSelectedBypassPackageSet(UserSettings settings)
+        {
+            return settings.GetEnabledAppRules()
+                .Select(rule => rule.AppId)
+                .Where(appId => !string.IsNullOrWhiteSpace(appId))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
+        private HashSet<string> GetCurrentlySelectedBypassPackageSet()
+        {
+            if (appRuleToggles.Count == 0)
+                return GetSelectedBypassPackageSet(settingsHandler.UserSettings);
+
+            return appRuleToggles
+                .Where(pair => pair.Value.IsChecked == true)
+                .Select(pair => pair.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
 
         private void RefreshConfigs()
@@ -756,6 +877,14 @@ namespace InvisibleGorillaXRay.Android.Views
                 return false;
 
             UserSettings current = settingsHandler.UserSettings;
+            List<AppRule> appRules = BuildSelectedAndroidAppRules();
+            AppRulesMode appRulesMode = AppRulesEnabledToggle.IsChecked == true
+                ? AppRulesMode.BYPASS_SELECTED_APPS
+                : AppRulesMode.DISABLED;
+            bool appRulesChanged = current.GetAppRulesMode() != appRulesMode
+                || !AreAppRuleSetsEquivalent(current.GetAppRules(), appRules);
+            bool shouldRestartVpn = appRulesChanged && IsConnectionActive();
+
             settingsHandler.UpdateUserSettings(new UserSettings
             {
                 Language = current.GetLanguage(),
@@ -773,16 +902,101 @@ namespace InvisibleGorillaXRay.Android.Views
                 TestPort = current.GetTestPort(),
                 TunIp = current.GetTunIp(),
                 Dns = string.IsNullOrWhiteSpace(DnsInput.Text) ? current.GetDns() : DnsInput.Text.Trim(),
-                LogPath = current.GetLogPath()
+                LogPath = current.GetLogPath(),
+                AppRulesMode = appRulesMode,
+                AppRules = appRules
             });
 
             UpdateCurrentConfigSummary();
             UpdateRuntimeSummary();
 
             if (showSuccessMessage)
-                SetStatus(Localize("Lang.Android.Status.SettingsSaved"));
+                SetStatus(shouldRestartVpn
+                    ? Localize("Lang.AppRules.RestartingVpn")
+                    : Localize("Lang.Android.Status.SettingsSaved"));
+
+            if (shouldRestartVpn)
+                _ = RestartConnectionAfterSettingsChangeAsync();
 
             return true;
+        }
+
+        private List<AppRule> BuildSelectedAndroidAppRules()
+        {
+            if (appRuleToggles.Count == 0)
+                return settingsHandler.UserSettings.GetAppRules();
+
+            HashSet<string> selectedPackages = GetCurrentlySelectedBypassPackageSet();
+            return discoveredAndroidApps
+                .Where(app => selectedPackages.Contains(app.PackageName))
+                .Select(app => new AppRule(
+                    appId: app.PackageName,
+                    displayName: app.DisplayName,
+                    iconRef: app.IconRef,
+                    enabled: true))
+                .ToList();
+        }
+
+        private static bool AreAppRuleSetsEquivalent(IReadOnlyCollection<AppRule> currentRules, IReadOnlyCollection<AppRule> nextRules)
+        {
+            HashSet<string> currentIds = currentRules
+                .Where(rule => rule.Enabled && !string.IsNullOrWhiteSpace(rule.AppId))
+                .Select(rule => rule.AppId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            HashSet<string> nextIds = nextRules
+                .Where(rule => rule.Enabled && !string.IsNullOrWhiteSpace(rule.AppId))
+                .Select(rule => rule.AppId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            return currentIds.SetEquals(nextIds);
+        }
+
+        private bool IsConnectionActive()
+        {
+            return StopActionButton.IsVisible
+                || isRunWorkerBusy
+                || AndroidVpnServiceController.IsRunning
+                || AndroidVpnServiceController.IsStopping;
+        }
+
+        private async Task RestartConnectionAfterSettingsChangeAsync()
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!isStopWorkerBusy && StopActionButton.IsVisible)
+                    OnStopClick(null, new RoutedEventArgs());
+            });
+
+            DateTime deadline = DateTime.UtcNow.AddSeconds(20);
+            while (DateTime.UtcNow < deadline)
+            {
+                if (!StopActionButton.IsVisible
+                    && !isRunWorkerBusy
+                    && !AndroidVpnServiceController.IsRunning
+                    && !AndroidVpnServiceController.IsStopping)
+                {
+                    break;
+                }
+
+                await Task.Delay(250);
+            }
+
+            if (StopActionButton.IsVisible
+                || isRunWorkerBusy
+                || AndroidVpnServiceController.IsRunning
+                || AndroidVpnServiceController.IsStopping)
+            {
+                Dispatcher.UIThread.Post(() => SetStatus(Localize("Lang.AppRules.RestartRequired")));
+                return;
+            }
+
+            await Task.Delay(300);
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!isRunWorkerBusy && !AndroidVpnServiceController.IsRunning)
+                    OnRunClick(null, new RoutedEventArgs());
+            });
         }
 
         private bool TryParseProxyPort(string? text, out int value)
@@ -824,6 +1038,11 @@ namespace InvisibleGorillaXRay.Android.Views
             builder.AppendLine($"{Localize("Lang.Window.Settings.TunIp")}: {settings.GetTunIp()}");
             builder.AppendLine($"{Localize("Lang.Android.Runtime.Dns")}: {settings.GetDns()}");
             builder.AppendLine($"{Localize("Lang.Android.Runtime.Udp")}: {(settings.GetUdpEnabled() ? Localize("Lang.Android.Runtime.Enabled") : Localize("Lang.Android.Runtime.Disabled"))}");
+            builder.AppendLine(
+                $"{Localize("Lang.AppRules.Title")}: " +
+                $"{(settings.GetAppRulesMode() == AppRulesMode.BYPASS_SELECTED_APPS
+                    ? string.Format(Localize("Lang.AppRules.RuntimeEnabled"), settings.GetEnabledAppRules().Count)
+                    : Localize("Lang.AppRules.RuntimeDisabled"))}");
             builder.Append(Localize("Lang.Android.Runtime.SystemProxyNotice"));
 
             if (!string.IsNullOrWhiteSpace(broadcastMessage))
@@ -1191,6 +1410,12 @@ namespace InvisibleGorillaXRay.Android.Views
         private void OnSaveSettingsClick(object? sender, RoutedEventArgs e)
         {
             TrySaveSettings(showSuccessMessage: true);
+        }
+
+        private void OnRefreshInstalledAppsClick(object? sender, RoutedEventArgs e)
+        {
+            ReloadDiscoveredAndroidApps();
+            SetStatus(Localize("Lang.AppRules.AppsRefreshed"));
         }
 
         private void OnHomeSectionClick(object? sender, RoutedEventArgs e)

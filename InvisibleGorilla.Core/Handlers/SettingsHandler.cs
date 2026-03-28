@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using Newtonsoft.Json;
 
 namespace InvisibleGorillaXRay.Handlers
@@ -40,6 +41,8 @@ namespace InvisibleGorillaXRay.Handlers
             this.userSettings.TunIp = userSettings.TunIp;
             this.userSettings.Dns = userSettings.Dns;
             this.userSettings.LogPath = NormalizePath(userSettings.LogPath, Values.Directory.LOGS);
+            this.userSettings.AppRulesMode = userSettings.AppRulesMode;
+            this.userSettings.AppRules = CloneAppRules(userSettings.AppRules);
 
             UpdateStartupSetting();
             SaveUserSettings();
@@ -90,6 +93,8 @@ namespace InvisibleGorillaXRay.Handlers
             {
                 settings.CurrentConfigPath = NormalizePath(settings.CurrentConfigPath, Values.Directory.CONFIGS);
                 settings.LogPath = NormalizePath(settings.LogPath, Values.Directory.LOGS);
+                settings.AppRules ??= new System.Collections.Generic.List<AppRule>();
+                settings.AppRules = CloneAppRules(settings.AppRules);
                 return settings;
             }
         }
@@ -110,6 +115,17 @@ namespace InvisibleGorillaXRay.Handlers
                 return System.IO.Path.GetFullPath(System.IO.Path.Combine(Values.Directory.ROOT, path));
 
             return path;
+        }
+
+        private static System.Collections.Generic.List<AppRule> CloneAppRules(System.Collections.Generic.IEnumerable<AppRule>? appRules)
+        {
+            if (appRules == null)
+                return new System.Collections.Generic.List<AppRule>();
+
+            return appRules
+                .Where(rule => rule != null && !string.IsNullOrWhiteSpace(rule.AppId))
+                .Select(rule => rule.Clone())
+                .ToList();
         }
     }
 }

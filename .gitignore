@@ -18,3 +18,7 @@
 /publish-android
 /dist
 /XRay-Wrapper/gorilla-xray
+.cursorrules
+memory-bank/activeContext.md
+memory-bank/progress.md
+memory-bank/systemPatterns.md
