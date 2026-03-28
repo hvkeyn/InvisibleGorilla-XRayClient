@@ -146,9 +146,27 @@ func runAndroidTunLoop(bridge *androidTunBridge) {
 
 	buffer := make([]byte, androidTunReadBufferSize)
 	for {
-		packetLength, err := bridge.tunFile.Read(buffer)
+		tunFile := bridge.tunFile
+		if tunFile == nil {
+			return
+		}
+
+		packetLength, err := tunFile.Read(buffer)
 		if packetLength > 0 {
-			if _, writeErr := bridge.lwip.Write(buffer[:packetLength]); writeErr != nil && !isIgnorableTunInputError(writeErr) {
+			if isBridgeStopping(bridge) {
+				return
+			}
+
+			lwip := bridge.lwip
+			if lwip == nil {
+				return
+			}
+
+			if _, writeErr := lwip.Write(buffer[:packetLength]); writeErr != nil && !isIgnorableTunInputError(writeErr) {
+				if isBridgeStopping(bridge) {
+					return
+				}
+
 				setAndroidTunLastError(fmt.Sprintf("tun2socks packet handling failed: %v", writeErr))
 				return
 			}
@@ -195,9 +213,7 @@ func stopAndroidTunLocked() {
 	}
 
 	tunFile := bridge.tunFile
-	bridge.tunFile = nil
 	lwip := bridge.lwip
-	bridge.lwip = nil
 
 	// Release the global bridge lock before closing the TUN file and LWIP stack.
 	// Close() may synchronously trigger callbacks that also need androidTunMutex.
@@ -207,6 +223,12 @@ func stopAndroidTunLocked() {
 	// Close the TUN FD first so the packet reader unblocks before lwip teardown.
 	if tunFile != nil {
 		_ = tunFile.Close()
+	}
+
+	// Give the read loop a chance to exit cleanly before tearing down lwip.
+	select {
+	case <-bridge.done:
+	case <-time.After(2 * time.Second):
 	}
 
 	if lwip != nil {
@@ -219,14 +241,15 @@ func isExpectedTunClose(err error) bool {
 		return true
 	}
 
-	if errors.Is(err, os.ErrClosed) || errors.Is(err, io.EOF) {
+	if errors.Is(err, os.ErrClosed) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrClosedPipe) {
 		return true
 	}
 
 	message := err.Error()
 	return strings.Contains(message, "file already closed") ||
 		strings.Contains(message, "bad file descriptor") ||
-		strings.Contains(message, "use of closed file")
+		strings.Contains(message, "use of closed file") ||
+		strings.Contains(message, "closed pipe")
 }
 
 func isIgnorableTunInputError(err error) bool {
@@ -234,11 +257,20 @@ func isIgnorableTunInputError(err error) bool {
 		return false
 	}
 
-	return strings.Contains(err.Error(), "packet not handled")
+	return isExpectedTunClose(err) || strings.Contains(err.Error(), "packet not handled")
 }
 
 func setAndroidTunLastError(message string) {
 	androidTunMutex.Lock()
 	defer androidTunMutex.Unlock()
 	androidTunLastError = message
+}
+
+func isBridgeStopping(bridge *androidTunBridge) bool {
+	select {
+	case <-bridge.stop:
+		return true
+	default:
+		return false
+	}
 }
