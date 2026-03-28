@@ -9,7 +9,7 @@ namespace InvisibleGorillaXRay.Core
     using Models;
     using Values;
 
-    internal class XRayCoreWrapper
+    public class XRayCoreWrapper
     {
         private const string LIB_NAME = "XRayCore";
 
@@ -22,6 +22,11 @@ namespace InvisibleGorillaXRay.Core
         {
             if (libraryName != LIB_NAME)
                 return IntPtr.Zero;
+
+            // Android 7+ expects native code to come from the app's packaged lib/<abi> directory.
+            // Loading from writable app-private storage is unreliable and can be rejected by the linker.
+            if (OperatingSystem.IsAndroid())
+                return NativeLibrary.Load(libraryName, assembly, searchPath);
 
             string libDir = Values.Directory.LIBRARIES;
 
@@ -137,6 +142,40 @@ namespace InvisibleGorillaXRay.Core
 
             [DllImport(LIB_NAME, EntryPoint = "GetXrayCoreVersion")]
             static extern IntPtr GetXRayCoreVersionNative();
+        }
+
+        public static string? StartAndroidTunnel(int fileDescriptor, int proxyPort, bool isUdpEnabled)
+        {
+            IntPtr errorPtr = StartAndroidTunnelNative(fileDescriptor, proxyPort, isUdpEnabled);
+            return errorPtr == IntPtr.Zero ? null : Marshal.PtrToStringAnsi(errorPtr);
+
+            [DllImport(LIB_NAME, EntryPoint = "StartAndroidTun2Socks")]
+            static extern IntPtr StartAndroidTunnelNative(int fileDescriptor, int proxyPort, bool isUdpEnabled);
+        }
+
+        public static void StopAndroidTunnel()
+        {
+            StopAndroidTunnelNative();
+
+            [DllImport(LIB_NAME, EntryPoint = "StopAndroidTun2Socks")]
+            static extern void StopAndroidTunnelNative();
+        }
+
+        public static bool IsAndroidTunnelRunning()
+        {
+            return IsAndroidTunnelRunningNative();
+
+            [DllImport(LIB_NAME, EntryPoint = "IsAndroidTun2SocksRunning")]
+            static extern bool IsAndroidTunnelRunningNative();
+        }
+
+        public static string? GetAndroidTunnelLastError()
+        {
+            IntPtr errorPtr = GetAndroidTunnelLastErrorNative();
+            return errorPtr == IntPtr.Zero ? null : Marshal.PtrToStringAnsi(errorPtr);
+
+            [DllImport(LIB_NAME, EntryPoint = "GetAndroidTun2SocksLastError")]
+            static extern IntPtr GetAndroidTunnelLastErrorNative();
         }
 
         private static IntPtr StringToUtf8Ptr(string str)

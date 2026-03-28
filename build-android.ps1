@@ -834,7 +834,7 @@ function Invoke-NativeBridgeBuild {
                 Label = "arm64-v8a"
                 GoArch = "arm64"
                 TargetTriple = "aarch64-linux-android"
-                OutputDir = $RuntimeDir
+                OutputDir = (Join-Path $RuntimeDir "arm64-v8a")
             },
             @{
                 Label = "x86_64"
@@ -865,9 +865,7 @@ function Invoke-NativeBridgeBuild {
             }
 
             $nativeLibPath = Join-Path $target.OutputDir "libXRayCore.so"
-            $nativeAssetPath = Join-Path $target.OutputDir "libXRayCore.bin"
             Remove-Item $nativeLibPath -Force -ErrorAction SilentlyContinue
-            Remove-Item $nativeAssetPath -Force -ErrorAction SilentlyContinue
 
             & go build --buildmode=c-shared `
                 -o $nativeLibPath `
@@ -879,9 +877,12 @@ function Invoke-NativeBridgeBuild {
             }
 
             Remove-Item (Join-Path $target.OutputDir "libXRayCore.h") -Force -ErrorAction SilentlyContinue
-            Move-Item -Path $nativeLibPath -Destination $nativeAssetPath -Force
-            Write-Success "libXRayCore runtime asset created for $($target.Label)"
+            Write-Success "libXRayCore native library created for $($target.Label)"
         }
+
+        Remove-Item (Join-Path $RuntimeDir "libXRayCore.bin") -Force -ErrorAction SilentlyContinue
+        Remove-Item (Join-Path $RuntimeDir "libXRayCore.so") -Force -ErrorAction SilentlyContinue
+        Remove-Item (Join-Path $RuntimeDir "libXRayCore.so.asset-id") -Force -ErrorAction SilentlyContinue
     }
     finally {
         $env:GOOS = $oldGoos

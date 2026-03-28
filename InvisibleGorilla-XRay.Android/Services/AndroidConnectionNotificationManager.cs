@@ -48,6 +48,7 @@ namespace InvisibleGorillaXRay.Android.Services
     {
         private const string ChannelId = "invisiblegorilla.connection.status";
         private const int NotificationId = 42042;
+        internal const int ForegroundNotificationId = NotificationId;
         private static readonly object SyncRoot = new();
 
         private static Timer? updateTimer;
@@ -116,6 +117,17 @@ namespace InvisibleGorillaXRay.Android.Services
                 updateTimer = null;
                 currentSession = null;
                 CancelNotificationLocked();
+            }
+        }
+
+        internal static Notification BuildForegroundNotification(Context context)
+        {
+            lock (SyncRoot)
+            {
+                EnsureChannelLocked();
+                return currentSession == null
+                    ? BuildFallbackNotification(context)
+                    : BuildNotificationLocked(context);
             }
         }
 
@@ -258,6 +270,25 @@ namespace InvisibleGorillaXRay.Android.Services
                 .SetContentTitle(session.Text.AppName)
                 .SetContentText(contentText)
                 .SetStyle(new Notification.BigTextStyle().BigText(expandedText.ToString()))
+                .SetSmallIcon(Resource.Drawable.ic_notification_connection)
+                .SetContentIntent(CreateLaunchPendingIntent(context))
+                .SetOnlyAlertOnce(true)
+                .SetOngoing(true)
+                .SetShowWhen(false)
+                .SetVisibility(NotificationVisibility.Public);
+
+            return builder.Build();
+        }
+
+        private static Notification BuildFallbackNotification(Context context)
+        {
+            Notification.Builder builder = Build.VERSION.SdkInt >= BuildVersionCodes.O
+                ? new Notification.Builder(context, ChannelId)
+                : new Notification.Builder(context);
+
+            builder
+                .SetContentTitle("Invisible Gorilla XRay")
+                .SetContentText("Preparing Android VPN tunnel...")
                 .SetSmallIcon(Resource.Drawable.ic_notification_connection)
                 .SetContentIntent(CreateLaunchPendingIntent(context))
                 .SetOnlyAlertOnce(true)

@@ -50,10 +50,9 @@ namespace InvisibleGorillaXRay.Android.Managers
             settingsHandler.UpdateUserSettings(new InvisibleGorillaXRay.Models.UserSettings
             {
                 Language = settingsHandler.UserSettings.GetLanguage(),
-                // Android still exposes VPN/TUN as coming soon in the UI,
-                // but the persisted runtime mode must stay on the working proxy path.
-                Mode = InvisibleGorillaXRay.Models.Mode.PROXY,
-                Protocol = settingsHandler.UserSettings.GetProtocol(),
+                Mode = InvisibleGorillaXRay.Models.Mode.TUN,
+                // Android VpnService routing uses the local SOCKS listener as the bridge target.
+                Protocol = InvisibleGorillaXRay.Models.Protocol.SOCKS,
                 LogLevel = settingsHandler.UserSettings.GetLogLevel(),
                 IsSystemProxyUse = false,
                 IsUdpEnable = settingsHandler.UserSettings.GetUdpEnabled(),

@@ -1,0 +1,244 @@
+//go:build android
+
+package xray
+
+/*
+#include <stdbool.h>
+#include <stdlib.h>
+*/
+import "C"
+
+import (
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
+	tcore "github.com/eycorsican/go-tun2socks/core"
+	tsocks "github.com/eycorsican/go-tun2socks/proxy/socks"
+)
+
+const androidTunReadBufferSize = 64 * 1024
+
+var androidTunMutex sync.Mutex
+var androidTunState *androidTunBridge
+var androidTunLastError string
+
+type androidTunBridge struct {
+	tunFile *os.File
+	lwip    tcore.LWIPStack
+	done    chan struct{}
+	stop    chan struct{}
+}
+
+type disabledUDPHandler struct{}
+
+func (disabledUDPHandler) Connect(conn tcore.UDPConn, target *net.UDPAddr) error {
+	return errors.New("udp is disabled")
+}
+
+func (disabledUDPHandler) ReceiveTo(conn tcore.UDPConn, data []byte, addr *net.UDPAddr) error {
+	conn.Close()
+	return errors.New("udp is disabled")
+}
+
+//export StartAndroidTun2Socks
+func StartAndroidTun2Socks(fd C.int, proxyPort C.int, isUdpEnabled C.bool) (errPtr *C.char) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			message := fmt.Sprintf("android tun2socks panic: %v", recovered)
+			androidTunMutex.Lock()
+			stopAndroidTunLocked()
+			androidTunLastError = message
+			androidTunMutex.Unlock()
+			errPtr = C.CString(message)
+		}
+	}()
+
+	androidTunMutex.Lock()
+	defer androidTunMutex.Unlock()
+
+	androidTunLastError = ""
+	stopAndroidTunLocked()
+
+	if fd <= 0 {
+		message := "invalid Android TUN file descriptor"
+		androidTunLastError = message
+		return C.CString(message)
+	}
+
+	if proxyPort <= 0 {
+		message := "invalid Android SOCKS proxy port"
+		androidTunLastError = message
+		return C.CString(message)
+	}
+
+	tunFile := os.NewFile(uintptr(fd), fmt.Sprintf("android-tun-%d", int(fd)))
+	if tunFile == nil {
+		message := "failed to open Android TUN file descriptor"
+		androidTunLastError = message
+		return C.CString(message)
+	}
+
+	lwip := tcore.NewLWIPStack()
+	bridge := &androidTunBridge{
+		tunFile: tunFile,
+		lwip:    lwip,
+		done:    make(chan struct{}),
+		stop:    make(chan struct{}),
+	}
+
+	tcore.RegisterTCPConnHandler(tsocks.NewTCPHandler("127.0.0.1", uint16(proxyPort)))
+	if bool(isUdpEnabled) {
+		tcore.RegisterUDPConnHandler(tsocks.NewUDPHandler("127.0.0.1", uint16(proxyPort), 30*time.Second))
+	} else {
+		tcore.RegisterUDPConnHandler(disabledUDPHandler{})
+	}
+
+	tcore.RegisterOutputFn(func(data []byte) (int, error) {
+		return writeAndroidTunPacket(bridge, data)
+	})
+
+	androidTunState = bridge
+	go runAndroidTunLoop(bridge)
+	return nil
+}
+
+//export StopAndroidTun2Socks
+func StopAndroidTun2Socks() {
+	androidTunMutex.Lock()
+	defer androidTunMutex.Unlock()
+	stopAndroidTunLocked()
+}
+
+//export IsAndroidTun2SocksRunning
+func IsAndroidTun2SocksRunning() C.bool {
+	androidTunMutex.Lock()
+	defer androidTunMutex.Unlock()
+	return C.bool(androidTunState != nil)
+}
+
+//export GetAndroidTun2SocksLastError
+func GetAndroidTun2SocksLastError() *C.char {
+	androidTunMutex.Lock()
+	defer androidTunMutex.Unlock()
+
+	if androidTunLastError == "" {
+		return nil
+	}
+
+	return C.CString(androidTunLastError)
+}
+
+func runAndroidTunLoop(bridge *androidTunBridge) {
+	defer close(bridge.done)
+	defer func() {
+		androidTunMutex.Lock()
+		if androidTunState == bridge {
+			androidTunState = nil
+		}
+		androidTunMutex.Unlock()
+	}()
+
+	buffer := make([]byte, androidTunReadBufferSize)
+	for {
+		packetLength, err := bridge.tunFile.Read(buffer)
+		if packetLength > 0 {
+			if _, writeErr := bridge.lwip.Write(buffer[:packetLength]); writeErr != nil && !isIgnorableTunInputError(writeErr) {
+				setAndroidTunLastError(fmt.Sprintf("tun2socks packet handling failed: %v", writeErr))
+				return
+			}
+		}
+
+		if err != nil {
+			if !isExpectedTunClose(err) {
+				setAndroidTunLastError(fmt.Sprintf("tun2socks read failed: %v", err))
+			}
+			return
+		}
+
+		select {
+		case <-bridge.stop:
+			return
+		default:
+		}
+	}
+}
+
+func writeAndroidTunPacket(bridge *androidTunBridge, data []byte) (int, error) {
+	androidTunMutex.Lock()
+	defer androidTunMutex.Unlock()
+
+	if androidTunState != bridge || bridge.tunFile == nil {
+		return 0, io.ErrClosedPipe
+	}
+
+	return bridge.tunFile.Write(data)
+}
+
+func stopAndroidTunLocked() {
+	bridge := androidTunState
+	androidTunState = nil
+
+	if bridge == nil {
+		return
+	}
+
+	select {
+	case <-bridge.stop:
+	default:
+		close(bridge.stop)
+	}
+
+	tunFile := bridge.tunFile
+	bridge.tunFile = nil
+	lwip := bridge.lwip
+	bridge.lwip = nil
+
+	// Release the global bridge lock before closing the TUN file and LWIP stack.
+	// Close() may synchronously trigger callbacks that also need androidTunMutex.
+	androidTunMutex.Unlock()
+	defer androidTunMutex.Lock()
+
+	// Close the TUN FD first so the packet reader unblocks before lwip teardown.
+	if tunFile != nil {
+		_ = tunFile.Close()
+	}
+
+	if lwip != nil {
+		_ = lwip.Close()
+	}
+}
+
+func isExpectedTunClose(err error) bool {
+	if err == nil {
+		return true
+	}
+
+	if errors.Is(err, os.ErrClosed) || errors.Is(err, io.EOF) {
+		return true
+	}
+
+	message := err.Error()
+	return strings.Contains(message, "file already closed") ||
+		strings.Contains(message, "bad file descriptor") ||
+		strings.Contains(message, "use of closed file")
+}
+
+func isIgnorableTunInputError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	return strings.Contains(err.Error(), "packet not handled")
+}
+
+func setAndroidTunLastError(message string) {
+	androidTunMutex.Lock()
+	defer androidTunMutex.Unlock()
+	androidTunLastError = message
+}

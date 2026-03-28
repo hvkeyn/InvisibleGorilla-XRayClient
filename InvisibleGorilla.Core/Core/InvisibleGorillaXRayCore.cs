@@ -99,11 +99,11 @@ namespace InvisibleGorillaXRay.Core
         {
             Mode mode = getMode.Invoke();
 
-            if (mode == Mode.PROXY)
+            if (mode == Mode.PROXY || mode == Mode.TUN)
             {
-                // For PROXY mode, defer proxy activation until xray-core is listening.
-                // This prevents the browser from hitting a dead port before xray starts.
-                // The actual proxy enable/disable is handled in Run().
+                // For Android and other platforms, defer the system mode activation until
+                // xray-core is already listening on the local port. This avoids race
+                // conditions where the browser or tunnel bridge hits a dead listener.
                 return new Status(
                     code: Code.SUCCESS,
                     subCode: SubCode.SUCCESS,
@@ -188,11 +188,36 @@ namespace InvisibleGorillaXRay.Core
                 return;
             }
 
+            if (!portActive)
+            {
+                DiagnosticLog.Write("Run", "Local proxy listener did not become active in time, stopping server.");
+                XRayCoreWrapper.StopServer();
+                serverThread.Join(2000);
+                throw new InvalidOperationException(mode == Mode.TUN
+                    ? LocalizationService.GetTerm(Localization.CANT_TUNNEL_SYSTEM)
+                    : LocalizationService.GetTerm(Localization.CANT_PROXY_SYSTEM));
+            }
+
             if (mode == Mode.PROXY)
             {
                 DiagnosticLog.Write("Run", "Enabling proxy...");
                 Status proxyStatus = EnableProxy();
                 DiagnosticLog.Write("Run", $"EnableProxy result: code={proxyStatus.Code}, subCode={proxyStatus.SubCode}");
+            }
+            else
+            {
+                DiagnosticLog.Write("Run", "Enabling tunnel...");
+                Status tunnelStatus = EnableTunnel();
+                DiagnosticLog.Write("Run", $"EnableTunnel result: code={tunnelStatus.Code}, subCode={tunnelStatus.SubCode}");
+
+                if (tunnelStatus.Code == Code.ERROR)
+                {
+                    XRayCoreWrapper.StopServer();
+                    serverThread.Join(2000);
+                    throw new InvalidOperationException(
+                        tunnelStatus.Content?.ToString()
+                        ?? LocalizationService.GetTerm(Localization.CANT_TUNNEL_SYSTEM));
+                }
             }
 
             DiagnosticLog.Write("Run", "Waiting for server thread to complete (Join)...");
@@ -204,6 +229,12 @@ namespace InvisibleGorillaXRay.Core
                 DiagnosticLog.Write("Run", "Disabling proxy...");
                 DisableProxy();
                 DiagnosticLog.Write("Run", "Proxy disabled.");
+            }
+            else
+            {
+                DiagnosticLog.Write("Run", "Disabling tunnel...");
+                DisableTunnel();
+                DiagnosticLog.Write("Run", "Tunnel disabled.");
             }
 
             void SendServerStartEvent()

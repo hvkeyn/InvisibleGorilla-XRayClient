@@ -1,14 +1,17 @@
+using System;
+
 namespace InvisibleGorillaXRay.Android.Handlers.Tunnels
 {
     using InvisibleGorillaXRay.Core;
+    using InvisibleGorillaXRay.Android.Services;
     using InvisibleGorillaXRay.Handlers.Tunnels;
     using InvisibleGorillaXRay.Models;
+    using InvisibleGorillaXRay.Services;
+    using InvisibleGorillaXRay.Values;
 
     public sealed class AndroidTunnel : ITunnel
     {
-        private const string UnsupportedMessage =
-            "Android TUN mode requires a VpnService-backed mobile tunnel bridge. " +
-            "The APK groundwork is now present, but the native mobile tunnel runtime still needs to be bundled.";
+        private LocalizationService LocalizationService => ServiceLocator.Get<LocalizationService>();
 
         public Status Enable(string ip, int port, string address, string server, string dns)
         {
@@ -16,21 +19,53 @@ namespace InvisibleGorillaXRay.Android.Handlers.Tunnels
                 "AndroidTunnel",
                 $"TUN mode requested for proxy={ip}:{port}, address={address}, server={server}, dns={dns}");
 
+            Status startStatus = AndroidVpnServiceController.Start(new AndroidVpnStartOptions
+            {
+                ProxyPort = port,
+                UdpEnabled = true,
+                TunAddress = address,
+                Dns = dns,
+                SessionName = "Invisible Gorilla XRay"
+            });
+
+            if (startStatus.Code == Code.ERROR)
+            {
+                string detail = startStatus.Content?.ToString()
+                    ?? AndroidVpnServiceController.LastError
+                    ?? string.Empty;
+
+                if (detail.Contains("permission", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new Status(
+                        code: Code.ERROR,
+                        subCode: SubCode.CANT_TUNNEL,
+                        content: LocalizationService.GetTerm("Lang.Android.Status.VpnPermissionDenied"));
+                }
+
+                return new Status(
+                    code: Code.ERROR,
+                    subCode: SubCode.CANT_TUNNEL,
+                    content: string.Format(
+                        LocalizationService.GetTerm("Lang.Android.Status.VpnStartFailed"),
+                        detail));
+            }
+
             return new Status(
-                code: Code.ERROR,
-                subCode: SubCode.CANT_TUNNEL,
-                content: UnsupportedMessage
-            );
+                code: Code.SUCCESS,
+                subCode: SubCode.SUCCESS,
+                content: string.Empty);
         }
 
         public void Disable()
         {
             DiagnosticLog.Write("AndroidTunnel", "Disable requested");
+            AndroidVpnServiceController.Stop();
         }
 
         public void Cancel()
         {
             DiagnosticLog.Write("AndroidTunnel", "Cancel requested");
+            AndroidVpnServiceController.Stop();
         }
     }
 }

@@ -4,7 +4,10 @@ go 1.23
 
 toolchain go1.23.5
 
-require github.com/xtls/xray-core v1.8.25-0.20250130105737-0a8470cb14eb // v25.1.30
+require (
+	github.com/eycorsican/go-tun2socks v1.16.11
+	github.com/xtls/xray-core v1.8.25-0.20250130105737-0a8470cb14eb // v25.1.30
+)
 
 require (
 	github.com/OmarTariq612/goech v0.0.0-20240405204721-8e2e1dafd3a0 // indirect

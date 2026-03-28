@@ -6,6 +6,7 @@ using Android.OS;
 using Android.Views;
 using Avalonia;
 using Avalonia.Android;
+using System.Threading.Tasks;
 
 namespace InvisibleGorillaXRay.Android
 {
@@ -52,10 +53,15 @@ namespace InvisibleGorillaXRay.Android
     public class MainActivity : AvaloniaMainActivity<App>
     {
         private const int NotificationPermissionRequestCode = 1001;
+        private const int VpnPermissionRequestCode = 1002;
+        private static readonly object ActivitySync = new();
+        private static WeakReference<MainActivity>? currentActivity;
+        private static TaskCompletionSource<bool>? vpnPermissionRequest;
 
         protected override void OnCreate(Bundle? savedInstanceState)
         {
             base.OnCreate(savedInstanceState);
+            SetCurrentActivity(this);
             RequestNotificationPermissionIfNeeded();
             DispatchIncomingIntent(Intent);
         }
@@ -63,6 +69,7 @@ namespace InvisibleGorillaXRay.Android
         protected override void OnNewIntent(Intent? intent)
         {
             base.OnNewIntent(intent);
+            SetCurrentActivity(this);
 
             if (intent == null)
                 return;
@@ -75,6 +82,85 @@ namespace InvisibleGorillaXRay.Android
         {
             return base.CustomizeAppBuilder(builder)
                 .LogToTrace();
+        }
+
+        protected override void OnResume()
+        {
+            base.OnResume();
+            SetCurrentActivity(this);
+        }
+
+        protected override void OnDestroy()
+        {
+            lock (ActivitySync)
+            {
+                if (currentActivity != null &&
+                    currentActivity.TryGetTarget(out MainActivity? target) &&
+                    ReferenceEquals(target, this))
+                {
+                    currentActivity = null;
+                }
+            }
+
+            base.OnDestroy();
+        }
+
+        protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
+        {
+            if (requestCode == VpnPermissionRequestCode)
+            {
+                TaskCompletionSource<bool>? completion;
+                lock (ActivitySync)
+                {
+                    completion = vpnPermissionRequest;
+                    vpnPermissionRequest = null;
+                }
+
+                bool granted = resultCode == Result.Ok || global::Android.Net.VpnService.Prepare(this) == null;
+                completion?.TrySetResult(granted);
+                return;
+            }
+
+            base.OnActivityResult(requestCode, resultCode, data);
+        }
+
+        internal static Task<bool> EnsureVpnPreparedAsync()
+        {
+            MainActivity? activity = GetCurrentActivity();
+            if (activity == null)
+                return Task.FromResult(false);
+
+            Intent? intent = global::Android.Net.VpnService.Prepare(activity);
+            if (intent == null)
+                return Task.FromResult(true);
+
+            lock (ActivitySync)
+            {
+                if (vpnPermissionRequest != null)
+                    return vpnPermissionRequest.Task;
+
+                vpnPermissionRequest = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+
+            activity.RunOnUiThread(() =>
+            {
+                try
+                {
+                    activity.StartActivityForResult(intent, VpnPermissionRequestCode);
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("MainActivity.StartVpnConsent", ex);
+
+                    lock (ActivitySync)
+                    {
+                        vpnPermissionRequest?.TrySetResult(false);
+                        vpnPermissionRequest = null;
+                    }
+                }
+            });
+
+            return vpnPermissionRequest.Task;
         }
 
         private static void DispatchIncomingIntent(Intent? intent)
@@ -123,6 +209,25 @@ namespace InvisibleGorillaXRay.Android
             RequestPermissions(
                 new[] { global::Android.Manifest.Permission.PostNotifications },
                 NotificationPermissionRequestCode);
+        }
+
+        private static MainActivity? GetCurrentActivity()
+        {
+            lock (ActivitySync)
+            {
+                if (currentActivity != null && currentActivity.TryGetTarget(out MainActivity? target))
+                    return target;
+
+                return null;
+            }
+        }
+
+        private static void SetCurrentActivity(MainActivity activity)
+        {
+            lock (ActivitySync)
+            {
+                currentActivity = new WeakReference<MainActivity>(activity);
+            }
         }
     }
 }

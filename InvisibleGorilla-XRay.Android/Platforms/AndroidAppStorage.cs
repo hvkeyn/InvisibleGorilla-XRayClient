@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Runtime.InteropServices;
 using Android.App;
 
 namespace InvisibleGorillaXRay.Android.Platforms
@@ -24,41 +22,7 @@ namespace InvisibleGorillaXRay.Android.Platforms
 
             CopyAssetIfPresent("Runtime/geoip.dat", Path.Combine(InvisibleGorillaXRay.Values.Directory.ROOT, "geoip.dat"));
             CopyAssetIfPresent("Runtime/geosite.dat", Path.Combine(InvisibleGorillaXRay.Values.Directory.ROOT, "geosite.dat"));
-
-            foreach (string assetPath in GetNativeRuntimeAssetCandidates())
-            {
-                if (CopyAssetIfPresent(
-                    assetPath,
-                    InvisibleGorillaXRay.Values.Path.XRAY_CORE_LIB,
-                    assetIdentity: assetPath))
-                {
-                    DiagnosticLog.Write(
-                        "AndroidAppStorage",
-                        $"Prepared native runtime asset '{assetPath}' for architecture {RuntimeInformation.ProcessArchitecture}");
-                    return;
-                }
-            }
-
-            DiagnosticLog.Write(
-                "AndroidAppStorage",
-                $"Native runtime asset was not found for architecture {RuntimeInformation.ProcessArchitecture}");
-        }
-
-        private static IEnumerable<string> GetNativeRuntimeAssetCandidates()
-        {
-            string? abiFolder = RuntimeInformation.ProcessArchitecture switch
-            {
-                Architecture.X64 => "x86_64",
-                Architecture.Arm64 => "arm64-v8a",
-                Architecture.X86 => "x86",
-                Architecture.Arm => "armeabi-v7a",
-                _ => null
-            };
-
-            if (!string.IsNullOrWhiteSpace(abiFolder))
-                yield return $"Runtime/{abiFolder}/libXRayCore.bin";
-
-            yield return "Runtime/libXRayCore.bin";
+            DeleteLegacyCopiedNativeRuntime();
         }
 
         private static bool CopyAssetIfPresent(string assetPath, string destinationPath, string? assetIdentity = null)
@@ -114,6 +78,24 @@ namespace InvisibleGorillaXRay.Android.Platforms
                 localAppData = AppContext.BaseDirectory;
 
             return Path.Combine(localAppData, "InvisibleGorilla-XRay");
+        }
+
+        private static void DeleteLegacyCopiedNativeRuntime()
+        {
+            try
+            {
+                string nativeLibPath = InvisibleGorillaXRay.Values.Path.XRAY_CORE_LIB;
+                if (File.Exists(nativeLibPath))
+                    File.Delete(nativeLibPath);
+
+                string assetIdentityPath = nativeLibPath + ".asset-id";
+                if (File.Exists(assetIdentityPath))
+                    File.Delete(assetIdentityPath);
+            }
+            catch
+            {
+                // The packaged AndroidNativeLibrary is the source of truth.
+            }
         }
     }
 }

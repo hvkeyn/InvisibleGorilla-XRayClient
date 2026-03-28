@@ -299,8 +299,8 @@ namespace InvisibleGorillaXRay.Android.Views
             SettingsDescriptionText.Text = Localize("Lang.Android.Settings.Description");
             BasicSettingsTitleText.Text = Localize("Lang.Window.Settings.Basic");
             ConnectionModeTitleText.Text = Localize("Lang.Window.Settings.Mode");
-            ProxyModeBadgeText.Text = Localize("Lang.Notify.Mode.Proxy");
-            VpnComingSoonBadgeText.Text = Localize("Lang.Android.Settings.VpnComingSoon");
+            ProxyModeBadgeText.Text = Localize("Lang.Notify.Mode.TUN");
+            VpnComingSoonBadgeText.Text = Localize("Lang.Android.Settings.VpnReady");
             ProtocolTitleText.Text = Localize("Lang.Window.Settings.Protocol");
             UdpEnabledToggle.Content = Localize("Lang.Window.Settings.UDP");
             AnalyticsToggle.Content = Localize("Lang.Window.Settings.SendAnalytics");
@@ -419,7 +419,8 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             UserSettings settings = settingsHandler.UserSettings;
 
-            ProtocolSelector.SelectedItem = settings.GetProtocol().ToString();
+            ProtocolSelector.SelectedItem = Protocol.SOCKS.ToString();
+            ProtocolSelector.IsEnabled = false;
             ProxyPortInput.Text = settings.GetProxyPort().ToString();
             DnsInput.Text = settings.GetDns();
             UdpEnabledToggle.IsChecked = settings.GetUdpEnabled();
@@ -746,8 +747,8 @@ namespace InvisibleGorillaXRay.Android.Views
             settingsHandler.UpdateUserSettings(new UserSettings
             {
                 Language = current.GetLanguage(),
-                Mode = Mode.PROXY,
-                Protocol = ParseProtocol(ProtocolSelector.SelectedItem?.ToString(), current.GetProtocol()),
+                Mode = Mode.TUN,
+                Protocol = Protocol.SOCKS,
                 LogLevel = current.GetLogLevel(),
                 IsSystemProxyUse = false,
                 IsUdpEnable = UdpEnabledToggle.IsChecked ?? current.GetUdpEnabled(),
@@ -805,8 +806,10 @@ namespace InvisibleGorillaXRay.Android.Views
             StringBuilder builder = new();
             builder.AppendLine($"{Localize("Lang.Android.Runtime.AppRoot")}: {InvisibleGorillaXRay.Values.Directory.ROOT}");
             builder.AppendLine($"{Localize("Lang.Android.Runtime.CurrentConfigPath")}: {currentConfigPath}");
+            builder.AppendLine($"{Localize("Lang.Window.Settings.Mode")}: {Localize("Lang.Notify.Mode.TUN")}");
             builder.AppendLine($"{Localize("Lang.Android.Runtime.ProxyListener")}: 127.0.0.1:{settings.GetProxyPort()}");
             builder.AppendLine($"{Localize("Lang.Android.Runtime.Protocol")}: {settings.GetProtocol()}");
+            builder.AppendLine($"{Localize("Lang.Window.Settings.TunIp")}: {settings.GetTunIp()}");
             builder.AppendLine($"{Localize("Lang.Android.Runtime.Dns")}: {settings.GetDns()}");
             builder.AppendLine($"{Localize("Lang.Android.Runtime.Udp")}: {(settings.GetUdpEnabled() ? Localize("Lang.Android.Runtime.Enabled") : Localize("Lang.Android.Runtime.Disabled"))}");
             builder.Append(Localize("Lang.Android.Runtime.SystemProxyNotice"));
@@ -1052,6 +1055,13 @@ namespace InvisibleGorillaXRay.Android.Views
             if (!TrySaveSettings(showSuccessMessage: false))
                 return;
 
+            bool vpnPrepared = await global::InvisibleGorillaXRay.Android.MainActivity.EnsureVpnPreparedAsync();
+            if (!vpnPrepared)
+            {
+                SetStatus("Lang.Android.Status.VpnPermissionDenied");
+                return;
+            }
+
             ShowSection(NavigationSection.Home);
             isRunWorkerBusy = true;
             SetRunningState(true);
@@ -1096,7 +1106,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     Dispatcher.UIThread.Post(() =>
                     {
                         SetConnectionState(ConnectionState.Running);
-                        SetStatus("Lang.Android.Status.RunningProxy");
+                        SetStatus("Lang.Android.Status.RunningTunnel");
                     });
 
                     core.Run(activeConfig);

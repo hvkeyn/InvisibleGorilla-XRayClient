@@ -14,6 +14,8 @@
     <AndroidPackageFormats>apk</AndroidPackageFormats>
     <AndroidUseSharedRuntime>false</AndroidUseSharedRuntime>
     <AndroidManifest>AndroidManifest.xml</AndroidManifest>
+    <PublishTrimmed>false</PublishTrimmed>
+    <RunAOTCompilation>false</RunAOTCompilation>
   </PropertyGroup>
 
   <ItemGroup>
@@ -42,6 +44,17 @@
     <AndroidAsset Include="Assets\Runtime\**\*.*"
                   Exclude="Assets\Runtime\**\*.so"
                   LogicalName="runtime/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AndroidNativeLibrary Include="Assets\Runtime\arm64-v8a\libXRayCore.so"
+                          Condition="Exists('Assets\Runtime\arm64-v8a\libXRayCore.so')">
+      <Abi>arm64-v8a</Abi>
+    </AndroidNativeLibrary>
+    <AndroidNativeLibrary Include="Assets\Runtime\x86_64\libXRayCore.so"
+                          Condition="Exists('Assets\Runtime\x86_64\libXRayCore.so')">
+      <Abi>x86_64</Abi>
+    </AndroidNativeLibrary>
   </ItemGroup>
 
 </Project>
