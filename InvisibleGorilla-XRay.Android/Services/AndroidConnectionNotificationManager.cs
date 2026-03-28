@@ -18,6 +18,7 @@ namespace InvisibleGorillaXRay.Android.Services
         public string StateStarting { get; init; } = string.Empty;
         public string StateRunning { get; init; } = string.Empty;
         public string StateStopping { get; init; } = string.Empty;
+        public string StateStopped { get; init; } = string.Empty;
         public string ConfigLabel { get; init; } = string.Empty;
         public string EndpointLabel { get; init; } = string.Empty;
         public string ListenerLabel { get; init; } = string.Empty;
@@ -41,7 +42,8 @@ namespace InvisibleGorillaXRay.Android.Services
     {
         Starting,
         Running,
-        Stopping
+        Stopping,
+        Stopped
     }
 
     internal static class AndroidConnectionNotificationManager
@@ -69,6 +71,7 @@ namespace InvisibleGorillaXRay.Android.Services
                 currentSession = session;
                 currentState = AndroidConnectionNotificationState.Starting;
                 startedAtUtc = DateTime.UtcNow;
+                DiagnosticLog.Write("AndroidConnectionNotification", $"ShowStarting config={session.ConfigName}");
 
                 long rxBytes = ReadUidRxBytes();
                 long txBytes = ReadUidTxBytes();
@@ -93,6 +96,7 @@ namespace InvisibleGorillaXRay.Android.Services
                     return;
 
                 currentState = AndroidConnectionNotificationState.Running;
+                DiagnosticLog.Write("AndroidConnectionNotification", $"MarkRunning config={currentSession.ConfigName}");
                 PublishNotificationLocked();
             }
         }
@@ -105,6 +109,22 @@ namespace InvisibleGorillaXRay.Android.Services
                     return;
 
                 currentState = AndroidConnectionNotificationState.Stopping;
+                DiagnosticLog.Write("AndroidConnectionNotification", $"MarkStopping config={currentSession.ConfigName}");
+                PublishNotificationLocked();
+            }
+        }
+
+        public static void MarkStopped()
+        {
+            lock (SyncRoot)
+            {
+                if (currentSession == null)
+                    return;
+
+                updateTimer?.Dispose();
+                updateTimer = null;
+                currentState = AndroidConnectionNotificationState.Stopped;
+                DiagnosticLog.Write("AndroidConnectionNotification", $"MarkStopped config={currentSession.ConfigName}");
                 PublishNotificationLocked();
             }
         }
@@ -115,6 +135,7 @@ namespace InvisibleGorillaXRay.Android.Services
             {
                 updateTimer?.Dispose();
                 updateTimer = null;
+                DiagnosticLog.Write("AndroidConnectionNotification", "Stop and clear notification state");
                 currentSession = null;
                 CancelNotificationLocked();
             }
@@ -140,11 +161,11 @@ namespace InvisibleGorillaXRay.Android.Services
             if (context?.GetSystemService(Context.NotificationService) is not NotificationManager manager)
                 return;
 
-            string channelName = currentSession?.Text.ChannelName;
+            string channelName = currentSession?.Text.ChannelName ?? string.Empty;
             if (string.IsNullOrWhiteSpace(channelName))
                 channelName = "Connection status";
 
-            string channelDescription = currentSession?.Text.ChannelDescription;
+            string channelDescription = currentSession?.Text.ChannelDescription ?? string.Empty;
             if (string.IsNullOrWhiteSpace(channelDescription))
                 channelDescription = "Shows current proxy connection status and traffic.";
 
@@ -273,7 +294,7 @@ namespace InvisibleGorillaXRay.Android.Services
                 .SetSmallIcon(Resource.Drawable.ic_notification_connection)
                 .SetContentIntent(CreateLaunchPendingIntent(context))
                 .SetOnlyAlertOnce(true)
-                .SetOngoing(true)
+                .SetOngoing(currentState != AndroidConnectionNotificationState.Stopped)
                 .SetShowWhen(false)
                 .SetVisibility(NotificationVisibility.Public);
 
@@ -338,6 +359,7 @@ namespace InvisibleGorillaXRay.Android.Services
                 AndroidConnectionNotificationState.Starting => text.StateStarting,
                 AndroidConnectionNotificationState.Running => text.StateRunning,
                 AndroidConnectionNotificationState.Stopping => text.StateStopping,
+                AndroidConnectionNotificationState.Stopped => text.StateStopped,
                 _ => text.StateRunning
             };
         }

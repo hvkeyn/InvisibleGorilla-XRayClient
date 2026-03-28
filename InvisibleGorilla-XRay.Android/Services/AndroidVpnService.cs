@@ -140,7 +140,7 @@ namespace InvisibleGorillaXRay.Android.Services
 
             lock (SyncRoot)
             {
-                StopVpnCore("Restarting Android VPN");
+                ResetVpnCore("Restarting Android VPN");
 
                 Builder builder = new Builder(this)
                     .SetSession(sessionName)
@@ -227,6 +227,21 @@ namespace InvisibleGorillaXRay.Android.Services
             }
         }
 
+        private void ResetVpnCore(string reason)
+        {
+            healthTimer?.Dispose();
+            healthTimer = null;
+
+            try
+            {
+                XRayCoreWrapper.StopAndroidTunnel();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("AndroidVpnService.ResetTunnel", ex);
+            }
+        }
+
         private void StopVpnCore(string reason)
         {
             healthTimer?.Dispose();
@@ -241,7 +256,6 @@ namespace InvisibleGorillaXRay.Android.Services
                 DiagnosticLog.WriteException("AndroidVpnService.StopTunnel", ex);
             }
 
-            AndroidConnectionNotificationManager.Stop();
             AndroidVpnServiceController.NotifyStopped(reason);
 
             try
@@ -252,6 +266,8 @@ namespace InvisibleGorillaXRay.Android.Services
             {
                 DiagnosticLog.WriteException("AndroidVpnService.StopForeground", ex);
             }
+
+            AndroidConnectionNotificationManager.MarkStopped();
         }
 
         private static string[] SplitDnsServers(string dns)

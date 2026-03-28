@@ -1085,6 +1085,51 @@
             </Grid>
         </ScrollViewer>
 
+        <Border x:Name="ConfigShareActionSheetBorder"
+                Grid.Row="1"
+                Margin="20,0,20,18"
+                Padding="16,14"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Bottom"
+                Background="{StaticResource SurfaceLight}"
+                BorderBrush="{StaticResource SurfaceBright}"
+                BorderThickness="1"
+                CornerRadius="14"
+                BoxShadow="0 4 14 0 #66000000"
+                IsVisible="False">
+            <StackPanel Spacing="10">
+                <TextBlock x:Name="ConfigShareTitleLabel"
+                           Text="Share configuration"
+                           FontSize="18"
+                           FontWeight="SemiBold" />
+                <Button x:Name="CopyConfigLinkSheetButton"
+                        Height="40"
+                        Theme="{StaticResource GrayActionButton}"
+                        Click="OnCopyConfigLinkClick">
+                    <TextBlock Text="Copy source link"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                </Button>
+                <Button x:Name="ExportConfigSheetButton"
+                        Height="40"
+                        Theme="{StaticResource GreenActionButton}"
+                        Foreground="#252526"
+                        Click="OnExportConfigClick">
+                    <TextBlock Text="Export full configuration"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                </Button>
+                <Button x:Name="CancelConfigShareSheetButton"
+                        Height="38"
+                        Theme="{StaticResource GrayActionButton}"
+                        Click="OnCancelConfigShareClick">
+                    <TextBlock Text="Cancel"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                </Button>
+            </StackPanel>
+        </Border>
+
         <Border Grid.Row="2"
                 Background="{StaticResource SurfaceLight}">
             <StackPanel Orientation="Horizontal"

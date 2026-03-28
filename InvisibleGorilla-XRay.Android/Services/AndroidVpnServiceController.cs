@@ -20,6 +20,7 @@ namespace InvisibleGorillaXRay.Android.Services
         private static readonly object SyncRoot = new();
         private static TaskCompletionSource<Status>? pendingStart;
         private static bool isRunning;
+        private static bool isStopping;
         private static string lastError = string.Empty;
 
         public static Status Start(AndroidVpnStartOptions options)
@@ -36,6 +37,7 @@ namespace InvisibleGorillaXRay.Android.Services
             {
                 pendingStart = completion;
                 lastError = string.Empty;
+                isStopping = false;
             }
 
             try
@@ -83,8 +85,10 @@ namespace InvisibleGorillaXRay.Android.Services
 
             lock (SyncRoot)
             {
-                if (!isRunning)
+                if (!isRunning || isStopping)
                     return;
+
+                isStopping = true;
             }
 
             try
@@ -110,6 +114,15 @@ namespace InvisibleGorillaXRay.Android.Services
             }
         }
 
+        public static bool IsStopping
+        {
+            get
+            {
+                lock (SyncRoot)
+                    return isStopping;
+            }
+        }
+
         public static string LastError
         {
             get
@@ -124,6 +137,7 @@ namespace InvisibleGorillaXRay.Android.Services
             lock (SyncRoot)
             {
                 isRunning = true;
+                isStopping = false;
                 lastError = string.Empty;
                 pendingStart?.TrySetResult(new Status(Code.SUCCESS, SubCode.SUCCESS, string.Empty));
                 pendingStart = null;
@@ -135,6 +149,7 @@ namespace InvisibleGorillaXRay.Android.Services
             lock (SyncRoot)
             {
                 isRunning = false;
+                isStopping = false;
                 lastError = string.IsNullOrWhiteSpace(message)
                     ? "Android VPN service failed to start."
                     : message;
@@ -148,6 +163,7 @@ namespace InvisibleGorillaXRay.Android.Services
             lock (SyncRoot)
             {
                 isRunning = false;
+                isStopping = false;
                 if (!string.IsNullOrWhiteSpace(message))
                     lastError = message;
             }

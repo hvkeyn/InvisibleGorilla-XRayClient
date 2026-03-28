@@ -1,0 +1,10 @@
+# Invisible Gorilla XRay Client Notes
+
+- Всегда читать все файлы из `memory-bank/` в начале новой задачи. Если Memory Bank отсутствует, создать базовые файлы и поддерживать их в актуальном состоянии.
+- Всегда отвечать пользователю на русском языке.
+- Для Android VPN/TUN изменений проверять не только UI, но и реальную маршрутизацию через IP-проверку в браузере до и после `STOP`.
+- После правок в `XRay-Wrapper/xray/android_tun2socks.go` обязательно пересобирать `libXRayCore.so` для `arm64-v8a` и `x86_64`.
+- После правок в Android runtime/service публиковать как минимум `android-x64` для эмулятора и `android-arm64` для устройства.
+- Для Android нативная библиотека должна идти через `AndroidNativeLibrary`, а не через копирование `.bin` в app-private storage.
+- Если на Android проявляется зависание при `STOP`, сначала проверять блокировки вокруг `StopAndroidTun2Socks`, `AndroidVpnService`, `OnStartCommand`, `StopForeground`, и `logcat` на `Timeout executing service` или `ANR`.
+- Для сложных `vless://` ссылок в adb помнить, что `&` и `#` могут ломаться shell-парсингом; при необходимости валидировать через прямую запись конфига в app data или через UI/clipboard flow.

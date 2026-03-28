@@ -55,7 +55,7 @@ namespace InvisibleGorillaXRay.Android
         private const int NotificationPermissionRequestCode = 1001;
         private const int VpnPermissionRequestCode = 1002;
         private static readonly object ActivitySync = new();
-        private static WeakReference<MainActivity>? currentActivity;
+        private static MainActivity? currentActivity;
         private static TaskCompletionSource<bool>? vpnPermissionRequest;
 
         protected override void OnCreate(Bundle? savedInstanceState)
@@ -94,12 +94,8 @@ namespace InvisibleGorillaXRay.Android
         {
             lock (ActivitySync)
             {
-                if (currentActivity != null &&
-                    currentActivity.TryGetTarget(out MainActivity? target) &&
-                    ReferenceEquals(target, this))
-                {
+                if (ReferenceEquals(currentActivity, this))
                     currentActivity = null;
-                }
             }
 
             base.OnDestroy();
@@ -215,10 +211,7 @@ namespace InvisibleGorillaXRay.Android
         {
             lock (ActivitySync)
             {
-                if (currentActivity != null && currentActivity.TryGetTarget(out MainActivity? target))
-                    return target;
-
-                return null;
+                return currentActivity;
             }
         }
 
@@ -226,7 +219,7 @@ namespace InvisibleGorillaXRay.Android
         {
             lock (ActivitySync)
             {
-                currentActivity = new WeakReference<MainActivity>(activity);
+                currentActivity = activity;
             }
         }
     }
