@@ -119,6 +119,7 @@
     <system:String x:Key="Lang.AppRules.Template.Default">Default</system:String>
     <system:String x:Key="Lang.AppRules.Template.Unnamed">Unnamed template</system:String>
     <system:String x:Key="Lang.AppRules.Template.NewName">Template {0}</system:String>
+    <system:String x:Key="Lang.AppRules.LoadFailed">Couldn't open the app rules editor. Please try again.</system:String>
 
     <system:String x:Key="Lang.Window.Update.WindowTitle">Update</system:String>
     <system:String x:Key="Lang.Window.Update.Title">UPDATE</system:String>

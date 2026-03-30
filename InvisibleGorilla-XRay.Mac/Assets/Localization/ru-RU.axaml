@@ -203,6 +203,7 @@
     <x:String x:Key="Lang.AppRules.Template.Default">По умолчанию</x:String>
     <x:String x:Key="Lang.AppRules.Template.Unnamed">Без имени</x:String>
     <x:String x:Key="Lang.AppRules.Template.NewName">Шаблон {0}</x:String>
+    <x:String x:Key="Lang.AppRules.LoadFailed">Не удалось открыть редактор правил приложений. Попробуйте еще раз.</x:String>
     <x:String x:Key="Lang.AppRules.RestartingVpn">Правила приложений сохранены. Android VPN перезапускается для применения изменений...</x:String>
     <x:String x:Key="Lang.AppRules.RestartRequired">Правила приложений сохранены, но Android VPN нужно перезапустить вручную для применения.</x:String>
     <x:String x:Key="Lang.AppRules.AppsRefreshed">Список установленных приложений обновлён.</x:String>

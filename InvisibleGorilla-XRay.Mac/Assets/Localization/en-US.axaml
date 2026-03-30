@@ -203,6 +203,7 @@
     <x:String x:Key="Lang.AppRules.Template.Default">Default</x:String>
     <x:String x:Key="Lang.AppRules.Template.Unnamed">Unnamed template</x:String>
     <x:String x:Key="Lang.AppRules.Template.NewName">Template {0}</x:String>
+    <x:String x:Key="Lang.AppRules.LoadFailed">Couldn't open the app rules editor. Please try again.</x:String>
     <x:String x:Key="Lang.AppRules.RestartingVpn">App rules saved. Restarting Android VPN to apply bypass changes...</x:String>
     <x:String x:Key="Lang.AppRules.RestartRequired">App rules were saved, but Android VPN must be restarted manually to apply them.</x:String>
     <x:String x:Key="Lang.AppRules.AppsRefreshed">Installed apps list refreshed.</x:String>

@@ -119,6 +119,7 @@
     <system:String x:Key="Lang.AppRules.Template.Default">По умолчанию</system:String>
     <system:String x:Key="Lang.AppRules.Template.Unnamed">Без имени</system:String>
     <system:String x:Key="Lang.AppRules.Template.NewName">Шаблон {0}</system:String>
+    <system:String x:Key="Lang.AppRules.LoadFailed">Не удалось открыть редактор правил приложений. Попробуйте еще раз.</system:String>
 
     <system:String x:Key="Lang.Window.Update.WindowTitle">Обновление</system:String>
     <system:String x:Key="Lang.Window.Update.Title">ОБНОВЛЕНИЕ</system:String>

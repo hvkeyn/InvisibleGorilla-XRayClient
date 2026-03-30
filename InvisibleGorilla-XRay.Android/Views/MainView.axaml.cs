@@ -250,6 +250,17 @@ namespace InvisibleGorillaXRay.Android.Views
         private TextBlock AppRulesEditorAppListTitleText => GetRequiredControl<TextBlock>("AppRulesEditorAppListTitleTextBlock");
         private StackPanel AppRulesEditorItemsHost => GetRequiredControl<StackPanel>("AppRulesEditorItemsPanel");
         private TextBlock AppRulesEditorNoAppsText => GetRequiredControl<TextBlock>("AppRulesEditorNoAppsTextBlock");
+        private ComboBox AppRulesTemplateSelector => GetRequiredControl<ComboBox>("AppRulesTemplateComboBox");
+        private Button NewAppRulesTemplateActionButton => GetRequiredControl<Button>("NewAppRulesTemplateButton");
+        private Button DeleteAppRulesTemplateActionButton => GetRequiredControl<Button>("DeleteAppRulesTemplateButton");
+        private TextBox AppRulesTemplateNameInput => GetRequiredControl<TextBox>("AppRulesTemplateNameTextBox");
+        private RadioButton AppRulesModeAllAppsOption => GetRequiredControl<RadioButton>("AppRulesModeAllAppsRadioButton");
+        private RadioButton AppRulesModeBypassOption => GetRequiredControl<RadioButton>("AppRulesModeBypassRadioButton");
+        private RadioButton AppRulesModeOnlySelectedOption => GetRequiredControl<RadioButton>("AppRulesModeOnlySelectedRadioButton");
+        private TextBox AppRulesSearchInput => GetRequiredControl<TextBox>("AppRulesSearchTextBox");
+        private Button RefreshAppRulesEditorActionButton => GetRequiredControl<Button>("RefreshAppRulesEditorButton");
+        private Button CancelAppRulesEditorActionButton => GetRequiredControl<Button>("CancelAppRulesEditorButton");
+        private Button SaveAppRulesEditorActionButton => GetRequiredControl<Button>("SaveAppRulesEditorButton");
         private TextBox ConfigLinkInput => GetRequiredControl<TextBox>("ConfigLinkTextBox");
         private TextBox SubscriptionRemarkInput => GetRequiredControl<TextBox>("SubscriptionRemarkTextBox");
         private TextBox SubscriptionLinkInput => GetRequiredControl<TextBox>("SubscriptionLinkTextBox");
@@ -364,20 +375,20 @@ namespace InvisibleGorillaXRay.Android.Views
             AppRulesEditorDescriptionText.Text = Localize("Lang.AppRules.ManagerDescription");
             AppRulesEditorCurrentConfigLabelText.Text = Localize("Lang.AppRules.CurrentConfig");
             AppRulesEditorTemplateTitleText.Text = Localize("Lang.AppRules.Template.Title");
-            NewAppRulesTemplateButton.Content = Localize("Lang.AppRules.Template.New");
-            DeleteAppRulesTemplateButton.Content = Localize("Lang.AppRules.Template.Delete");
+            NewAppRulesTemplateActionButton.Content = Localize("Lang.AppRules.Template.New");
+            DeleteAppRulesTemplateActionButton.Content = Localize("Lang.AppRules.Template.Delete");
             AppRulesEditorTemplateNameLabelText.Text = Localize("Lang.AppRules.Template.Name");
             AppRulesEditorModeTitleText.Text = Localize("Lang.AppRules.Mode.Title");
             AppRulesEditorModeDescriptionText.Text = Localize("Lang.AppRules.Mode.Description");
-            AppRulesModeAllAppsRadioButton.Content = Localize("Lang.AppRules.Mode.AllApps");
-            AppRulesModeBypassRadioButton.Content = Localize("Lang.AppRules.Mode.Bypass");
-            AppRulesModeOnlySelectedRadioButton.Content = Localize("Lang.AppRules.Mode.OnlySelected");
+            AppRulesModeAllAppsOption.Content = Localize("Lang.AppRules.Mode.AllApps");
+            AppRulesModeBypassOption.Content = Localize("Lang.AppRules.Mode.Bypass");
+            AppRulesModeOnlySelectedOption.Content = Localize("Lang.AppRules.Mode.OnlySelected");
             AppRulesEditorAppListTitleText.Text = Localize("Lang.AppRules.AppList.Title");
-            AppRulesSearchTextBox.Watermark = Localize("Lang.AppRules.Search");
-            RefreshAppRulesEditorButton.Content = Localize("Lang.AppRules.RefreshApps");
+            AppRulesSearchInput.Watermark = Localize("Lang.AppRules.Search");
+            RefreshAppRulesEditorActionButton.Content = Localize("Lang.AppRules.RefreshApps");
             AppRulesEditorNoAppsText.Text = Localize("Lang.AppRules.NoAppsFound");
-            CancelAppRulesEditorButton.Content = Localize("Lang.Button.Cancel");
-            SaveAppRulesEditorButton.Content = Localize("Lang.AppRules.Save");
+            CancelAppRulesEditorActionButton.Content = Localize("Lang.Button.Cancel");
+            SaveAppRulesEditorActionButton.Content = Localize("Lang.AppRules.Save");
             TunTitleText.Text = Localize("Lang.Window.Settings.TUN");
             TunDescriptionText.Text = Localize("Lang.Android.Settings.TunDescription");
             LogsAndDiagnosticsTitleText.Text = Localize("Lang.Android.Settings.LogsAndDiagnostics");
@@ -656,7 +667,15 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void OnOpenAppRulesEditorClick(object? sender, RoutedEventArgs e)
         {
-            OpenAppRulesEditor();
+            try
+            {
+                OpenAppRulesEditor();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.OpenAppRulesEditor", ex);
+                SetStatus("Lang.AppRules.LoadFailed");
+            }
         }
 
         private void OpenAppRulesEditor()
@@ -674,7 +693,7 @@ namespace InvisibleGorillaXRay.Android.Views
 
             discoveredAndroidApps = AndroidInstalledAppDiscovery.GetLaunchableApps().ToList();
             AppRulesEditorCurrentConfigText.Text = CurrentConfigNameText.Text;
-            AppRulesSearchTextBox.Text = string.Empty;
+            AppRulesSearchInput.Text = string.Empty;
 
             PopulateAppRulesTemplateSelector(settings.GetBoundAppRuleTemplateId());
             AppRulesEditorOverlay.IsVisible = true;
@@ -702,14 +721,14 @@ namespace InvisibleGorillaXRay.Android.Views
                     Name = GetTemplateDisplayName(template.Id, template)
                 }));
 
-            AppRulesTemplateComboBox.ItemsSource = items;
+            AppRulesTemplateSelector.ItemsSource = items;
 
             TemplateComboItem selectedItem = items.FirstOrDefault(item =>
                     string.Equals(item.Id, preferredTemplateId, StringComparison.OrdinalIgnoreCase))
                 ?? items[0];
 
             isApplyingAppRulesEditor = true;
-            AppRulesTemplateComboBox.SelectedItem = selectedItem;
+            AppRulesTemplateSelector.SelectedItem = selectedItem;
             activeAppRulesTemplateId = selectedItem.Id;
             ApplyTemplateToAppRulesEditor(GetActiveAppRulesTemplate());
             isApplyingAppRulesEditor = false;
@@ -720,20 +739,20 @@ namespace InvisibleGorillaXRay.Android.Views
             isApplyingAppRulesEditor = true;
             try
             {
-                AppRulesTemplateNameTextBox.Text = template.Name ?? string.Empty;
-                AppRulesTemplateNameTextBox.IsEnabled = !IsDefaultAppRulesTemplate(template.Id);
-                DeleteAppRulesTemplateButton.IsEnabled = !IsDefaultAppRulesTemplate(template.Id);
+                AppRulesTemplateNameInput.Text = template.Name ?? string.Empty;
+                AppRulesTemplateNameInput.IsEnabled = !IsDefaultAppRulesTemplate(template.Id);
+                DeleteAppRulesTemplateActionButton.IsEnabled = !IsDefaultAppRulesTemplate(template.Id);
 
                 switch (template.Mode)
                 {
                     case AppRulesMode.BYPASS_SELECTED_APPS:
-                        AppRulesModeBypassRadioButton.IsChecked = true;
+                        AppRulesModeBypassOption.IsChecked = true;
                         break;
                     case AppRulesMode.ONLY_SELECTED_APPS:
-                        AppRulesModeOnlySelectedRadioButton.IsChecked = true;
+                        AppRulesModeOnlySelectedOption.IsChecked = true;
                         break;
                     default:
-                        AppRulesModeAllAppsRadioButton.IsChecked = true;
+                        AppRulesModeAllAppsOption.IsChecked = true;
                         break;
                 }
 
@@ -750,7 +769,7 @@ namespace InvisibleGorillaXRay.Android.Views
             AppRulesEditorItemsHost.Children.Clear();
             appRuleToggles.Clear();
 
-            string filter = AppRulesSearchTextBox.Text?.Trim() ?? string.Empty;
+            string filter = AppRulesSearchInput.Text?.Trim() ?? string.Empty;
             IEnumerable<AndroidInstalledAppInfo> filteredApps = discoveredAndroidApps;
             if (!string.IsNullOrWhiteSpace(filter))
             {
@@ -843,7 +862,7 @@ namespace InvisibleGorillaXRay.Android.Views
             template.AppRules = BuildSelectedAppRulesForEditor(template);
 
             if (!IsDefaultAppRulesTemplate(template.Id))
-                template.Name = AppRulesTemplateNameTextBox.Text?.Trim() ?? string.Empty;
+                template.Name = AppRulesTemplateNameInput.Text?.Trim() ?? string.Empty;
         }
 
         private List<AppRule> BuildSelectedAppRulesForEditor(AppRuleTemplate template)
@@ -904,10 +923,10 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private AppRulesMode GetSelectedAppRulesEditorMode()
         {
-            if (AppRulesModeOnlySelectedRadioButton.IsChecked == true)
+            if (AppRulesModeOnlySelectedOption.IsChecked == true)
                 return AppRulesMode.ONLY_SELECTED_APPS;
 
-            if (AppRulesModeBypassRadioButton.IsChecked == true)
+            if (AppRulesModeBypassOption.IsChecked == true)
                 return AppRulesMode.BYPASS_SELECTED_APPS;
 
             return AppRulesMode.ALL_APPS;
@@ -940,7 +959,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 return;
 
             CaptureActiveAppRulesEditorTemplateState();
-            activeAppRulesTemplateId = (AppRulesTemplateComboBox.SelectedItem as TemplateComboItem)?.Id
+            activeAppRulesTemplateId = (AppRulesTemplateSelector.SelectedItem as TemplateComboItem)?.Id
                 ?? AppRuleTemplate.DefaultTemplateId;
             ApplyTemplateToAppRulesEditor(GetActiveAppRulesTemplate());
         }
@@ -951,7 +970,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 return;
 
             CaptureActiveAppRulesEditorTemplateState();
-            GetActiveAppRulesTemplate().Name = AppRulesTemplateNameTextBox.Text?.Trim() ?? string.Empty;
+            GetActiveAppRulesTemplate().Name = AppRulesTemplateNameInput.Text?.Trim() ?? string.Empty;
             PopulateAppRulesTemplateSelector(activeAppRulesTemplateId);
         }
 
@@ -974,10 +993,18 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void OnRefreshAppRulesEditorClick(object? sender, RoutedEventArgs e)
         {
-            CaptureActiveAppRulesEditorTemplateState();
-            discoveredAndroidApps = AndroidInstalledAppDiscovery.GetLaunchableApps().ToList();
-            RenderAppRulesEditorCards(GetActiveAppRulesTemplate());
-            SetStatus(Localize("Lang.AppRules.AppsRefreshed"));
+            try
+            {
+                CaptureActiveAppRulesEditorTemplateState();
+                discoveredAndroidApps = AndroidInstalledAppDiscovery.GetLaunchableApps().ToList();
+                RenderAppRulesEditorCards(GetActiveAppRulesTemplate());
+                SetStatus(Localize("Lang.AppRules.AppsRefreshed"));
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.RefreshAppRulesEditor", ex);
+                SetStatus("Lang.AppRules.LoadFailed");
+            }
         }
 
         private void OnNewAppRulesTemplateClick(object? sender, RoutedEventArgs e)
