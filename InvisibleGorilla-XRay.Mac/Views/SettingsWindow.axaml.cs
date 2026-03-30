@@ -61,8 +61,10 @@ namespace InvisibleGorillaXRay.Mac.Views
         private Func<string> getDns;
         private Func<LogLevel> getLogLevel;
         private Func<string> getLogPath;
+        private Func<UserSettings> getUserSettings;
         private Func<AppRulesMode> getAppRulesMode;
         private Func<List<AppRule>> getAppRules;
+        private Func<AppRulesWindow> openAppRulesWindow;
         private Func<PolicyWindow> openPolicyWindow;
 
         private Action<UserSettings> onUpdateUserSettings;
@@ -113,8 +115,10 @@ namespace InvisibleGorillaXRay.Mac.Views
             Func<string> getDns,
             Func<LogLevel> getLogLevel,
             Func<string> getLogPath,
+            Func<UserSettings> getUserSettings,
             Func<AppRulesMode> getAppRulesMode,
             Func<List<AppRule>> getAppRules,
+            Func<AppRulesWindow> openAppRulesWindow,
             Func<PolicyWindow> openPolicyWindow,
             Action<UserSettings> onUpdateUserSettings)
         {
@@ -134,8 +138,10 @@ namespace InvisibleGorillaXRay.Mac.Views
             this.getDns = getDns;
             this.getLogLevel = getLogLevel;
             this.getLogPath = getLogPath;
+            this.getUserSettings = getUserSettings;
             this.getAppRulesMode = getAppRulesMode;
             this.getAppRules = getAppRules;
+            this.openAppRulesWindow = openAppRulesWindow;
             this.openPolicyWindow = openPolicyWindow;
             this.onUpdateUserSettings = onUpdateUserSettings;
 
@@ -154,7 +160,6 @@ namespace InvisibleGorillaXRay.Mac.Views
             checkBoxStartHidden.IsChecked = getStartHiddenEnabled.Invoke();
             checkBoxAutoConnect.IsChecked = getAutoConnectEnabled.Invoke();
             checkBoxSendAnalytics.IsChecked = getSendingAnalyticsEnabled.Invoke();
-            checkBoxEnableAppRules.IsChecked = getAppRulesMode.Invoke() == AppRulesMode.BYPASS_SELECTED_APPS;
 
             textBoxProxyPort.Text = getProxyPort.Invoke().ToString();
             textBoxTunPort.Text = getTunPort.Invoke().ToString();
@@ -165,7 +170,7 @@ namespace InvisibleGorillaXRay.Mac.Views
 
             SelectComboBoxItem(comboBoxLogLevel, getLogLevel.Invoke());
             textBoxLogPath.Text = Path.GetFullPath(getLogPath.Invoke());
-            ReloadDiscoveredApps();
+            RefreshAppRulesSummary();
         }
 
         private void SelectComboBoxItem<T>(ComboBox comboBox, T key)
@@ -360,6 +365,7 @@ namespace InvisibleGorillaXRay.Mac.Views
 
         private void OnConfirmButtonClick(object sender, RoutedEventArgs e)
         {
+            UserSettings currentSettings = getUserSettings.Invoke();
             UserSettings userSettings = new UserSettings(
                 language: GetComboBoxSelectedKey<string>(comboBoxLanguage) ?? "en-US",
                 mode: GetComboBoxSelectedKey<Mode>(comboBoxMode),
@@ -377,10 +383,10 @@ namespace InvisibleGorillaXRay.Mac.Views
                 tunIp: textBoxTunDeviceIp.Text ?? "10.0.236.10",
                 dns: textBoxTunDns.Text ?? "8.8.8.8",
                 logPath: textBoxLogPath.Text ?? "./Logs",
-                appRulesMode: checkBoxEnableAppRules.IsChecked == true
-                    ? AppRulesMode.BYPASS_SELECTED_APPS
-                    : AppRulesMode.DISABLED,
-                appRules: BuildSelectedDesktopAppRules()
+                appRulesMode: currentSettings.GetAppRulesMode(),
+                appRules: currentSettings.GetAppRules(),
+                appRuleTemplates: currentSettings.GetAppRuleTemplates(),
+                appRuleTemplateBindings: currentSettings.GetAppRuleTemplateBindings()
             );
 
             SendRunAtStartupActivationEvent(userSettings);
@@ -419,7 +425,66 @@ namespace InvisibleGorillaXRay.Mac.Views
 
         private void OnRefreshAppRulesClick(object sender, RoutedEventArgs e)
         {
-            ReloadDiscoveredApps();
+            RefreshAppRulesSummary();
+        }
+
+        private async void OnManageAppRulesClick(object sender, RoutedEventArgs e)
+        {
+            AppRulesWindow appRulesWindow = openAppRulesWindow.Invoke();
+            appRulesWindow.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            await appRulesWindow.ShowDialog(this);
+            RefreshAppRulesSummary();
+        }
+
+        private void RefreshAppRulesSummary()
+        {
+            UserSettings settings = getUserSettings.Invoke();
+            AppRulesMode mode = settings.GetEffectiveAppRulesMode();
+            AppRuleTemplate template = settings.GetEffectiveAppRuleTemplate();
+            int selectedCount = settings.GetEffectiveEnabledAppRules().Count;
+
+            textBlockAppRulesSummary.Text = string.Format(
+                Localize("Lang.AppRules.Summary"),
+                GetTemplateDisplayName(settings.GetBoundAppRuleTemplateId(), template),
+                LocalizeMode(mode),
+                selectedCount);
+
+            textBlockAppRulesConfigHint.Text = string.IsNullOrWhiteSpace(settings.GetCurrentConfigPath())
+                ? Localize("Lang.AppRules.NoConfigSelected")
+                : string.Format(
+                    Localize("Lang.AppRules.BoundConfig"),
+                    settings.GetCurrentConfigPath());
+        }
+
+        private string GetTemplateDisplayName(string templateId, AppRuleTemplate template)
+        {
+            if (string.IsNullOrWhiteSpace(templateId)
+                || string.Equals(templateId, AppRuleTemplate.DefaultTemplateId, StringComparison.OrdinalIgnoreCase))
+            {
+                return Localize("Lang.AppRules.Template.Default");
+            }
+
+            return string.IsNullOrWhiteSpace(template.Name)
+                ? Localize("Lang.AppRules.Template.Unnamed")
+                : template.Name;
+        }
+
+        private string LocalizeMode(AppRulesMode mode)
+        {
+            return mode switch
+            {
+                AppRulesMode.BYPASS_SELECTED_APPS => Localize("Lang.AppRules.Mode.Bypass"),
+                AppRulesMode.ONLY_SELECTED_APPS => Localize("Lang.AppRules.Mode.OnlySelected"),
+                _ => Localize("Lang.AppRules.Mode.AllApps")
+            };
+        }
+
+        private string Localize(string key)
+        {
+            if (Application.Current?.TryFindResource(key, out object? value) == true)
+                return value?.ToString() ?? key;
+
+            return key;
         }
 
         private void HideAllPanels()

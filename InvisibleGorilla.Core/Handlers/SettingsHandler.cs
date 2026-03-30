@@ -43,6 +43,8 @@ namespace InvisibleGorillaXRay.Handlers
             this.userSettings.LogPath = NormalizePath(userSettings.LogPath, Values.Directory.LOGS);
             this.userSettings.AppRulesMode = userSettings.AppRulesMode;
             this.userSettings.AppRules = CloneAppRules(userSettings.AppRules);
+            this.userSettings.AppRuleTemplates = CloneAppRuleTemplates(userSettings.AppRuleTemplates);
+            this.userSettings.AppRuleTemplateBindings = CloneAppRuleTemplateBindings(userSettings.AppRuleTemplateBindings);
 
             UpdateStartupSetting();
             SaveUserSettings();
@@ -95,6 +97,10 @@ namespace InvisibleGorillaXRay.Handlers
                 settings.LogPath = NormalizePath(settings.LogPath, Values.Directory.LOGS);
                 settings.AppRules ??= new System.Collections.Generic.List<AppRule>();
                 settings.AppRules = CloneAppRules(settings.AppRules);
+                settings.AppRuleTemplates ??= new System.Collections.Generic.List<AppRuleTemplate>();
+                settings.AppRuleTemplateBindings ??= new System.Collections.Generic.List<AppRuleTemplateBinding>();
+                settings.AppRuleTemplates = CloneAppRuleTemplates(settings.AppRuleTemplates);
+                settings.AppRuleTemplateBindings = CloneAppRuleTemplateBindings(settings.AppRuleTemplateBindings);
                 return settings;
             }
         }
@@ -126,6 +132,46 @@ namespace InvisibleGorillaXRay.Handlers
                 .Where(rule => rule != null && !string.IsNullOrWhiteSpace(rule.AppId))
                 .Select(rule => rule.Clone())
                 .ToList();
+        }
+
+        private static System.Collections.Generic.List<AppRuleTemplate> CloneAppRuleTemplates(System.Collections.Generic.IEnumerable<AppRuleTemplate>? templates)
+        {
+            if (templates == null)
+                return new System.Collections.Generic.List<AppRuleTemplate>();
+
+            return templates
+                .Where(template => template != null && !string.IsNullOrWhiteSpace(template.Id))
+                .Select(template =>
+                {
+                    AppRuleTemplate clone = template.Clone();
+                    clone.AppRules = CloneAppRules(clone.AppRules);
+                    clone.Name = clone.Name?.Trim() ?? string.Empty;
+                    return clone;
+                })
+                .ToList();
+        }
+
+        private static System.Collections.Generic.List<AppRuleTemplateBinding> CloneAppRuleTemplateBindings(System.Collections.Generic.IEnumerable<AppRuleTemplateBinding>? bindings)
+        {
+            if (bindings == null)
+                return new System.Collections.Generic.List<AppRuleTemplateBinding>();
+
+            return bindings
+                .Where(binding => binding != null
+                    && !string.IsNullOrWhiteSpace(binding.ConfigPath)
+                    && !string.IsNullOrWhiteSpace(binding.TemplateId))
+                .Select(binding => new AppRuleTemplateBinding(
+                    configPath: NormalizeConfigPath(binding.ConfigPath),
+                    templateId: binding.TemplateId.Trim()))
+                .ToList();
+        }
+
+        private static string NormalizeConfigPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return string.Empty;
+
+            return NormalizePath(path, path.Trim());
         }
     }
 }

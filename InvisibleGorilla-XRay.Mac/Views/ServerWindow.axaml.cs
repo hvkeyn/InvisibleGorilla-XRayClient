@@ -31,6 +31,8 @@ namespace InvisibleGorillaXRay.Mac.Views
         private SubscriptionOperation subscriptionOperation;
 
         private Func<string> getCurrentConfigPath;
+        private Func<UserSettings> getUserSettings;
+        private Func<AppRulesWindow> openAppRulesWindow;
         private Func<bool> isCurrentPathEqualRootConfigPath;
         private Func<List<Config>> getAllGeneralConfigs;
         private Func<string, List<Config>> getAllSubscriptionConfigs;
@@ -62,6 +64,8 @@ namespace InvisibleGorillaXRay.Mac.Views
 
         public void Setup(
             Func<string> getCurrentConfigPath,
+            Func<UserSettings> getUserSettings,
+            Func<AppRulesWindow> openAppRulesWindow,
             Func<bool> isCurrentPathEqualRootConfigPath,
             Func<List<Config>> getAllGeneralConfigs,
             Func<string, List<Config>> getAllSubscriptionConfigs,
@@ -79,6 +83,8 @@ namespace InvisibleGorillaXRay.Mac.Views
             Action<string> onUpdateConfig)
         {
             this.getCurrentConfigPath = getCurrentConfigPath;
+            this.getUserSettings = getUserSettings;
+            this.openAppRulesWindow = openAppRulesWindow;
             this.isCurrentPathEqualRootConfigPath = isCurrentPathEqualRootConfigPath;
             this.getAllGeneralConfigs = getAllGeneralConfigs;
             this.getAllSubscriptionConfigs = getAllSubscriptionConfigs;
@@ -103,6 +109,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             LoadConfigsList(GroupType.GENERAL);
             LoadConfigsList(GroupType.SUBSCRIPTION);
             ShowServersPanel();
+            RefreshAppRulesSummary();
 
             if (isCurrentPathEqualRootConfigPath?.Invoke() == true)
                 OnConfigTabClick(null, null);
@@ -358,6 +365,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             panelAddConfigs.IsVisible = false;
             panelAddSubscriptions.IsVisible = false;
             panelServers.IsVisible = true;
+            RefreshAppRulesSummary();
         }
 
         private void LoadConfigsList(GroupType group)
@@ -366,6 +374,8 @@ namespace InvisibleGorillaXRay.Mac.Views
                 LoadGeneralConfigsList();
             else
                 LoadSubscriptionConfigsList();
+
+            RefreshAppRulesSummary();
         }
 
         private void LoadGeneralConfigsList()
@@ -671,5 +681,51 @@ namespace InvisibleGorillaXRay.Mac.Views
             buttonConfigTab.IsEnabled = true;
             buttonSubscriptionTab.IsEnabled = true;
         }
+
+        private async void OnManageAppRulesClick(object? sender, RoutedEventArgs e)
+        {
+            AppRulesWindow appRulesWindow = openAppRulesWindow.Invoke();
+            await appRulesWindow.ShowDialog(this);
+            RefreshAppRulesSummary();
+        }
+
+        private void RefreshAppRulesSummary()
+        {
+            UserSettings settings = getUserSettings.Invoke();
+            AppRulesMode mode = settings.GetEffectiveAppRulesMode();
+            AppRuleTemplate template = settings.GetEffectiveAppRuleTemplate();
+            int selectedCount = settings.GetEffectiveEnabledAppRules().Count;
+
+            textBlockAppRulesSummary.Text = string.Format(
+                Localize("Lang.AppRules.Summary"),
+                GetTemplateDisplayName(settings.GetBoundAppRuleTemplateId(), template),
+                LocalizeMode(mode),
+                selectedCount);
+        }
+
+        private string GetTemplateDisplayName(string templateId, AppRuleTemplate template)
+        {
+            if (string.IsNullOrWhiteSpace(templateId)
+                || string.Equals(templateId, AppRuleTemplate.DefaultTemplateId, StringComparison.OrdinalIgnoreCase))
+            {
+                return Localize("Lang.AppRules.Template.Default");
+            }
+
+            return string.IsNullOrWhiteSpace(template.Name)
+                ? Localize("Lang.AppRules.Template.Unnamed")
+                : template.Name;
+        }
+
+        private string LocalizeMode(AppRulesMode mode)
+        {
+            return mode switch
+            {
+                AppRulesMode.BYPASS_SELECTED_APPS => Localize("Lang.AppRules.Mode.Bypass"),
+                AppRulesMode.ONLY_SELECTED_APPS => Localize("Lang.AppRules.Mode.OnlySelected"),
+                _ => Localize("Lang.AppRules.Mode.AllApps")
+            };
+        }
+
+        private string Localize(string key) => LocalizationService.GetTerm(key);
     }
 }

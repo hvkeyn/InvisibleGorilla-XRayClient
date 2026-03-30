@@ -9,6 +9,7 @@ using Android.Content.PM;
 using Android.Net;
 using Android.OS;
 using InvisibleGorillaXRay.Core;
+using InvisibleGorillaXRay.Models;
 
 namespace InvisibleGorillaXRay.Android.Services
 {
@@ -29,7 +30,8 @@ namespace InvisibleGorillaXRay.Android.Services
         private const string ExtraTunAddress = "tun_address";
         private const string ExtraDns = "dns";
         private const string ExtraSessionName = "session_name";
-        private const string ExtraBypassPackages = "bypass_packages";
+        private const string ExtraAppRulesMode = "app_rules_mode";
+        private const string ExtraAppPackages = "app_packages";
         private const int DefaultMtu = 1500;
         private const string DefaultIpv6Address = "fdfe:dcba:9876::1";
         private const int DefaultIpv6PrefixLength = 126;
@@ -46,8 +48,9 @@ namespace InvisibleGorillaXRay.Android.Services
             intent.PutExtra(ExtraTunAddress, options.TunAddress);
             intent.PutExtra(ExtraDns, options.Dns);
             intent.PutExtra(ExtraSessionName, options.SessionName);
-            if (options.BypassPackages.Count > 0)
-                intent.PutStringArrayListExtra(ExtraBypassPackages, new List<string>(options.BypassPackages));
+            intent.PutExtra(ExtraAppRulesMode, (int)options.AppRulesMode);
+            if (options.AppPackages.Count > 0)
+                intent.PutStringArrayListExtra(ExtraAppPackages, new List<string>(options.AppPackages));
             return intent;
         }
 
@@ -141,7 +144,8 @@ namespace InvisibleGorillaXRay.Android.Services
             string tunAddress = intent.GetStringExtra(ExtraTunAddress)?.Trim() ?? "10.0.236.10";
             string dns = intent.GetStringExtra(ExtraDns)?.Trim() ?? "8.8.8.8";
             string sessionName = intent.GetStringExtra(ExtraSessionName)?.Trim() ?? "Invisible Gorilla XRay";
-            string[] bypassPackages = intent.GetStringArrayListExtra(ExtraBypassPackages)?
+            AppRulesMode appRulesMode = NormalizeAppRulesMode(intent.GetIntExtra(ExtraAppRulesMode, (int)AppRulesMode.ALL_APPS));
+            string[] appPackages = intent.GetStringArrayListExtra(ExtraAppPackages)?
                 .Where(packageName => !string.IsNullOrWhiteSpace(packageName))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray()
@@ -164,8 +168,7 @@ namespace InvisibleGorillaXRay.Android.Services
                     builder.AddDnsServer(dnsServer);
 
                 TryEnableIpv6(builder);
-                TryExcludeOwnProcess(builder);
-                TryExcludeUserSelectedApplications(builder, bypassPackages);
+                ApplyApplicationRules(builder, appRulesMode, appPackages);
 
                 ParcelFileDescriptor? tunInterface = builder.Establish();
                 if (tunInterface == null)
@@ -186,7 +189,7 @@ namespace InvisibleGorillaXRay.Android.Services
 
             DiagnosticLog.Write(
                 "AndroidVpnService",
-                $"Android VPN established with proxyPort={proxyPort}, tunAddress={tunAddress}, dns={dns}, udpEnabled={udpEnabled}, bypassPackages={string.Join(",", bypassPackages)}");
+                $"Android VPN established with proxyPort={proxyPort}, tunAddress={tunAddress}, dns={dns}, udpEnabled={udpEnabled}, appRulesMode={appRulesMode}, appPackages={string.Join(",", appPackages)}");
         }
 
         private void StartForegroundCompat()
@@ -291,6 +294,18 @@ namespace InvisibleGorillaXRay.Android.Services
             return servers.Length == 0 ? new[] { "8.8.8.8" } : servers;
         }
 
+        private void ApplyApplicationRules(Builder builder, AppRulesMode mode, IEnumerable<string> packages)
+        {
+            if (mode == AppRulesMode.ONLY_SELECTED_APPS)
+            {
+                TryAllowUserSelectedApplications(builder, packages);
+                return;
+            }
+
+            TryExcludeOwnProcess(builder);
+            TryExcludeUserSelectedApplications(builder, packages);
+        }
+
         private void TryExcludeOwnProcess(Builder builder)
         {
             try
@@ -325,6 +340,28 @@ namespace InvisibleGorillaXRay.Android.Services
             }
         }
 
+        private void TryAllowUserSelectedApplications(Builder builder, IEnumerable<string> packages)
+        {
+            foreach (string packageName in packages)
+            {
+                try
+                {
+                    if (string.Equals(packageName, PackageName, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    builder.AddAllowedApplication(packageName);
+                }
+                catch (PackageManager.NameNotFoundException ex)
+                {
+                    DiagnosticLog.WriteException($"AndroidVpnService.AddAllowedApplication.{packageName}", ex);
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException($"AndroidVpnService.AddAllowedApplication.{packageName}", ex);
+                }
+            }
+        }
+
         private void TryEnableIpv6(Builder builder)
         {
             try
@@ -336,6 +373,16 @@ namespace InvisibleGorillaXRay.Android.Services
             {
                 DiagnosticLog.WriteException("AndroidVpnService.EnableIpv6", ex);
             }
+        }
+
+        private static AppRulesMode NormalizeAppRulesMode(int rawValue)
+        {
+            return rawValue switch
+            {
+                (int)AppRulesMode.BYPASS_SELECTED_APPS => AppRulesMode.BYPASS_SELECTED_APPS,
+                (int)AppRulesMode.ONLY_SELECTED_APPS => AppRulesMode.ONLY_SELECTED_APPS,
+                _ => AppRulesMode.ALL_APPS
+            };
         }
     }
 }

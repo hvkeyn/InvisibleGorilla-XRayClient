@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Controls;
@@ -17,6 +17,8 @@ namespace InvisibleGorillaXRay
         private Action pendingToRenderActions = delegate { };
 
         private Func<string> getCurrentConfigPath;
+        private Func<UserSettings> getUserSettings;
+        private Func<AppRulesWindow> openAppRulesWindow;
         private Func<bool> isCurrentPathEqualRootConfigPath;
         private Func<string, int> testConnection;
         private Func<string> getLogPath;
@@ -33,6 +35,8 @@ namespace InvisibleGorillaXRay
 
         public void Setup(
             Func<string> getCurrentConfigPath,
+            Func<UserSettings> getUserSettings,
+            Func<AppRulesWindow> openAppRulesWindow,
             Func<bool> isCurrentPathEqualRootConfigPath,
             Func<List<Config>> getAllGeneralConfigs, 
             Func<string, List<Config>> getAllSubscriptionConfigs,
@@ -50,6 +54,8 @@ namespace InvisibleGorillaXRay
             Action<string> onUpdateConfig)
         {
             this.getCurrentConfigPath = getCurrentConfigPath;
+            this.getUserSettings = getUserSettings;
+            this.openAppRulesWindow = openAppRulesWindow;
             this.isCurrentPathEqualRootConfigPath = isCurrentPathEqualRootConfigPath;
             this.getAllGeneralConfigs = getAllGeneralConfigs;
             this.getAllSubscriptionConfigs = getAllSubscriptionConfigs;
@@ -93,6 +99,8 @@ namespace InvisibleGorillaXRay
             }
 
             void ExecutePendingToRenderActions() => pendingToRenderActions.Invoke();
+
+            RefreshAppRulesSummary();
         }
 
         private void OnCancelButtonClick(object sender, RoutedEventArgs e)
@@ -111,6 +119,7 @@ namespace InvisibleGorillaXRay
             panelAddSubscriptions.Visibility = Visibility.Hidden;
             panelServers.Visibility = Visibility.Visible;
             SelectConfig(getCurrentConfigPath.Invoke());
+            RefreshAppRulesSummary();
         }
 
         private void SetImportingType(ImportingType type) => importingType = type;
@@ -243,6 +252,7 @@ namespace InvisibleGorillaXRay
         {
             DeselectAllConfigs();
             SelectConfig();
+            RefreshAppRulesSummary();
 
             void DeselectAllConfigs()
             {
@@ -314,6 +324,56 @@ namespace InvisibleGorillaXRay
         {
             SetEnableConfigTabButton(true);
             SetEnableSubscriptionTabButton(true);
+        }
+
+        private void OnManageAppRulesClick(object sender, RoutedEventArgs e)
+        {
+            AppRulesWindow appRulesWindow = openAppRulesWindow.Invoke();
+            appRulesWindow.Owner = this;
+            appRulesWindow.ShowDialog();
+            RefreshAppRulesSummary();
+        }
+
+        private void RefreshAppRulesSummary()
+        {
+            UserSettings settings = getUserSettings.Invoke();
+            AppRulesMode mode = settings.GetEffectiveAppRulesMode();
+            AppRuleTemplate template = settings.GetEffectiveAppRuleTemplate();
+            int selectedCount = settings.GetEffectiveEnabledAppRules().Count;
+
+            textBlockAppRulesSummary.Text = string.Format(
+                Localize("Lang.AppRules.Summary"),
+                GetTemplateDisplayName(settings.GetBoundAppRuleTemplateId(), template),
+                LocalizeMode(mode),
+                selectedCount);
+        }
+
+        private string GetTemplateDisplayName(string templateId, AppRuleTemplate template)
+        {
+            if (string.IsNullOrWhiteSpace(templateId)
+                || string.Equals(templateId, AppRuleTemplate.DefaultTemplateId, StringComparison.OrdinalIgnoreCase))
+            {
+                return Localize("Lang.AppRules.Template.Default");
+            }
+
+            return string.IsNullOrWhiteSpace(template.Name)
+                ? Localize("Lang.AppRules.Template.Unnamed")
+                : template.Name;
+        }
+
+        private string LocalizeMode(AppRulesMode mode)
+        {
+            return mode switch
+            {
+                AppRulesMode.BYPASS_SELECTED_APPS => Localize("Lang.AppRules.Mode.Bypass"),
+                AppRulesMode.ONLY_SELECTED_APPS => Localize("Lang.AppRules.Mode.OnlySelected"),
+                _ => Localize("Lang.AppRules.Mode.AllApps")
+            };
+        }
+
+        private string Localize(string key)
+        {
+            return TryFindResource(key)?.ToString() ?? key;
         }
 
         private void HandleWarningMessage(string message)

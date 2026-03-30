@@ -116,6 +116,8 @@ namespace InvisibleGorillaXRay.Mac.Factories
             ServerWindow serverWindow = new ServerWindow();
             serverWindow.Setup(
                 getCurrentConfigPath: settingsHandler.UserSettings.GetCurrentConfigPath,
+                getUserSettings: () => settingsHandler.UserSettings,
+                openAppRulesWindow: CreateAppRulesWindow,
                 isCurrentPathEqualRootConfigPath: configHandler.IsCurrentPathEqualRootConfigPath,
                 getAllGeneralConfigs: configHandler.GetAllGeneralConfigs,
                 getAllSubscriptionConfigs: configHandler.GetAllSubscriptionConfigs,
@@ -172,8 +174,10 @@ namespace InvisibleGorillaXRay.Mac.Factories
                 getDns: settingsHandler.UserSettings.GetDns,
                 getLogLevel: settingsHandler.UserSettings.GetLogLevel,
                 getLogPath: settingsHandler.UserSettings.GetLogPath,
+                getUserSettings: () => settingsHandler.UserSettings,
                 getAppRulesMode: settingsHandler.UserSettings.GetAppRulesMode,
                 getAppRules: settingsHandler.UserSettings.GetAppRules,
+                openAppRulesWindow: CreateAppRulesWindow,
                 openPolicyWindow: CreatePolicyWindow,
                 onUpdateUserSettings: UpdateUserSettings
             );
@@ -184,6 +188,38 @@ namespace InvisibleGorillaXRay.Mac.Factories
             );
 
             return settingsWindow;
+
+            void UpdateUserSettings(UserSettings userSettings)
+            {
+                settingsHandler.UpdateUserSettings(userSettings);
+                localizationHandler.TryApplyCurrentLanguage();
+                notifyHandler.InitializeNotifyIcon();
+                notifyHandler.CheckModeItem();
+                GetMainWindow()?.TryDisableModeAndRerun();
+            }
+        }
+
+        public AppRulesWindow CreateAppRulesWindow()
+        {
+            SettingsHandler settingsHandler = handlersManager.GetHandler<SettingsHandler>();
+            MacNotifyHandler notifyHandler = handlersManager.GetHandler<MacNotifyHandler>();
+            MacLocalizationHandler localizationHandler = handlersManager.GetHandler<MacLocalizationHandler>();
+
+            AppRulesWindow appRulesWindow = new AppRulesWindow();
+            var icon = GetAppIcon();
+            if (icon != null) appRulesWindow.Icon = icon;
+
+            appRulesWindow.Setup(
+                getUserSettings: () => settingsHandler.UserSettings,
+                onUpdateUserSettings: UpdateUserSettings
+            );
+
+            SetupLocalizedWindowTitle(
+                window: appRulesWindow,
+                term: "Lang.AppRules.Title"
+            );
+
+            return appRulesWindow;
 
             void UpdateUserSettings(UserSettings userSettings)
             {

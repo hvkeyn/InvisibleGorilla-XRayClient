@@ -3,7 +3,13 @@ using Newtonsoft.Json;
 
 namespace InvisibleGorillaXRay.Models
 {
-    public enum AppRulesMode { DISABLED, BYPASS_SELECTED_APPS }
+    public enum AppRulesMode
+    {
+        ALL_APPS = 0,
+        DISABLED = ALL_APPS,
+        BYPASS_SELECTED_APPS = 1,
+        ONLY_SELECTED_APPS = 2
+    }
 
     public class AppRule
     {

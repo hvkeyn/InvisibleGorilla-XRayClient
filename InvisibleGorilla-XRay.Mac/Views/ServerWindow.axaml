@@ -146,6 +146,36 @@
                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Button>
             </Grid>
+
+            <Border x:Name="borderAppRulesSummary"
+                    Grid.Row="1"
+                    Margin="15,0,70,15"
+                    Padding="10"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Bottom"
+                    CornerRadius="8"
+                    BorderBrush="{StaticResource Color.LightGray}"
+                    BorderThickness="1"
+                    Background="#66000000">
+                <StackPanel Spacing="6">
+                    <TextBlock x:Name="textBlockAppRulesSummary"
+                               Width="210"
+                               Foreground="White"
+                               TextWrapping="Wrap"
+                               FontWeight="SemiBold"
+                               FontSize="12"/>
+
+                    <Button x:Name="buttonManageAppRules"
+                            Width="150"
+                            Height="28"
+                            HorizontalAlignment="Left"
+                            Content="{DynamicResource Lang.AppRules.Manage}"
+                            Theme="{StaticResource Button.Rectangle.Gray}"
+                            Foreground="White"
+                            FontSize="12"
+                            Click="OnManageAppRulesClick"/>
+                </StackPanel>
+            </Border>
         </Grid>
 
         <!-- Add config panel -->

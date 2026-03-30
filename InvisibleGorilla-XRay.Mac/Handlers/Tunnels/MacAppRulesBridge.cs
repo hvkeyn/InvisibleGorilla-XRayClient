@@ -11,11 +11,11 @@ namespace InvisibleGorillaXRay.Mac.Handlers.Tunnels
 
     internal sealed class MacTransparentProxyBridgeConfig
     {
-        public string Mode { get; init; } = AppRulesMode.BYPASS_SELECTED_APPS.ToString();
+        public string Mode { get; init; } = AppRulesMode.ALL_APPS.ToString();
         public int SocksPort { get; init; }
         public string TunnelAddress { get; init; } = string.Empty;
         public string Dns { get; init; } = string.Empty;
-        public List<string> ExcludedBundleIdentifiers { get; init; } = new();
+        public List<string> BundleIdentifiers { get; init; } = new();
         public DateTime GeneratedAtUtc { get; init; } = DateTime.UtcNow;
     }
 
@@ -29,7 +29,8 @@ namespace InvisibleGorillaXRay.Mac.Handlers.Tunnels
             try
             {
                 Values.Directory.EnsureWritableDirectories();
-                List<string> excludedBundleIds = settings.GetEnabledAppRules()
+                AppRulesMode mode = settings.GetEffectiveAppRulesMode();
+                List<string> bundleIds = settings.GetEffectiveEnabledAppRules()
                     .Select(rule => rule.AppId?.Trim())
                     .Where(appId => !string.IsNullOrWhiteSpace(appId))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -37,16 +38,17 @@ namespace InvisibleGorillaXRay.Mac.Handlers.Tunnels
 
                 MacTransparentProxyBridgeConfig config = new()
                 {
+                    Mode = mode.ToString(),
                     SocksPort = socksPort,
                     TunnelAddress = tunnelAddress ?? string.Empty,
                     Dns = dns ?? string.Empty,
-                    ExcludedBundleIdentifiers = excludedBundleIds
+                    BundleIdentifiers = bundleIds
                 };
 
                 File.WriteAllText(ConfigPath, JsonConvert.SerializeObject(config, Formatting.Indented));
                 DiagnosticLog.Write(
                     "MacAppRulesBridge",
-                    $"Prepared transparent proxy config with {excludedBundleIds.Count} excluded apps at {ConfigPath}");
+                    $"Prepared transparent proxy config with mode={mode} and {bundleIds.Count} bundle ids at {ConfigPath}");
 
                 if (!Directory.Exists(HelperRoot))
                 {

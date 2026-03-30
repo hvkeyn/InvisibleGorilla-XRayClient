@@ -84,12 +84,6 @@ namespace InvisibleGorillaXRay.Mac.Handlers.Tunnels
         {
             SettingsHandler settingsHandler = new(() => new MacStartup());
             UserSettings settings = settingsHandler.UserSettings;
-            if (settings.GetAppRulesMode() != AppRulesMode.BYPASS_SELECTED_APPS)
-            {
-                MacAppRulesBridge.Clear();
-                return new Status(Code.SUCCESS, SubCode.SUCCESS, null);
-            }
-
             return MacAppRulesBridge.Prepare(settings, socksPort, tunnelAddress, dns);
         }
 

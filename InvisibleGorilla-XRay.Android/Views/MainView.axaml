@@ -418,6 +418,31 @@
                                FontSize="18"
                                HorizontalAlignment="Center" />
 
+                    <TextBlock x:Name="CurrentConfigAppRulesSummaryTextBlock"
+                               Width="320"
+                               Margin="0,8,0,0"
+                               Text="All apps"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource TextMuted}"
+                               FontSize="12"
+                               HorizontalAlignment="Center" />
+
+                    <Button x:Name="CurrentConfigAppRulesButton"
+                            Theme="{StaticResource LinkButton}"
+                            MinWidth="220"
+                            MinHeight="36"
+                            HorizontalAlignment="Center"
+                            Margin="0,6,0,0"
+                            Padding="12,6"
+                            Click="OnOpenAppRulesEditorClick">
+                        <TextBlock x:Name="CurrentConfigAppRulesButtonTextBlock"
+                                   Text="App rules"
+                                   TextDecorations="Underline"
+                                   Foreground="{StaticResource AccentBlue}"
+                                   FontSize="13" />
+                    </Button>
+
                     <Button Theme="{StaticResource LinkButton}"
                             MinWidth="270"
                             MinHeight="40"
@@ -1056,34 +1081,43 @@
                                        Text="Selected apps will bypass the VPN while the rest of the device traffic continues through XRay."
                                        TextWrapping="Wrap"
                                        Foreground="{StaticResource TextMuted}" />
-                            <CheckBox x:Name="AppRulesEnabledCheckBox"
-                                      Content="Exclude selected apps from VPN" />
-                            <Button x:Name="RefreshInstalledAppsButton"
-                                    Height="36"
-                                    HorizontalAlignment="Left"
-                                    Padding="12,0"
-                                    Theme="{StaticResource GrayActionButton}"
-                                    Click="OnRefreshInstalledAppsClick">
-                                <TextBlock Text="Refresh installed apps"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center" />
-                            </Button>
                             <Border Padding="10"
                                     CornerRadius="10"
                                     BorderBrush="{StaticResource SurfaceBright}"
                                     BorderThickness="1"
                                     Background="{StaticResource SurfaceDark}">
-                                <ScrollViewer MaxHeight="260"
-                                              HorizontalScrollBarVisibility="Disabled">
-                                    <StackPanel x:Name="AppRulesItemsPanel"
-                                                Spacing="6" />
-                                </ScrollViewer>
+                                <StackPanel Spacing="6">
+                                    <TextBlock x:Name="AppRulesSummaryTextBlock"
+                                               Text="All apps"
+                                               Foreground="White"
+                                               TextWrapping="Wrap"
+                                               FontWeight="SemiBold"
+                                               FontSize="13" />
+                                    <TextBlock x:Name="AppRulesConfigHintTextBlock"
+                                               Text="Bound to current configuration"
+                                               TextWrapping="Wrap"
+                                               Foreground="{StaticResource TextMuted}"
+                                               FontSize="11" />
+                                    <Button x:Name="OpenAppRulesEditorButton"
+                                            Height="36"
+                                            HorizontalAlignment="Left"
+                                            Padding="12,0"
+                                            Theme="{StaticResource GrayActionButton}"
+                                            Click="OnOpenAppRulesEditorClick">
+                                        <TextBlock x:Name="OpenAppRulesEditorButtonTextBlock"
+                                                   Text="Manage app rules"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" />
+                                    </Button>
+                                </StackPanel>
                             </Border>
-                            <TextBlock x:Name="NoDiscoveredAppsTextBlock"
-                                       Text="No launchable apps were found."
-                                       TextWrapping="Wrap"
-                                       Foreground="{StaticResource TextMuted}"
-                                       IsVisible="False" />
+                            <StackPanel IsVisible="False">
+                                <CheckBox x:Name="AppRulesEnabledCheckBox" />
+                                <Button x:Name="RefreshInstalledAppsButton"
+                                        Click="OnRefreshInstalledAppsClick" />
+                                <StackPanel x:Name="AppRulesItemsPanel" />
+                                <TextBlock x:Name="NoDiscoveredAppsTextBlock" />
+                            </StackPanel>
                         </StackPanel>
                     </Border>
 
@@ -1173,6 +1207,183 @@
                                VerticalAlignment="Center" />
                 </Button>
             </StackPanel>
+        </Border>
+
+        <Border x:Name="AppRulesEditorOverlayBorder"
+                Grid.Row="1"
+                Grid.RowSpan="2"
+                Background="#B0000000"
+                IsVisible="False">
+            <Grid Margin="14">
+                <Border Padding="16,14"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch"
+                        Background="{StaticResource SurfaceLight}"
+                        BorderBrush="{StaticResource SurfaceBright}"
+                        BorderThickness="1"
+                        CornerRadius="14">
+                    <Grid RowDefinitions="*,50">
+                        <ScrollViewer Grid.Row="0"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
+                            <StackPanel Spacing="10">
+                                <TextBlock x:Name="AppRulesEditorTitleTextBlock"
+                                           Text="App rules"
+                                           FontSize="20"
+                                           FontWeight="SemiBold" />
+                                <TextBlock x:Name="AppRulesEditorDescriptionTextBlock"
+                                           Text="Pick a template, choose a mode, and select applications for the current configuration."
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource TextMuted}" />
+
+                                <Border Padding="10"
+                                        CornerRadius="10"
+                                        BorderBrush="{StaticResource SurfaceBright}"
+                                        BorderThickness="1"
+                                        Background="{StaticResource SurfaceDark}">
+                                    <StackPanel Spacing="4">
+                                        <TextBlock x:Name="AppRulesEditorCurrentConfigLabelTextBlock"
+                                                   Text="Current configuration"
+                                                   Foreground="{StaticResource TextMuted}"
+                                                   FontSize="11" />
+                                        <TextBlock x:Name="AppRulesEditorCurrentConfigTextBlock"
+                                                   Text="No server configuration selected"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="White"
+                                                   FontWeight="SemiBold"
+                                                   FontSize="14" />
+                                    </StackPanel>
+                                </Border>
+
+                                <TextBlock x:Name="AppRulesEditorTemplateTitleTextBlock"
+                                           Text="Template"
+                                           Foreground="White"
+                                           FontWeight="SemiBold"
+                                           FontSize="14" />
+                                <Grid ColumnDefinitions="*,8,110,8,110">
+                                    <ComboBox x:Name="AppRulesTemplateComboBox"
+                                              Grid.Column="0"
+                                              SelectionChanged="OnAppRulesTemplateSelectionChanged" />
+                                    <Button x:Name="NewAppRulesTemplateButton"
+                                            Grid.Column="2"
+                                            Height="36"
+                                            Theme="{StaticResource GrayActionButton}"
+                                            Click="OnNewAppRulesTemplateClick">
+                                        <TextBlock Text="New"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" />
+                                    </Button>
+                                    <Button x:Name="DeleteAppRulesTemplateButton"
+                                            Grid.Column="4"
+                                            Height="36"
+                                            Theme="{StaticResource RedActionButton}"
+                                            Click="OnDeleteAppRulesTemplateClick">
+                                        <TextBlock Text="Delete"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" />
+                                    </Button>
+                                </Grid>
+
+                                <TextBlock x:Name="AppRulesEditorTemplateNameLabelTextBlock"
+                                           Text="Template name"
+                                           Foreground="{StaticResource TextMuted}"
+                                           FontSize="11" />
+                                <TextBox x:Name="AppRulesTemplateNameTextBox"
+                                         TextChanged="OnAppRulesTemplateNameChanged" />
+
+                                <TextBlock x:Name="AppRulesEditorModeTitleTextBlock"
+                                           Text="Mode"
+                                           Foreground="White"
+                                           FontWeight="SemiBold"
+                                           FontSize="14" />
+                                <TextBlock x:Name="AppRulesEditorModeDescriptionTextBlock"
+                                           Text="Choose whether apps bypass the VPN, only selected apps use the VPN, or all apps are allowed."
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource TextMuted}" />
+
+                                <StackPanel Spacing="8">
+                                    <RadioButton x:Name="AppRulesModeAllAppsRadioButton"
+                                                 Content="All apps"
+                                                 Foreground="White"
+                                                 IsChecked="True"
+                                                 Checked="OnAppRulesModeChanged" />
+                                    <RadioButton x:Name="AppRulesModeBypassRadioButton"
+                                                 Content="Bypass selected apps"
+                                                 Foreground="White"
+                                                 Checked="OnAppRulesModeChanged" />
+                                    <RadioButton x:Name="AppRulesModeOnlySelectedRadioButton"
+                                                 Content="Only selected apps use VPN"
+                                                 Foreground="White"
+                                                 Checked="OnAppRulesModeChanged" />
+                                </StackPanel>
+
+                                <TextBlock x:Name="AppRulesEditorAppListTitleTextBlock"
+                                           Text="Applications"
+                                           Foreground="White"
+                                           FontWeight="SemiBold"
+                                           FontSize="14" />
+                                <Grid ColumnDefinitions="*,8,150">
+                                    <TextBox x:Name="AppRulesSearchTextBox"
+                                             Grid.Column="0"
+                                             Watermark="Search apps"
+                                             TextChanged="OnAppRulesSearchTextChanged" />
+                                    <Button x:Name="RefreshAppRulesEditorButton"
+                                            Grid.Column="2"
+                                            Height="36"
+                                            Theme="{StaticResource GrayActionButton}"
+                                            Click="OnRefreshAppRulesEditorClick">
+                                        <TextBlock Text="Refresh installed apps"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" />
+                                    </Button>
+                                </Grid>
+
+                                <Border Padding="10"
+                                        CornerRadius="10"
+                                        BorderBrush="{StaticResource SurfaceBright}"
+                                        BorderThickness="1"
+                                        Background="{StaticResource SurfaceDark}">
+                                    <ScrollViewer MaxHeight="280"
+                                                  HorizontalScrollBarVisibility="Disabled">
+                                        <StackPanel x:Name="AppRulesEditorItemsPanel"
+                                                    Spacing="6" />
+                                    </ScrollViewer>
+                                </Border>
+
+                                <TextBlock x:Name="AppRulesEditorNoAppsTextBlock"
+                                           Text="No launchable apps were found."
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource TextMuted}"
+                                           IsVisible="False" />
+                            </StackPanel>
+                        </ScrollViewer>
+
+                        <Grid Grid.Row="1"
+                              ColumnDefinitions="*,10,*">
+                            <Button x:Name="CancelAppRulesEditorButton"
+                                    Grid.Column="0"
+                                    Height="40"
+                                    Theme="{StaticResource GrayActionButton}"
+                                    Click="OnCancelAppRulesEditorClick">
+                                <TextBlock Text="Cancel"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center" />
+                            </Button>
+                            <Button x:Name="SaveAppRulesEditorButton"
+                                    Grid.Column="2"
+                                    Height="40"
+                                    Theme="{StaticResource GreenActionButton}"
+                                    Foreground="#252526"
+                                    FontWeight="Bold"
+                                    Click="OnSaveAppRulesEditorClick">
+                                <TextBlock Text="Save app rules"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center" />
+                            </Button>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </Grid>
         </Border>
 
         <Border Grid.Row="2"

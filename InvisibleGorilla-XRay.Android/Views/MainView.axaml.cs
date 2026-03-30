@@ -38,6 +38,14 @@ namespace InvisibleGorillaXRay.Android.Views
         private enum ServersViewMode { Browse, AddConfig, AddSubscription }
         private enum ConfigImportMode { File, Link }
 
+        private sealed class TemplateComboItem
+        {
+            public string Id { get; init; } = string.Empty;
+            public string Name { get; init; } = string.Empty;
+
+            public override string ToString() => Name;
+        }
+
         private static readonly IBrush StoppedBrush = new SolidColorBrush(Color.Parse("#D66A75"));
         private static readonly IBrush StartingBrush = new SolidColorBrush(Color.Parse("#C9A227"));
         private static readonly IBrush RunningBrush = new SolidColorBrush(Color.Parse("#56B870"));
@@ -64,6 +72,11 @@ namespace InvisibleGorillaXRay.Android.Views
         private Subscription? selectedSubscription;
         private readonly Dictionary<string, int> configAvailability = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, CheckBox> appRuleToggles = new(StringComparer.OrdinalIgnoreCase);
+        private readonly List<AppRuleTemplate> workingAppRuleTemplates = new();
+        private readonly List<AppRuleTemplateBinding> workingAppRuleBindings = new();
+        private AppRuleTemplate workingDefaultAppRuleTemplate = new();
+        private string activeAppRulesTemplateId = AppRuleTemplate.DefaultTemplateId;
+        private bool isApplyingAppRulesEditor;
         private bool isCheckWorkerBusy;
         private bool isRunWorkerBusy;
         private bool isStopWorkerBusy;
@@ -144,6 +157,8 @@ namespace InvisibleGorillaXRay.Android.Views
         private TextBlock ConnectionStateTitleText => GetRequiredControl<TextBlock>("ConnectionStateTitleTextBlock");
         private TextBlock ConnectionStateSubtitleText => GetRequiredControl<TextBlock>("ConnectionStateSubtitleTextBlock");
         private TextBlock CurrentConfigNameText => GetRequiredControl<TextBlock>("CurrentConfigNameTextBlock");
+        private TextBlock CurrentConfigAppRulesSummaryText => GetRequiredControl<TextBlock>("CurrentConfigAppRulesSummaryTextBlock");
+        private TextBlock CurrentConfigAppRulesButtonText => GetRequiredControl<TextBlock>("CurrentConfigAppRulesButtonTextBlock");
         private TextBlock ManageServerConfigurationText => GetRequiredControl<TextBlock>("ManageServerConfigurationTextBlock");
         private Border HomeStatusPanelContainer => GetRequiredControl<Border>("HomeStatusPanel");
         private TextBlock HomeStatusText => GetRequiredControl<TextBlock>("HomeStatusTextBlock");
@@ -208,6 +223,9 @@ namespace InvisibleGorillaXRay.Android.Views
         private TextBlock DnsTitleText => GetRequiredControl<TextBlock>("DnsTitleTextBlock");
         private TextBlock AppRulesTitleText => GetRequiredControl<TextBlock>("AppRulesTitleTextBlock");
         private TextBlock AppRulesDescriptionText => GetRequiredControl<TextBlock>("AppRulesDescriptionTextBlock");
+        private TextBlock AppRulesSummaryText => GetRequiredControl<TextBlock>("AppRulesSummaryTextBlock");
+        private TextBlock AppRulesConfigHintText => GetRequiredControl<TextBlock>("AppRulesConfigHintTextBlock");
+        private TextBlock OpenAppRulesEditorButtonText => GetRequiredControl<TextBlock>("OpenAppRulesEditorButtonTextBlock");
         private TextBlock NoDiscoveredAppsText => GetRequiredControl<TextBlock>("NoDiscoveredAppsTextBlock");
         private TextBlock TunTitleText => GetRequiredControl<TextBlock>("TunTitleTextBlock");
         private TextBlock TunDescriptionText => GetRequiredControl<TextBlock>("TunDescriptionTextBlock");
@@ -220,6 +238,18 @@ namespace InvisibleGorillaXRay.Android.Views
         private CheckBox AppRulesEnabledToggle => GetRequiredControl<CheckBox>("AppRulesEnabledCheckBox");
         private StackPanel AppRulesItemsHost => GetRequiredControl<StackPanel>("AppRulesItemsPanel");
         private Button RefreshInstalledAppsActionButton => GetRequiredControl<Button>("RefreshInstalledAppsButton");
+        private Border AppRulesEditorOverlay => GetRequiredControl<Border>("AppRulesEditorOverlayBorder");
+        private TextBlock AppRulesEditorTitleText => GetRequiredControl<TextBlock>("AppRulesEditorTitleTextBlock");
+        private TextBlock AppRulesEditorDescriptionText => GetRequiredControl<TextBlock>("AppRulesEditorDescriptionTextBlock");
+        private TextBlock AppRulesEditorCurrentConfigLabelText => GetRequiredControl<TextBlock>("AppRulesEditorCurrentConfigLabelTextBlock");
+        private TextBlock AppRulesEditorCurrentConfigText => GetRequiredControl<TextBlock>("AppRulesEditorCurrentConfigTextBlock");
+        private TextBlock AppRulesEditorTemplateTitleText => GetRequiredControl<TextBlock>("AppRulesEditorTemplateTitleTextBlock");
+        private TextBlock AppRulesEditorTemplateNameLabelText => GetRequiredControl<TextBlock>("AppRulesEditorTemplateNameLabelTextBlock");
+        private TextBlock AppRulesEditorModeTitleText => GetRequiredControl<TextBlock>("AppRulesEditorModeTitleTextBlock");
+        private TextBlock AppRulesEditorModeDescriptionText => GetRequiredControl<TextBlock>("AppRulesEditorModeDescriptionTextBlock");
+        private TextBlock AppRulesEditorAppListTitleText => GetRequiredControl<TextBlock>("AppRulesEditorAppListTitleTextBlock");
+        private StackPanel AppRulesEditorItemsHost => GetRequiredControl<StackPanel>("AppRulesEditorItemsPanel");
+        private TextBlock AppRulesEditorNoAppsText => GetRequiredControl<TextBlock>("AppRulesEditorNoAppsTextBlock");
         private TextBox ConfigLinkInput => GetRequiredControl<TextBox>("ConfigLinkTextBox");
         private TextBox SubscriptionRemarkInput => GetRequiredControl<TextBox>("SubscriptionRemarkTextBox");
         private TextBox SubscriptionLinkInput => GetRequiredControl<TextBox>("SubscriptionLinkTextBox");
@@ -272,6 +302,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private void ApplyLocalizedText()
         {
             ManageServerConfigurationText.Text = Localize("Lang.Window.Main.ManageServerConfiguration");
+            CurrentConfigAppRulesButtonText.Text = Localize("Lang.AppRules.Manage");
 
             RunActionButton.Content = Localize("Lang.Run");
             StopActionButton.Content = Localize("Lang.Stop");
@@ -326,9 +357,27 @@ namespace InvisibleGorillaXRay.Android.Views
             DnsTitleText.Text = Localize("Lang.Window.Settings.Dns");
             AppRulesTitleText.Text = Localize("Lang.AppRules.Title");
             AppRulesDescriptionText.Text = Localize("Lang.AppRules.Description.Android");
-            AppRulesEnabledToggle.Content = Localize("Lang.AppRules.EnableBypass");
-            RefreshInstalledAppsActionButton.Content = Localize("Lang.AppRules.RefreshApps");
+            OpenAppRulesEditorButtonText.Text = Localize("Lang.AppRules.Manage");
+            AppRulesConfigHintText.Text = Localize("Lang.AppRules.NoConfigSelected");
             NoDiscoveredAppsText.Text = Localize("Lang.AppRules.NoAppsFound");
+            AppRulesEditorTitleText.Text = Localize("Lang.AppRules.Title");
+            AppRulesEditorDescriptionText.Text = Localize("Lang.AppRules.ManagerDescription");
+            AppRulesEditorCurrentConfigLabelText.Text = Localize("Lang.AppRules.CurrentConfig");
+            AppRulesEditorTemplateTitleText.Text = Localize("Lang.AppRules.Template.Title");
+            NewAppRulesTemplateButton.Content = Localize("Lang.AppRules.Template.New");
+            DeleteAppRulesTemplateButton.Content = Localize("Lang.AppRules.Template.Delete");
+            AppRulesEditorTemplateNameLabelText.Text = Localize("Lang.AppRules.Template.Name");
+            AppRulesEditorModeTitleText.Text = Localize("Lang.AppRules.Mode.Title");
+            AppRulesEditorModeDescriptionText.Text = Localize("Lang.AppRules.Mode.Description");
+            AppRulesModeAllAppsRadioButton.Content = Localize("Lang.AppRules.Mode.AllApps");
+            AppRulesModeBypassRadioButton.Content = Localize("Lang.AppRules.Mode.Bypass");
+            AppRulesModeOnlySelectedRadioButton.Content = Localize("Lang.AppRules.Mode.OnlySelected");
+            AppRulesEditorAppListTitleText.Text = Localize("Lang.AppRules.AppList.Title");
+            AppRulesSearchTextBox.Watermark = Localize("Lang.AppRules.Search");
+            RefreshAppRulesEditorButton.Content = Localize("Lang.AppRules.RefreshApps");
+            AppRulesEditorNoAppsText.Text = Localize("Lang.AppRules.NoAppsFound");
+            CancelAppRulesEditorButton.Content = Localize("Lang.Button.Cancel");
+            SaveAppRulesEditorButton.Content = Localize("Lang.AppRules.Save");
             TunTitleText.Text = Localize("Lang.Window.Settings.TUN");
             TunDescriptionText.Text = Localize("Lang.Android.Settings.TunDescription");
             LogsAndDiagnosticsTitleText.Text = Localize("Lang.Android.Settings.LogsAndDiagnostics");
@@ -337,6 +386,7 @@ namespace InvisibleGorillaXRay.Android.Views
             SetAdvancedImportVisible(isShowingAdvancedImport);
             SetConfigImportMode(currentConfigImportMode);
             UpdateSubscriptionEmptyState();
+            RefreshAppRulesSummary();
         }
 
         private string Localize(string key)
@@ -431,7 +481,6 @@ namespace InvisibleGorillaXRay.Android.Views
             if (!isSettingsSectionInitialized)
             {
                 ProtocolSelector.ItemsSource = Enum.GetNames(typeof(Protocol));
-                discoveredAndroidApps = AndroidInstalledAppDiscovery.GetLaunchableApps().ToList();
                 isSettingsSectionInitialized = true;
             }
 
@@ -449,8 +498,7 @@ namespace InvisibleGorillaXRay.Android.Views
             DnsInput.Text = settings.GetDns();
             UdpEnabledToggle.IsChecked = settings.GetUdpEnabled();
             AnalyticsToggle.IsChecked = settings.GetSendingAnalyticsEnabled();
-            AppRulesEnabledToggle.IsChecked = settings.GetAppRulesMode() == AppRulesMode.BYPASS_SELECTED_APPS;
-            RenderAndroidAppRuleCards(GetSelectedBypassPackageSet(settings));
+            RefreshAppRulesSummary();
         }
 
         private void ReloadDiscoveredAndroidApps()
@@ -556,6 +604,487 @@ namespace InvisibleGorillaXRay.Android.Views
                 .Where(pair => pair.Value.IsChecked == true)
                 .Select(pair => pair.Key)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
+        private void RefreshAppRulesSummary()
+        {
+            UserSettings settings = settingsHandler.UserSettings;
+            string summary = BuildAppRulesSummary(settings);
+            string boundConfigText = string.IsNullOrWhiteSpace(settings.GetCurrentConfigPath())
+                ? Localize("Lang.AppRules.NoConfigSelected")
+                : LocalizeFormat("Lang.AppRules.BoundConfig", settings.GetCurrentConfigPath());
+
+            AppRulesSummaryText.Text = summary;
+            AppRulesConfigHintText.Text = boundConfigText;
+            CurrentConfigAppRulesSummaryText.Text = summary;
+        }
+
+        private string BuildAppRulesSummary(UserSettings settings)
+        {
+            AppRulesMode mode = settings.GetEffectiveAppRulesMode();
+            AppRuleTemplate template = settings.GetEffectiveAppRuleTemplate();
+            int selectedCount = settings.GetEffectiveEnabledAppRules().Count;
+            return LocalizeFormat(
+                "Lang.AppRules.Summary",
+                GetTemplateDisplayName(settings.GetBoundAppRuleTemplateId(), template),
+                LocalizeMode(mode),
+                selectedCount);
+        }
+
+        private string GetTemplateDisplayName(string templateId, AppRuleTemplate template)
+        {
+            if (string.IsNullOrWhiteSpace(templateId)
+                || string.Equals(templateId, AppRuleTemplate.DefaultTemplateId, StringComparison.OrdinalIgnoreCase))
+            {
+                return Localize("Lang.AppRules.Template.Default");
+            }
+
+            return string.IsNullOrWhiteSpace(template.Name)
+                ? Localize("Lang.AppRules.Template.Unnamed")
+                : template.Name;
+        }
+
+        private string LocalizeMode(AppRulesMode mode)
+        {
+            return mode switch
+            {
+                AppRulesMode.BYPASS_SELECTED_APPS => Localize("Lang.AppRules.Mode.Bypass"),
+                AppRulesMode.ONLY_SELECTED_APPS => Localize("Lang.AppRules.Mode.OnlySelected"),
+                _ => Localize("Lang.AppRules.Mode.AllApps")
+            };
+        }
+
+        private void OnOpenAppRulesEditorClick(object? sender, RoutedEventArgs e)
+        {
+            OpenAppRulesEditor();
+        }
+
+        private void OpenAppRulesEditor()
+        {
+            CaptureActiveAppRulesEditorTemplateState();
+
+            UserSettings settings = settingsHandler.UserSettings;
+            workingDefaultAppRuleTemplate = settings.GetAppRuleTemplateById(AppRuleTemplate.DefaultTemplateId);
+
+            workingAppRuleTemplates.Clear();
+            workingAppRuleTemplates.AddRange(settings.GetAppRuleTemplates());
+
+            workingAppRuleBindings.Clear();
+            workingAppRuleBindings.AddRange(settings.GetAppRuleTemplateBindings());
+
+            discoveredAndroidApps = AndroidInstalledAppDiscovery.GetLaunchableApps().ToList();
+            AppRulesEditorCurrentConfigText.Text = CurrentConfigNameText.Text;
+            AppRulesSearchTextBox.Text = string.Empty;
+
+            PopulateAppRulesTemplateSelector(settings.GetBoundAppRuleTemplateId());
+            AppRulesEditorOverlay.IsVisible = true;
+        }
+
+        private void CloseAppRulesEditor()
+        {
+            AppRulesEditorOverlay.IsVisible = false;
+            isApplyingAppRulesEditor = false;
+        }
+
+        private void PopulateAppRulesTemplateSelector(string preferredTemplateId)
+        {
+            List<TemplateComboItem> items = new();
+            items.Add(new TemplateComboItem
+            {
+                Id = AppRuleTemplate.DefaultTemplateId,
+                Name = Localize("Lang.AppRules.Template.Default")
+            });
+
+            items.AddRange(
+                workingAppRuleTemplates.Select(template => new TemplateComboItem
+                {
+                    Id = template.Id,
+                    Name = GetTemplateDisplayName(template.Id, template)
+                }));
+
+            AppRulesTemplateComboBox.ItemsSource = items;
+
+            TemplateComboItem selectedItem = items.FirstOrDefault(item =>
+                    string.Equals(item.Id, preferredTemplateId, StringComparison.OrdinalIgnoreCase))
+                ?? items[0];
+
+            isApplyingAppRulesEditor = true;
+            AppRulesTemplateComboBox.SelectedItem = selectedItem;
+            activeAppRulesTemplateId = selectedItem.Id;
+            ApplyTemplateToAppRulesEditor(GetActiveAppRulesTemplate());
+            isApplyingAppRulesEditor = false;
+        }
+
+        private void ApplyTemplateToAppRulesEditor(AppRuleTemplate template)
+        {
+            isApplyingAppRulesEditor = true;
+            try
+            {
+                AppRulesTemplateNameTextBox.Text = template.Name ?? string.Empty;
+                AppRulesTemplateNameTextBox.IsEnabled = !IsDefaultAppRulesTemplate(template.Id);
+                DeleteAppRulesTemplateButton.IsEnabled = !IsDefaultAppRulesTemplate(template.Id);
+
+                switch (template.Mode)
+                {
+                    case AppRulesMode.BYPASS_SELECTED_APPS:
+                        AppRulesModeBypassRadioButton.IsChecked = true;
+                        break;
+                    case AppRulesMode.ONLY_SELECTED_APPS:
+                        AppRulesModeOnlySelectedRadioButton.IsChecked = true;
+                        break;
+                    default:
+                        AppRulesModeAllAppsRadioButton.IsChecked = true;
+                        break;
+                }
+
+                RenderAppRulesEditorCards(template);
+            }
+            finally
+            {
+                isApplyingAppRulesEditor = false;
+            }
+        }
+
+        private void RenderAppRulesEditorCards(AppRuleTemplate template)
+        {
+            AppRulesEditorItemsHost.Children.Clear();
+            appRuleToggles.Clear();
+
+            string filter = AppRulesSearchTextBox.Text?.Trim() ?? string.Empty;
+            IEnumerable<AndroidInstalledAppInfo> filteredApps = discoveredAndroidApps;
+            if (!string.IsNullOrWhiteSpace(filter))
+            {
+                filteredApps = filteredApps.Where(app =>
+                    app.DisplayName.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                    || app.PackageName.Contains(filter, StringComparison.OrdinalIgnoreCase));
+            }
+
+            HashSet<string> selectedPackages = template.AppRules
+                .Where(rule => rule.Enabled && !string.IsNullOrWhiteSpace(rule.AppId))
+                .Select(rule => rule.AppId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            foreach (AndroidInstalledAppInfo app in filteredApps)
+            {
+                CheckBox toggle = new()
+                {
+                    IsChecked = selectedPackages.Contains(app.PackageName),
+                    VerticalAlignment = VerticalAlignment.Top,
+                    Margin = new Thickness(0, 2, 0, 0)
+                };
+
+                appRuleToggles[app.PackageName] = toggle;
+
+                StackPanel textPanel = new()
+                {
+                    Spacing = 2
+                };
+                textPanel.Children.Add(new TextBlock
+                {
+                    Text = app.DisplayName,
+                    Foreground = Brushes.White,
+                    FontWeight = FontWeight.SemiBold,
+                    TextWrapping = TextWrapping.Wrap
+                });
+
+                StringBuilder metaBuilder = new(app.PackageName);
+                if (app.IsSystemApp)
+                    metaBuilder.Append(" • ").Append(Localize("Lang.AppRules.SystemBadge"));
+
+                textPanel.Children.Add(new TextBlock
+                {
+                    Text = metaBuilder.ToString(),
+                    Foreground = GetBrushResource("TextMuted", Brushes.Gray),
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap
+                });
+
+                Grid root = new();
+                root.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+                root.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+
+                Grid.SetColumn(toggle, 0);
+                root.Children.Add(toggle);
+                Grid.SetColumn(textPanel, 1);
+                root.Children.Add(textPanel);
+
+                Border card = new()
+                {
+                    Padding = new Thickness(12, 10),
+                    Margin = new Thickness(0, 0, 0, 6),
+                    Background = GetBrushResource("SurfaceDark", Brushes.Transparent),
+                    BorderBrush = GetBrushResource("SurfaceBright", IdleMarkerBrush),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(10),
+                    Child = root
+                };
+
+                card.PointerPressed += (_, args) =>
+                {
+                    if (args.Source is Button or CheckBox)
+                        return;
+
+                    toggle.IsChecked = !(toggle.IsChecked ?? false);
+                };
+
+                AppRulesEditorItemsHost.Children.Add(card);
+            }
+
+            AppRulesEditorNoAppsText.IsVisible = AppRulesEditorItemsHost.Children.Count == 0;
+        }
+
+        private void CaptureActiveAppRulesEditorTemplateState()
+        {
+            if (isApplyingAppRulesEditor)
+                return;
+
+            AppRuleTemplate template = GetActiveAppRulesTemplate();
+            template.Mode = GetSelectedAppRulesEditorMode();
+            template.AppRules = BuildSelectedAppRulesForEditor(template);
+
+            if (!IsDefaultAppRulesTemplate(template.Id))
+                template.Name = AppRulesTemplateNameTextBox.Text?.Trim() ?? string.Empty;
+        }
+
+        private List<AppRule> BuildSelectedAppRulesForEditor(AppRuleTemplate template)
+        {
+            HashSet<string> selectedPackages = template.AppRules
+                .Where(rule => rule.Enabled && !string.IsNullOrWhiteSpace(rule.AppId))
+                .Select(rule => rule.AppId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            if (appRuleToggles.Count > 0)
+            {
+                foreach (string visiblePackageId in appRuleToggles.Keys)
+                    selectedPackages.Remove(visiblePackageId);
+
+                foreach (string checkedPackageId in appRuleToggles
+                             .Where(pair => pair.Value.IsChecked == true)
+                             .Select(pair => pair.Key))
+                {
+                    selectedPackages.Add(checkedPackageId);
+                }
+            }
+
+            List<AppRule> rules = discoveredAndroidApps
+                .Where(app => selectedPackages.Contains(app.PackageName))
+                .Select(app => new AppRule(
+                    appId: app.PackageName,
+                    displayName: app.DisplayName,
+                    iconRef: app.IconRef,
+                    enabled: true))
+                .ToList();
+
+            foreach (AppRule existingRule in template.AppRules)
+            {
+                if (!existingRule.Enabled || string.IsNullOrWhiteSpace(existingRule.AppId))
+                    continue;
+
+                if (!selectedPackages.Contains(existingRule.AppId))
+                    continue;
+
+                if (rules.Any(rule => string.Equals(rule.AppId, existingRule.AppId, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                rules.Add(existingRule.Clone());
+            }
+
+            return rules;
+        }
+
+        private AppRuleTemplate GetActiveAppRulesTemplate()
+        {
+            if (IsDefaultAppRulesTemplate(activeAppRulesTemplateId))
+                return workingDefaultAppRuleTemplate;
+
+            return workingAppRuleTemplates.FirstOrDefault(template =>
+                       string.Equals(template.Id, activeAppRulesTemplateId, StringComparison.OrdinalIgnoreCase))
+                ?? workingDefaultAppRuleTemplate;
+        }
+
+        private AppRulesMode GetSelectedAppRulesEditorMode()
+        {
+            if (AppRulesModeOnlySelectedRadioButton.IsChecked == true)
+                return AppRulesMode.ONLY_SELECTED_APPS;
+
+            if (AppRulesModeBypassRadioButton.IsChecked == true)
+                return AppRulesMode.BYPASS_SELECTED_APPS;
+
+            return AppRulesMode.ALL_APPS;
+        }
+
+        private bool IsDefaultAppRulesTemplate(string? templateId)
+        {
+            return string.IsNullOrWhiteSpace(templateId)
+                || string.Equals(templateId, AppRuleTemplate.DefaultTemplateId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeConfigPathKey(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return string.Empty;
+
+            try
+            {
+                return System.IO.Path.GetFullPath(path.Trim());
+            }
+            catch
+            {
+                return path.Trim();
+            }
+        }
+
+        private void OnAppRulesTemplateSelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (isApplyingAppRulesEditor)
+                return;
+
+            CaptureActiveAppRulesEditorTemplateState();
+            activeAppRulesTemplateId = (AppRulesTemplateComboBox.SelectedItem as TemplateComboItem)?.Id
+                ?? AppRuleTemplate.DefaultTemplateId;
+            ApplyTemplateToAppRulesEditor(GetActiveAppRulesTemplate());
+        }
+
+        private void OnAppRulesTemplateNameChanged(object? sender, TextChangedEventArgs e)
+        {
+            if (isApplyingAppRulesEditor || IsDefaultAppRulesTemplate(activeAppRulesTemplateId))
+                return;
+
+            CaptureActiveAppRulesEditorTemplateState();
+            GetActiveAppRulesTemplate().Name = AppRulesTemplateNameTextBox.Text?.Trim() ?? string.Empty;
+            PopulateAppRulesTemplateSelector(activeAppRulesTemplateId);
+        }
+
+        private void OnAppRulesModeChanged(object? sender, RoutedEventArgs e)
+        {
+            if (isApplyingAppRulesEditor)
+                return;
+
+            CaptureActiveAppRulesEditorTemplateState();
+        }
+
+        private void OnAppRulesSearchTextChanged(object? sender, TextChangedEventArgs e)
+        {
+            if (isApplyingAppRulesEditor)
+                return;
+
+            CaptureActiveAppRulesEditorTemplateState();
+            RenderAppRulesEditorCards(GetActiveAppRulesTemplate());
+        }
+
+        private void OnRefreshAppRulesEditorClick(object? sender, RoutedEventArgs e)
+        {
+            CaptureActiveAppRulesEditorTemplateState();
+            discoveredAndroidApps = AndroidInstalledAppDiscovery.GetLaunchableApps().ToList();
+            RenderAppRulesEditorCards(GetActiveAppRulesTemplate());
+            SetStatus(Localize("Lang.AppRules.AppsRefreshed"));
+        }
+
+        private void OnNewAppRulesTemplateClick(object? sender, RoutedEventArgs e)
+        {
+            CaptureActiveAppRulesEditorTemplateState();
+
+            AppRuleTemplate newTemplate = GetActiveAppRulesTemplate().Clone();
+            newTemplate.Id = Guid.NewGuid().ToString("N");
+            newTemplate.Name = LocalizeFormat("Lang.AppRules.Template.NewName", workingAppRuleTemplates.Count + 1);
+            workingAppRuleTemplates.Add(newTemplate);
+
+            PopulateAppRulesTemplateSelector(newTemplate.Id);
+        }
+
+        private void OnDeleteAppRulesTemplateClick(object? sender, RoutedEventArgs e)
+        {
+            if (IsDefaultAppRulesTemplate(activeAppRulesTemplateId))
+                return;
+
+            workingAppRuleTemplates.RemoveAll(template =>
+                string.Equals(template.Id, activeAppRulesTemplateId, StringComparison.OrdinalIgnoreCase));
+            activeAppRulesTemplateId = AppRuleTemplate.DefaultTemplateId;
+            PopulateAppRulesTemplateSelector(activeAppRulesTemplateId);
+        }
+
+        private void OnCancelAppRulesEditorClick(object? sender, RoutedEventArgs e)
+        {
+            CloseAppRulesEditor();
+        }
+
+        private void OnSaveAppRulesEditorClick(object? sender, RoutedEventArgs e)
+        {
+            CaptureActiveAppRulesEditorTemplateState();
+
+            UserSettings current = settingsHandler.UserSettings;
+            List<AppRuleTemplate> templates = workingAppRuleTemplates
+                .Select(template => template.Clone())
+                .Where(template => !string.IsNullOrWhiteSpace(template.Id))
+                .ToList();
+
+            HashSet<string> validTemplateIds = templates
+                .Select(template => template.Id)
+                .Append(AppRuleTemplate.DefaultTemplateId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            string normalizedCurrentConfigPath = NormalizeConfigPathKey(current.GetCurrentConfigPath());
+            List<AppRuleTemplateBinding> bindings = workingAppRuleBindings
+                .Select(binding => binding.Clone())
+                .Where(binding => !string.Equals(
+                    NormalizeConfigPathKey(binding.ConfigPath),
+                    normalizedCurrentConfigPath,
+                    StringComparison.OrdinalIgnoreCase))
+                .Where(binding => validTemplateIds.Contains(binding.TemplateId))
+                .ToList();
+
+            if (!string.IsNullOrWhiteSpace(normalizedCurrentConfigPath))
+            {
+                bindings.Add(new AppRuleTemplateBinding(
+                    configPath: normalizedCurrentConfigPath,
+                    templateId: activeAppRulesTemplateId));
+            }
+
+            AppRulesMode previousMode = current.GetEffectiveAppRulesMode();
+            HashSet<string> previousIds = current.GetEffectiveEnabledAppRules()
+                .Select(rule => rule.AppId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> nextIds = GetActiveAppRulesTemplate().AppRules
+                .Where(rule => rule.Enabled && !string.IsNullOrWhiteSpace(rule.AppId))
+                .Select(rule => rule.AppId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            bool shouldRestartVpn = IsConnectionActive()
+                && (previousMode != GetActiveAppRulesTemplate().Mode || !previousIds.SetEquals(nextIds));
+
+            settingsHandler.UpdateUserSettings(new UserSettings
+            {
+                Language = current.GetLanguage(),
+                Mode = current.GetMode(),
+                Protocol = current.GetProtocol(),
+                LogLevel = current.GetLogLevel(),
+                IsSystemProxyUse = false,
+                IsUdpEnable = current.GetUdpEnabled(),
+                IsRunningAtStartup = current.GetRunningAtStartupEnabled(),
+                IsStartHidden = current.GetStartHiddenEnabled(),
+                IsAutoConnect = current.GetAutoConnectEnabled(),
+                IsSendingAnalytics = current.GetSendingAnalyticsEnabled(),
+                ProxyPort = current.GetProxyPort(),
+                TunPort = current.GetTunPort(),
+                TestPort = current.GetTestPort(),
+                TunIp = current.GetTunIp(),
+                Dns = current.GetDns(),
+                LogPath = current.GetLogPath(),
+                AppRulesMode = workingDefaultAppRuleTemplate.Mode,
+                AppRules = workingDefaultAppRuleTemplate.AppRules.Select(rule => rule.Clone()).ToList(),
+                AppRuleTemplates = templates,
+                AppRuleTemplateBindings = bindings
+            });
+
+            RefreshAppRulesSummary();
+            UpdateRuntimeSummary();
+            CloseAppRulesEditor();
+
+            SetStatus(shouldRestartVpn
+                ? Localize("Lang.AppRules.RestartingVpn")
+                : Localize("Lang.Android.Status.SettingsSaved"));
+
+            if (shouldRestartVpn)
+                _ = RestartConnectionAfterSettingsChangeAsync();
         }
 
         private void RefreshConfigs()
@@ -877,25 +1406,18 @@ namespace InvisibleGorillaXRay.Android.Views
                 return false;
 
             UserSettings current = settingsHandler.UserSettings;
-            List<AppRule> appRules = BuildSelectedAndroidAppRules();
-            AppRulesMode appRulesMode = AppRulesEnabledToggle.IsChecked == true
-                ? AppRulesMode.BYPASS_SELECTED_APPS
-                : AppRulesMode.DISABLED;
-            bool appRulesChanged = current.GetAppRulesMode() != appRulesMode
-                || !AreAppRuleSetsEquivalent(current.GetAppRules(), appRules);
-            bool shouldRestartVpn = appRulesChanged && IsConnectionActive();
 
             settingsHandler.UpdateUserSettings(new UserSettings
             {
                 Language = current.GetLanguage(),
-                Mode = Mode.TUN,
-                Protocol = Protocol.SOCKS,
+                Mode = current.GetMode(),
+                Protocol = current.GetProtocol(),
                 LogLevel = current.GetLogLevel(),
                 IsSystemProxyUse = false,
                 IsUdpEnable = UdpEnabledToggle.IsChecked ?? current.GetUdpEnabled(),
-                IsRunningAtStartup = false,
-                IsStartHidden = false,
-                IsAutoConnect = false,
+                IsRunningAtStartup = current.GetRunningAtStartupEnabled(),
+                IsStartHidden = current.GetStartHiddenEnabled(),
+                IsAutoConnect = current.GetAutoConnectEnabled(),
                 IsSendingAnalytics = AnalyticsToggle.IsChecked ?? current.GetSendingAnalyticsEnabled(),
                 ProxyPort = proxyPort,
                 TunPort = current.GetTunPort(),
@@ -903,20 +1425,18 @@ namespace InvisibleGorillaXRay.Android.Views
                 TunIp = current.GetTunIp(),
                 Dns = string.IsNullOrWhiteSpace(DnsInput.Text) ? current.GetDns() : DnsInput.Text.Trim(),
                 LogPath = current.GetLogPath(),
-                AppRulesMode = appRulesMode,
-                AppRules = appRules
+                AppRulesMode = current.GetAppRulesMode(),
+                AppRules = current.GetAppRules(),
+                AppRuleTemplates = current.GetAppRuleTemplates(),
+                AppRuleTemplateBindings = current.GetAppRuleTemplateBindings()
             });
 
             UpdateCurrentConfigSummary();
             UpdateRuntimeSummary();
+            RefreshAppRulesSummary();
 
             if (showSuccessMessage)
-                SetStatus(shouldRestartVpn
-                    ? Localize("Lang.AppRules.RestartingVpn")
-                    : Localize("Lang.Android.Status.SettingsSaved"));
-
-            if (shouldRestartVpn)
-                _ = RestartConnectionAfterSettingsChangeAsync();
+                SetStatus(Localize("Lang.Android.Status.SettingsSaved"));
 
             return true;
         }
@@ -1011,11 +1531,14 @@ namespace InvisibleGorillaXRay.Android.Views
         private void UpdateCurrentConfigSummary()
         {
             Config? currentConfig = configHandler.GetCurrentConfig();
-            CurrentConfigNameText.Text = currentConfig == null
+            string currentConfigText = currentConfig == null
                 ? Localize("Lang.Message.NoServerConfiguration")
                 : currentConfig.Group == GroupType.SUBSCRIPTION
                     ? $"{Localize("Lang.Window.Server.Subscriptions")} / {currentConfig.Name}"
                     : currentConfig.Name;
+            CurrentConfigNameText.Text = currentConfigText;
+            AppRulesEditorCurrentConfigText.Text = currentConfigText;
+            RefreshAppRulesSummary();
         }
 
         private void UpdateRuntimeSummary()
@@ -1040,9 +1563,7 @@ namespace InvisibleGorillaXRay.Android.Views
             builder.AppendLine($"{Localize("Lang.Android.Runtime.Udp")}: {(settings.GetUdpEnabled() ? Localize("Lang.Android.Runtime.Enabled") : Localize("Lang.Android.Runtime.Disabled"))}");
             builder.AppendLine(
                 $"{Localize("Lang.AppRules.Title")}: " +
-                $"{(settings.GetAppRulesMode() == AppRulesMode.BYPASS_SELECTED_APPS
-                    ? string.Format(Localize("Lang.AppRules.RuntimeEnabled"), settings.GetEnabledAppRules().Count)
-                    : Localize("Lang.AppRules.RuntimeDisabled"))}");
+                $"{BuildAppRulesSummary(settings)}");
             builder.Append(Localize("Lang.Android.Runtime.SystemProxyNotice"));
 
             if (!string.IsNullOrWhiteSpace(broadcastMessage))

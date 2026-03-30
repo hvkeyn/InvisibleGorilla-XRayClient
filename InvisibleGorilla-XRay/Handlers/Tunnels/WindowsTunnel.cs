@@ -93,7 +93,7 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
                         $"-address={address} " +
                         $"-server={server} " + 
                         $"-dns={dns}" +
-                        BuildBypassAppsCommandSuffix()
+                        BuildAppRulesCommandSuffix()
                 );
                 DiagnosticLog.Write("WindowsTunnel", "Sending enable command to TUN service");
                 
@@ -214,25 +214,29 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
 
         private Status ExecuteCommand(string command) => executeCommand.Invoke(command);
 
-        private static string BuildBypassAppsCommandSuffix()
+        private static string BuildAppRulesCommandSuffix()
         {
             SettingsHandler settingsHandler = new();
             UserSettings settings = settingsHandler.UserSettings;
-            if (settings.GetAppRulesMode() != AppRulesMode.BYPASS_SELECTED_APPS)
-                return string.Empty;
+            AppRulesMode mode = settings.GetEffectiveAppRulesMode();
 
-            string[] appPaths = settings.GetEnabledAppRules()
+            string[] appPaths = settings.GetEffectiveEnabledAppRules()
                 .Select(rule => rule.AppId?.Trim())
                 .Where(appId => !string.IsNullOrWhiteSpace(appId) && System.IO.File.Exists(appId))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray()!;
 
-            if (appPaths.Length == 0)
-                return string.Empty;
+            StringBuilder payloadBuilder = new();
+            payloadBuilder.Append("MODE=").Append(mode);
 
-            string payload = Convert.ToBase64String(Encoding.UTF8.GetBytes(string.Join('\n', appPaths)));
-            DiagnosticLog.Write("WindowsTunnel", $"Passing bypass rules payload with {appPaths.Length} apps");
-            return $" -bypassApps={payload}";
+            foreach (string appPath in appPaths)
+                payloadBuilder.Append('\n').Append(appPath);
+
+            string payload = Convert.ToBase64String(Encoding.UTF8.GetBytes(payloadBuilder.ToString()));
+            DiagnosticLog.Write(
+                "WindowsTunnel",
+                $"Passing app rules payload with mode={mode} and {appPaths.Length} apps");
+            return $" -appRules={payload}";
         }
     }
 }

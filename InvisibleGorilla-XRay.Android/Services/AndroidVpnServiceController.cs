@@ -14,7 +14,8 @@ namespace InvisibleGorillaXRay.Android.Services
         public string TunAddress { get; init; } = string.Empty;
         public string Dns { get; init; } = string.Empty;
         public string SessionName { get; init; } = "Invisible Gorilla XRay";
-        public IReadOnlyList<string> BypassPackages { get; init; } = Array.Empty<string>();
+        public AppRulesMode AppRulesMode { get; init; } = AppRulesMode.ALL_APPS;
+        public IReadOnlyList<string> AppPackages { get; init; } = Array.Empty<string>();
     }
 
     internal static class AndroidVpnServiceController

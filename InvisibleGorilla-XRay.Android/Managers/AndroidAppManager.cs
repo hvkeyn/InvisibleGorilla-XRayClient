@@ -67,7 +67,9 @@ namespace InvisibleGorillaXRay.Android.Managers
                 Dns = settingsHandler.UserSettings.GetDns(),
                 LogPath = settingsHandler.UserSettings.GetLogPath(),
                 AppRulesMode = settingsHandler.UserSettings.GetAppRulesMode(),
-                AppRules = settingsHandler.UserSettings.GetAppRules()
+                AppRules = settingsHandler.UserSettings.GetAppRules(),
+                AppRuleTemplates = settingsHandler.UserSettings.GetAppRuleTemplates(),
+                AppRuleTemplateBindings = settingsHandler.UserSettings.GetAppRuleTemplateBindings()
             });
         }
     }

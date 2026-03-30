@@ -90,8 +90,10 @@ namespace InvisibleGorillaXRay.Factories
                 getDns: settingsHandler.UserSettings.GetDns,
                 getLogLevel: settingsHandler.UserSettings.GetLogLevel,
                 getLogPath: settingsHandler.UserSettings.GetLogPath,
+                getUserSettings: () => settingsHandler.UserSettings,
                 getAppRulesMode: settingsHandler.UserSettings.GetAppRulesMode,
                 getAppRules: settingsHandler.UserSettings.GetAppRules,
+                openAppRulesWindow: CreateAppRulesWindow,
                 openPolicyWindow: CreatePolicyWindow,
                 onUpdateUserSettings: UpdateUserSettings
             );
@@ -175,6 +177,8 @@ namespace InvisibleGorillaXRay.Factories
             ServerWindow serverWindow = new ServerWindow();
             serverWindow.Setup(
                 getCurrentConfigPath: settingsHandler.UserSettings.GetCurrentConfigPath,
+                getUserSettings: () => settingsHandler.UserSettings,
+                openAppRulesWindow: CreateAppRulesWindow,
                 isCurrentPathEqualRootConfigPath: configHandler.IsCurrentPathEqualRootConfigPath,
                 getAllGeneralConfigs: configHandler.GetAllGeneralConfigs,
                 getAllSubscriptionConfigs: configHandler.GetAllSubscriptionConfigs,
@@ -204,6 +208,35 @@ namespace InvisibleGorillaXRay.Factories
                 settingsHandler.UpdateCurrentConfigPath(path);
                 mainWindow.UpdateUI();
                 mainWindow.TryRerun();
+            }
+        }
+
+        public AppRulesWindow CreateAppRulesWindow()
+        {
+            SettingsHandler settingsHandler = handlersManager.GetHandler<SettingsHandler>();
+            NotifyHandler notifyHandler = handlersManager.GetHandler<NotifyHandler>();
+            LocalizationHandler localizationHandler = handlersManager.GetHandler<LocalizationHandler>();
+
+            AppRulesWindow appRulesWindow = new AppRulesWindow();
+            appRulesWindow.Setup(
+                getUserSettings: () => settingsHandler.UserSettings,
+                onUpdateUserSettings: UpdateUserSettings
+            );
+
+            SetupLocalizedWindowTitle(
+                window: appRulesWindow,
+                term: "Lang.AppRules.Title"
+            );
+
+            return appRulesWindow;
+
+            void UpdateUserSettings(UserSettings userSettings)
+            {
+                settingsHandler.UpdateUserSettings(userSettings);
+                localizationHandler.TryApplyCurrentLanguage();
+                notifyHandler.InitializeNotifyIcon();
+                notifyHandler.CheckModeItem(userSettings.GetMode());
+                GetMainWindow().TryDisableModeAndRerun();
             }
         }
 

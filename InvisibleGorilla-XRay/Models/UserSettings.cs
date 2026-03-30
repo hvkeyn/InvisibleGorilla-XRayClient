@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -67,11 +68,17 @@ namespace InvisibleGorillaXRay.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue("./Logs")]
         public string LogPath;
 
-        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(AppRulesMode.DISABLED)]
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(AppRulesMode.ALL_APPS)]
         public AppRulesMode AppRulesMode;
 
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
         public List<AppRule> AppRules;
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public List<AppRuleTemplate> AppRuleTemplates;
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public List<AppRuleTemplateBinding> AppRuleTemplateBindings;
 
         public UserSettings()
         {
@@ -93,8 +100,10 @@ namespace InvisibleGorillaXRay.Models
             this.Dns = "8.8.8.8";
             this.LogLevel = LogLevel.NONE;
             this.LogPath = "./Logs";
-            this.AppRulesMode = AppRulesMode.DISABLED;
+            this.AppRulesMode = AppRulesMode.ALL_APPS;
             this.AppRules = new List<AppRule>();
+            this.AppRuleTemplates = new List<AppRuleTemplate>();
+            this.AppRuleTemplateBindings = new List<AppRuleTemplateBinding>();
         }
 
         public UserSettings(
@@ -114,8 +123,10 @@ namespace InvisibleGorillaXRay.Models
             string tunIp,
             string dns,
             string logPath,
-            AppRulesMode appRulesMode = AppRulesMode.DISABLED,
-            List<AppRule>? appRules = null
+            AppRulesMode appRulesMode = AppRulesMode.ALL_APPS,
+            List<AppRule>? appRules = null,
+            List<AppRuleTemplate>? appRuleTemplates = null,
+            List<AppRuleTemplateBinding>? appRuleTemplateBindings = null
         )
         {
             this.Language = language;
@@ -134,8 +145,10 @@ namespace InvisibleGorillaXRay.Models
             this.TunIp = tunIp;
             this.Dns = dns;
             this.LogPath = logPath;
-            this.AppRulesMode = appRulesMode;
+            this.AppRulesMode = NormalizeAppRulesMode(appRulesMode);
             this.AppRules = NormalizeAppRules(appRules);
+            this.AppRuleTemplates = NormalizeAppRuleTemplates(appRuleTemplates);
+            this.AppRuleTemplateBindings = NormalizeTemplateBindings(appRuleTemplateBindings);
         }
 
         public string GetClientId() => ClientId;
@@ -174,11 +187,83 @@ namespace InvisibleGorillaXRay.Models
 
         public string GetLogPath() => LogPath;
 
-        public AppRulesMode GetAppRulesMode() => AppRulesMode;
+        public AppRulesMode GetAppRulesMode() => NormalizeAppRulesMode(AppRulesMode);
 
         public List<AppRule> GetAppRules() => NormalizeAppRules(AppRules);
 
-        public List<AppRule> GetEnabledAppRules() => NormalizeAppRules(AppRules).Where(rule => rule.Enabled).ToList();
+        public List<AppRule> GetEnabledAppRules() => GetAppRules().Where(rule => rule.Enabled).ToList();
+
+        public List<AppRuleTemplate> GetAppRuleTemplates() => NormalizeAppRuleTemplates(AppRuleTemplates);
+
+        public List<AppRuleTemplateBinding> GetAppRuleTemplateBindings() => NormalizeTemplateBindings(AppRuleTemplateBindings);
+
+        public List<AppRuleTemplate> GetAvailableAppRuleTemplates()
+        {
+            List<AppRuleTemplate> templates = new() { CreateDefaultAppRuleTemplate() };
+            templates.AddRange(
+                GetAppRuleTemplates()
+                    .Where(template => !string.Equals(
+                        template.Id,
+                        AppRuleTemplate.DefaultTemplateId,
+                        StringComparison.OrdinalIgnoreCase))
+                    .Select(template => template.Clone()));
+            return templates;
+        }
+
+        public string GetBoundAppRuleTemplateId(string? configPath = null)
+        {
+            string normalizedConfigPath = NormalizeConfigPath(configPath ?? CurrentConfigPath);
+            if (string.IsNullOrWhiteSpace(normalizedConfigPath))
+                return AppRuleTemplate.DefaultTemplateId;
+
+            AppRuleTemplateBinding? binding = GetAppRuleTemplateBindings()
+                .LastOrDefault(candidate => string.Equals(
+                    candidate.ConfigPath,
+                    normalizedConfigPath,
+                    StringComparison.OrdinalIgnoreCase));
+
+            return binding?.TemplateId ?? AppRuleTemplate.DefaultTemplateId;
+        }
+
+        public AppRuleTemplate GetAppRuleTemplateById(string? templateId)
+        {
+            string normalizedTemplateId = NormalizeTemplateId(templateId);
+            if (string.IsNullOrWhiteSpace(normalizedTemplateId)
+                || string.Equals(normalizedTemplateId, AppRuleTemplate.DefaultTemplateId, StringComparison.OrdinalIgnoreCase))
+            {
+                return CreateDefaultAppRuleTemplate();
+            }
+
+            AppRuleTemplate? template = GetAppRuleTemplates()
+                .LastOrDefault(candidate => string.Equals(
+                    candidate.Id,
+                    normalizedTemplateId,
+                    StringComparison.OrdinalIgnoreCase));
+
+            return template?.Clone() ?? CreateDefaultAppRuleTemplate();
+        }
+
+        public AppRuleTemplate GetEffectiveAppRuleTemplate(string? configPath = null)
+        {
+            return GetAppRuleTemplateById(GetBoundAppRuleTemplateId(configPath));
+        }
+
+        public AppRulesMode GetEffectiveAppRulesMode(string? configPath = null)
+        {
+            return NormalizeAppRulesMode(GetEffectiveAppRuleTemplate(configPath).Mode);
+        }
+
+        public List<AppRule> GetEffectiveAppRules(string? configPath = null)
+        {
+            return NormalizeAppRules(GetEffectiveAppRuleTemplate(configPath).AppRules);
+        }
+
+        public List<AppRule> GetEffectiveEnabledAppRules(string? configPath = null)
+        {
+            return GetEffectiveAppRules(configPath)
+                .Where(rule => rule.Enabled)
+                .ToList();
+        }
 
         private static List<AppRule> NormalizeAppRules(List<AppRule>? appRules)
         {
@@ -189,6 +274,87 @@ namespace InvisibleGorillaXRay.Models
                 .Where(rule => rule != null && !string.IsNullOrWhiteSpace(rule.AppId))
                 .Select(rule => rule.Clone())
                 .ToList();
+        }
+
+        private static List<AppRuleTemplate> NormalizeAppRuleTemplates(List<AppRuleTemplate>? templates)
+        {
+            if (templates == null)
+                return new List<AppRuleTemplate>();
+
+            return templates
+                .Where(template => template != null && !string.IsNullOrWhiteSpace(template.Id))
+                .Select(template =>
+                {
+                    AppRuleTemplate clone = template.Clone();
+                    clone.Id = NormalizeTemplateId(clone.Id);
+                    clone.Mode = NormalizeAppRulesMode(clone.Mode);
+                    clone.AppRules = NormalizeAppRules(clone.AppRules);
+                    clone.Name = clone.Name?.Trim() ?? string.Empty;
+                    return clone;
+                })
+                .Where(template => !string.IsNullOrWhiteSpace(template.Id)
+                    && !string.Equals(template.Id, AppRuleTemplate.DefaultTemplateId, StringComparison.OrdinalIgnoreCase))
+                .GroupBy(template => template.Id, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.Last().Clone())
+                .ToList();
+        }
+
+        private static List<AppRuleTemplateBinding> NormalizeTemplateBindings(List<AppRuleTemplateBinding>? bindings)
+        {
+            if (bindings == null)
+                return new List<AppRuleTemplateBinding>();
+
+            return bindings
+                .Where(binding => binding != null)
+                .Select(binding => new AppRuleTemplateBinding(
+                    configPath: NormalizeConfigPath(binding.ConfigPath),
+                    templateId: NormalizeTemplateId(binding.TemplateId)))
+                .Where(binding => !string.IsNullOrWhiteSpace(binding.ConfigPath)
+                    && !string.IsNullOrWhiteSpace(binding.TemplateId))
+                .GroupBy(binding => binding.ConfigPath, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.Last().Clone())
+                .ToList();
+        }
+
+        private AppRuleTemplate CreateDefaultAppRuleTemplate()
+        {
+            return new AppRuleTemplate(
+                id: AppRuleTemplate.DefaultTemplateId,
+                name: string.Empty,
+                mode: NormalizeAppRulesMode(AppRulesMode),
+                appRules: NormalizeAppRules(AppRules));
+        }
+
+        private static string NormalizeTemplateId(string? templateId)
+        {
+            return string.IsNullOrWhiteSpace(templateId)
+                ? string.Empty
+                : templateId.Trim();
+        }
+
+        private static string NormalizeConfigPath(string? configPath)
+        {
+            if (string.IsNullOrWhiteSpace(configPath))
+                return string.Empty;
+
+            try
+            {
+                return System.IO.Path.GetFullPath(configPath.Trim());
+            }
+            catch
+            {
+                return configPath.Trim();
+            }
+        }
+
+        private static AppRulesMode NormalizeAppRulesMode(AppRulesMode mode)
+        {
+            return mode switch
+            {
+                AppRulesMode.BYPASS_SELECTED_APPS => AppRulesMode.BYPASS_SELECTED_APPS,
+                AppRulesMode.ONLY_SELECTED_APPS => AppRulesMode.ONLY_SELECTED_APPS,
+                _ => AppRulesMode.ALL_APPS
+            };
         }
     }
 }

@@ -22,6 +22,8 @@ namespace InvisibleGorillaXRay.Android.Handlers.Tunnels
                 "AndroidTunnel",
                 $"TUN mode requested for proxy={ip}:{port}, address={address}, server={server}, dns={dns}");
 
+            (AppRulesMode appRulesMode, string[] appPackages) = GetAppRulePackages();
+
             Status startStatus = AndroidVpnServiceController.Start(new AndroidVpnStartOptions
             {
                 ProxyPort = port,
@@ -29,7 +31,8 @@ namespace InvisibleGorillaXRay.Android.Handlers.Tunnels
                 TunAddress = address,
                 Dns = dns,
                 SessionName = "Invisible Gorilla XRay",
-                BypassPackages = GetBypassPackages()
+                AppRulesMode = appRulesMode,
+                AppPackages = appPackages
             });
 
             if (startStatus.Code == Code.ERROR)
@@ -72,18 +75,21 @@ namespace InvisibleGorillaXRay.Android.Handlers.Tunnels
             AndroidVpnServiceController.Stop();
         }
 
-        private static string[] GetBypassPackages()
+        private static (AppRulesMode Mode, string[] Packages) GetAppRulePackages()
         {
             SettingsHandler settingsHandler = new(() => new AndroidStartup());
             UserSettings settings = settingsHandler.UserSettings;
-            if (settings.GetAppRulesMode() != AppRulesMode.BYPASS_SELECTED_APPS)
-                return Array.Empty<string>();
+            AppRulesMode mode = settings.GetEffectiveAppRulesMode();
+            if (mode == AppRulesMode.ALL_APPS)
+                return (mode, Array.Empty<string>());
 
-            return settings.GetEnabledAppRules()
+            string[] packages = settings.GetEffectiveEnabledAppRules()
                 .Select(rule => rule.AppId?.Trim())
                 .Where(appId => !string.IsNullOrWhiteSpace(appId))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray()!;
+
+            return (mode, packages);
         }
     }
 }

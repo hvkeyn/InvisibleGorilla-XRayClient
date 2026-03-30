@@ -6,7 +6,7 @@ struct TransparentProxyBridgeConfig: Decodable {
     let socksPort: Int
     let tunnelAddress: String
     let dns: String
-    let excludedBundleIdentifiers: [String]
+    let bundleIdentifiers: [String]
     let generatedAtUtc: Date
 }
 
@@ -18,9 +18,13 @@ enum TransparentProxyConfigurator {
         let config = try decoder.decode(TransparentProxyBridgeConfig.self, from: data)
 
         // TODO:
+        // TODO:
         // 1. Discover installed applications on macOS.
-        // 2. Build NEAppRule include-list = all known bundle ids minus excludedBundleIdentifiers.
+        // 2. Map config.mode to the right NEAppRule behavior:
+        //    - ALL_APPS => no per-app filtering.
+        //    - BYPASS_SELECTED_APPS => include-list = all known bundle ids minus bundleIdentifiers.
+        //    - ONLY_SELECTED_APPS => include-list = bundleIdentifiers.
         // 3. Save/update a NETransparentProxyManager profile bound to the signed provider target.
-        print("Prepared transparent proxy scaffold for \(config.excludedBundleIdentifiers.count) excluded apps")
+        print("Prepared transparent proxy scaffold for mode \(config.mode) with \(config.bundleIdentifiers.count) bundle ids")
     }
 }
