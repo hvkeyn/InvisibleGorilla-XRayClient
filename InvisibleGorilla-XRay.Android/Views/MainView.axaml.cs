@@ -16,6 +16,7 @@ using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Input;
 using Avalonia.Layout;
+using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -247,9 +248,9 @@ namespace InvisibleGorillaXRay.Android.Views
         private TextBlock AppRulesEditorTemplateNameLabelText => GetRequiredControl<TextBlock>("AppRulesEditorTemplateNameLabelTextBlock");
         private TextBlock AppRulesEditorModeTitleText => GetRequiredControl<TextBlock>("AppRulesEditorModeTitleTextBlock");
         private TextBlock AppRulesEditorModeDescriptionText => GetRequiredControl<TextBlock>("AppRulesEditorModeDescriptionTextBlock");
-        private TextBlock AppRulesEditorAppListTitleText => GetRequiredControl<TextBlock>("AppRulesEditorAppListTitleTextBlock");
-        private StackPanel AppRulesEditorItemsHost => GetRequiredControl<StackPanel>("AppRulesEditorItemsPanel");
-        private TextBlock AppRulesEditorNoAppsText => GetRequiredControl<TextBlock>("AppRulesEditorNoAppsTextBlock");
+        private TextBlock AppRulesEditorSelectedCountText => GetRequiredControl<TextBlock>("AppRulesEditorSelectedCountTextBlock");
+        private Button OpenAppPickerActionButton => GetRequiredControl<Button>("OpenAppPickerButton");
+        private TextBlock OpenAppPickerButtonText => GetRequiredControl<TextBlock>("OpenAppPickerButtonTextBlock");
         private ComboBox AppRulesTemplateSelector => GetRequiredControl<ComboBox>("AppRulesTemplateComboBox");
         private Button NewAppRulesTemplateActionButton => GetRequiredControl<Button>("NewAppRulesTemplateButton");
         private Button DeleteAppRulesTemplateActionButton => GetRequiredControl<Button>("DeleteAppRulesTemplateButton");
@@ -257,10 +258,15 @@ namespace InvisibleGorillaXRay.Android.Views
         private RadioButton AppRulesModeAllAppsOption => GetRequiredControl<RadioButton>("AppRulesModeAllAppsRadioButton");
         private RadioButton AppRulesModeBypassOption => GetRequiredControl<RadioButton>("AppRulesModeBypassRadioButton");
         private RadioButton AppRulesModeOnlySelectedOption => GetRequiredControl<RadioButton>("AppRulesModeOnlySelectedRadioButton");
-        private TextBox AppRulesSearchInput => GetRequiredControl<TextBox>("AppRulesSearchTextBox");
-        private Button RefreshAppRulesEditorActionButton => GetRequiredControl<Button>("RefreshAppRulesEditorButton");
         private Button CancelAppRulesEditorActionButton => GetRequiredControl<Button>("CancelAppRulesEditorButton");
         private Button SaveAppRulesEditorActionButton => GetRequiredControl<Button>("SaveAppRulesEditorButton");
+        private Border AppPickerOverlay => GetRequiredControl<Border>("AppPickerOverlayBorder");
+        private TextBlock AppPickerTitleText => GetRequiredControl<TextBlock>("AppPickerTitleTextBlock");
+        private TextBox AppPickerSearchInput => GetRequiredControl<TextBox>("AppPickerSearchTextBox");
+        private StackPanel AppPickerItemsHost => GetRequiredControl<StackPanel>("AppPickerItemsPanel");
+        private TextBlock AppPickerLoadingText => GetRequiredControl<TextBlock>("AppPickerLoadingTextBlock");
+        private TextBlock AppPickerNoAppsText => GetRequiredControl<TextBlock>("AppPickerNoAppsTextBlock");
+        private TextBlock AppPickerDoneButtonText => GetRequiredControl<TextBlock>("AppPickerDoneButtonTextBlock");
         private TextBox ConfigLinkInput => GetRequiredControl<TextBox>("ConfigLinkTextBox");
         private TextBox SubscriptionRemarkInput => GetRequiredControl<TextBox>("SubscriptionRemarkTextBox");
         private TextBox SubscriptionLinkInput => GetRequiredControl<TextBox>("SubscriptionLinkTextBox");
@@ -383,12 +389,14 @@ namespace InvisibleGorillaXRay.Android.Views
             AppRulesModeAllAppsOption.Content = Localize("Lang.AppRules.Mode.AllApps");
             AppRulesModeBypassOption.Content = Localize("Lang.AppRules.Mode.Bypass");
             AppRulesModeOnlySelectedOption.Content = Localize("Lang.AppRules.Mode.OnlySelected");
-            AppRulesEditorAppListTitleText.Text = Localize("Lang.AppRules.AppList.Title");
-            AppRulesSearchInput.Watermark = Localize("Lang.AppRules.Search");
-            RefreshAppRulesEditorActionButton.Content = Localize("Lang.AppRules.RefreshApps");
-            AppRulesEditorNoAppsText.Text = Localize("Lang.AppRules.NoAppsFound");
+            OpenAppPickerButtonText.Text = Localize("Lang.AppRules.SelectApps");
             CancelAppRulesEditorActionButton.Content = Localize("Lang.Button.Cancel");
             SaveAppRulesEditorActionButton.Content = Localize("Lang.AppRules.Save");
+            AppPickerTitleText.Text = Localize("Lang.AppRules.SelectApps");
+            AppPickerSearchInput.Watermark = Localize("Lang.AppRules.Search");
+            AppPickerLoadingText.Text = Localize("Lang.AppRules.Loading");
+            AppPickerNoAppsText.Text = Localize("Lang.AppRules.NoAppsFound");
+            AppPickerDoneButtonText.Text = Localize("Lang.AppRules.Done");
             TunTitleText.Text = Localize("Lang.Window.Settings.TUN");
             TunDescriptionText.Text = Localize("Lang.Android.Settings.TunDescription");
             LogsAndDiagnosticsTitleText.Text = Localize("Lang.Android.Settings.LogsAndDiagnostics");
@@ -691,9 +699,7 @@ namespace InvisibleGorillaXRay.Android.Views
             workingAppRuleBindings.Clear();
             workingAppRuleBindings.AddRange(settings.GetAppRuleTemplateBindings());
 
-            discoveredAndroidApps = AndroidInstalledAppDiscovery.GetLaunchableApps().ToList();
             AppRulesEditorCurrentConfigText.Text = CurrentConfigNameText.Text;
-            AppRulesSearchInput.Text = string.Empty;
 
             PopulateAppRulesTemplateSelector(settings.GetBoundAppRuleTemplateId());
             AppRulesEditorOverlay.IsVisible = true;
@@ -701,8 +707,100 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void CloseAppRulesEditor()
         {
+            CloseAppPicker();
             AppRulesEditorOverlay.IsVisible = false;
             isApplyingAppRulesEditor = false;
+        }
+
+        private async void OnOpenAppPickerClick(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                CaptureActiveAppRulesEditorTemplateState();
+                AppPickerSearchInput.Text = string.Empty;
+                AppPickerOverlay.IsVisible = true;
+
+                if (discoveredAndroidApps == null || discoveredAndroidApps.Count == 0)
+                {
+                    AppPickerLoadingText.IsVisible = true;
+                    AppPickerItemsHost.Children.Clear();
+                    AppPickerNoAppsText.IsVisible = false;
+
+                    List<AndroidInstalledAppInfo> apps = await Task.Run(() =>
+                        AndroidInstalledAppDiscovery.GetLaunchableApps().ToList());
+
+                    discoveredAndroidApps = apps;
+                    AppPickerLoadingText.IsVisible = false;
+                }
+
+                RenderAppPickerCards(GetActiveAppRulesTemplate());
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.OpenAppPicker", ex);
+                SetStatus(Localize("Lang.AppRules.LoadFailed"));
+                AppPickerLoadingText.IsVisible = false;
+            }
+        }
+
+        private void CloseAppPicker()
+        {
+            AppPickerOverlay.IsVisible = false;
+        }
+
+        private void OnAppPickerBackClick(object? sender, RoutedEventArgs e)
+        {
+            CaptureActiveAppRulesEditorTemplateState();
+            UpdateEditorSelectedCount();
+            CloseAppPicker();
+        }
+
+        private void OnAppPickerDoneClick(object? sender, RoutedEventArgs e)
+        {
+            CaptureActiveAppRulesEditorTemplateState();
+            UpdateEditorSelectedCount();
+            CloseAppPicker();
+        }
+
+        private void OnAppPickerSearchTextChanged(object? sender, TextChangedEventArgs e)
+        {
+            if (isApplyingAppRulesEditor)
+                return;
+
+            CaptureActiveAppRulesEditorTemplateState();
+            RenderAppPickerCards(GetActiveAppRulesTemplate());
+        }
+
+        private async void OnAppPickerRefreshClick(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                CaptureActiveAppRulesEditorTemplateState();
+                AppPickerLoadingText.IsVisible = true;
+                AppPickerItemsHost.Children.Clear();
+                appRuleToggles.Clear();
+
+                List<AndroidInstalledAppInfo> apps = await Task.Run(() =>
+                    AndroidInstalledAppDiscovery.GetLaunchableApps().ToList());
+
+                discoveredAndroidApps = apps;
+                AppPickerLoadingText.IsVisible = false;
+                RenderAppPickerCards(GetActiveAppRulesTemplate());
+                SetStatus(Localize("Lang.AppRules.AppsRefreshed"));
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.AppPickerRefresh", ex);
+                AppPickerLoadingText.IsVisible = false;
+                SetStatus(Localize("Lang.AppRules.LoadFailed"));
+            }
+        }
+
+        private void UpdateEditorSelectedCount()
+        {
+            AppRuleTemplate template = GetActiveAppRulesTemplate();
+            int count = template.AppRules.Count(rule => rule.Enabled && !string.IsNullOrWhiteSpace(rule.AppId));
+            AppRulesEditorSelectedCountText.Text = LocalizeFormat("Lang.AppRules.SelectedCount", count);
         }
 
         private void PopulateAppRulesTemplateSelector(string preferredTemplateId)
@@ -756,7 +854,8 @@ namespace InvisibleGorillaXRay.Android.Views
                         break;
                 }
 
-                RenderAppRulesEditorCards(template);
+                appRuleToggles.Clear();
+                UpdateEditorSelectedCount();
             }
             finally
             {
@@ -764,12 +863,18 @@ namespace InvisibleGorillaXRay.Android.Views
             }
         }
 
-        private void RenderAppRulesEditorCards(AppRuleTemplate template)
+        private void RenderAppPickerCards(AppRuleTemplate template)
         {
-            AppRulesEditorItemsHost.Children.Clear();
+            AppPickerItemsHost.Children.Clear();
             appRuleToggles.Clear();
 
-            string filter = AppRulesSearchInput.Text?.Trim() ?? string.Empty;
+            if (discoveredAndroidApps == null || discoveredAndroidApps.Count == 0)
+            {
+                AppPickerNoAppsText.IsVisible = true;
+                return;
+            }
+
+            string filter = AppPickerSearchInput.Text?.Trim() ?? string.Empty;
             IEnumerable<AndroidInstalledAppInfo> filteredApps = discoveredAndroidApps;
             if (!string.IsNullOrWhiteSpace(filter))
             {
@@ -785,19 +890,27 @@ namespace InvisibleGorillaXRay.Android.Views
 
             foreach (AndroidInstalledAppInfo app in filteredApps)
             {
+                const double tapMoveThreshold = 10;
+
                 CheckBox toggle = new()
                 {
                     IsChecked = selectedPackages.Contains(app.PackageName),
-                    VerticalAlignment = VerticalAlignment.Top,
-                    Margin = new Thickness(0, 2, 0, 0)
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 6, 0)
                 };
 
                 appRuleToggles[app.PackageName] = toggle;
 
-                StackPanel textPanel = new()
+                Avalonia.Controls.Image iconImage = new()
                 {
-                    Spacing = 2
+                    Width = 36,
+                    Height = 36,
+                    Margin = new Thickness(0, 0, 10, 0),
+                    VerticalAlignment = VerticalAlignment.Center
                 };
+                TryLoadAppIcon(app.PackageName, iconImage);
+
+                StackPanel textPanel = new() { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
                 textPanel.Children.Add(new TextBlock
                 {
                     Text = app.DisplayName,
@@ -808,7 +921,7 @@ namespace InvisibleGorillaXRay.Android.Views
 
                 StringBuilder metaBuilder = new(app.PackageName);
                 if (app.IsSystemApp)
-                    metaBuilder.Append(" • ").Append(Localize("Lang.AppRules.SystemBadge"));
+                    metaBuilder.Append(" \u2022 ").Append(Localize("Lang.AppRules.SystemBadge"));
 
                 textPanel.Children.Add(new TextBlock
                 {
@@ -820,11 +933,14 @@ namespace InvisibleGorillaXRay.Android.Views
 
                 Grid root = new();
                 root.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
+                root.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
                 root.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
 
                 Grid.SetColumn(toggle, 0);
                 root.Children.Add(toggle);
-                Grid.SetColumn(textPanel, 1);
+                Grid.SetColumn(iconImage, 1);
+                root.Children.Add(iconImage);
+                Grid.SetColumn(textPanel, 2);
                 root.Children.Add(textPanel);
 
                 Border card = new()
@@ -838,18 +954,102 @@ namespace InvisibleGorillaXRay.Android.Views
                     Child = root
                 };
 
+                Point pointerPressedPosition = default;
+                bool canToggleOnRelease = false;
+
                 card.PointerPressed += (_, args) =>
                 {
-                    if (args.Source is Button or CheckBox)
+                    Control? sourceControl = args.Source as Control;
+                    if (!IsAppPickerTapTarget(sourceControl))
+                    {
+                        canToggleOnRelease = false;
+                        return;
+                    }
+
+                    pointerPressedPosition = args.GetCurrentPoint(card).Position;
+                    canToggleOnRelease = true;
+                };
+
+                card.PointerMoved += (_, args) =>
+                {
+                    if (!canToggleOnRelease)
+                        return;
+
+                    Point currentPosition = args.GetCurrentPoint(card).Position;
+                    if (!IsWithinTapThreshold(pointerPressedPosition, currentPosition, tapMoveThreshold))
+                        canToggleOnRelease = false;
+                };
+
+                card.PointerReleased += (_, args) =>
+                {
+                    if (!canToggleOnRelease)
+                        return;
+
+                    canToggleOnRelease = false;
+
+                    Control? sourceControl = args.Source as Control;
+                    if (!IsAppPickerTapTarget(sourceControl))
+                        return;
+
+                    Point currentPosition = args.GetCurrentPoint(card).Position;
+                    if (!IsWithinTapThreshold(pointerPressedPosition, currentPosition, tapMoveThreshold))
                         return;
 
                     toggle.IsChecked = !(toggle.IsChecked ?? false);
                 };
 
-                AppRulesEditorItemsHost.Children.Add(card);
+                AppPickerItemsHost.Children.Add(card);
             }
 
-            AppRulesEditorNoAppsText.IsVisible = AppRulesEditorItemsHost.Children.Count == 0;
+            AppPickerNoAppsText.IsVisible = AppPickerItemsHost.Children.Count == 0;
+        }
+
+        private static void TryLoadAppIcon(string packageName, Avalonia.Controls.Image target)
+        {
+            try
+            {
+                Context? context = global::Android.App.Application.Context;
+                if (context?.PackageManager == null)
+                    return;
+
+                global::Android.Graphics.Drawables.Drawable? drawable =
+                    context.PackageManager.GetApplicationIcon(packageName);
+                if (drawable == null)
+                    return;
+
+                int size = 72;
+                global::Android.Graphics.Bitmap bmp =
+                    global::Android.Graphics.Bitmap.CreateBitmap(size, size,
+                        global::Android.Graphics.Bitmap.Config.Argb8888!)!;
+                global::Android.Graphics.Canvas canvas = new(bmp);
+                drawable.SetBounds(0, 0, size, size);
+                drawable.Draw(canvas);
+
+                using MemoryStream ms = new();
+                bmp.Compress(global::Android.Graphics.Bitmap.CompressFormat.Png!, 80, ms);
+                bmp.Recycle();
+                ms.Position = 0;
+
+                target.Source = new Bitmap(ms);
+            }
+            catch
+            {
+                // icon load is best-effort
+            }
+        }
+
+        private static bool IsWithinTapThreshold(Point origin, Point current, double threshold)
+        {
+            return Math.Abs(current.X - origin.X) <= threshold
+                   && Math.Abs(current.Y - origin.Y) <= threshold;
+        }
+
+        private static bool IsAppPickerTapTarget(Control? sourceControl)
+        {
+            return sourceControl is not CheckBox
+                   && sourceControl?.FindAncestorOfType<CheckBox>() == null
+                   && sourceControl is not Button
+                   && sourceControl?.FindAncestorOfType<Button>() == null;
         }
 
         private void CaptureActiveAppRulesEditorTemplateState()
@@ -969,9 +1169,7 @@ namespace InvisibleGorillaXRay.Android.Views
             if (isApplyingAppRulesEditor || IsDefaultAppRulesTemplate(activeAppRulesTemplateId))
                 return;
 
-            CaptureActiveAppRulesEditorTemplateState();
             GetActiveAppRulesTemplate().Name = AppRulesTemplateNameInput.Text?.Trim() ?? string.Empty;
-            PopulateAppRulesTemplateSelector(activeAppRulesTemplateId);
         }
 
         private void OnAppRulesModeChanged(object? sender, RoutedEventArgs e)
@@ -982,30 +1180,7 @@ namespace InvisibleGorillaXRay.Android.Views
             CaptureActiveAppRulesEditorTemplateState();
         }
 
-        private void OnAppRulesSearchTextChanged(object? sender, TextChangedEventArgs e)
-        {
-            if (isApplyingAppRulesEditor)
-                return;
-
-            CaptureActiveAppRulesEditorTemplateState();
-            RenderAppRulesEditorCards(GetActiveAppRulesTemplate());
-        }
-
-        private void OnRefreshAppRulesEditorClick(object? sender, RoutedEventArgs e)
-        {
-            try
-            {
-                CaptureActiveAppRulesEditorTemplateState();
-                discoveredAndroidApps = AndroidInstalledAppDiscovery.GetLaunchableApps().ToList();
-                RenderAppRulesEditorCards(GetActiveAppRulesTemplate());
-                SetStatus(Localize("Lang.AppRules.AppsRefreshed"));
-            }
-            catch (Exception ex)
-            {
-                DiagnosticLog.WriteException("MainView.RefreshAppRulesEditor", ex);
-                SetStatus("Lang.AppRules.LoadFailed");
-            }
-        }
+        
 
         private void OnNewAppRulesTemplateClick(object? sender, RoutedEventArgs e)
         {
@@ -1071,12 +1246,18 @@ namespace InvisibleGorillaXRay.Android.Views
             HashSet<string> previousIds = current.GetEffectiveEnabledAppRules()
                 .Select(rule => rule.AppId)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            HashSet<string> nextIds = GetActiveAppRulesTemplate().AppRules
+            AppRuleTemplate activeTemplate = GetActiveAppRulesTemplate();
+            HashSet<string> nextIds = activeTemplate.AppRules
                 .Where(rule => rule.Enabled && !string.IsNullOrWhiteSpace(rule.AppId))
                 .Select(rule => rule.AppId)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            bool shouldRestartVpn = IsConnectionActive()
-                && (previousMode != GetActiveAppRulesTemplate().Mode || !previousIds.SetEquals(nextIds));
+            bool isActive = IsConnectionActive();
+            bool modeChanged = previousMode != activeTemplate.Mode;
+            bool appsChanged = !previousIds.SetEquals(nextIds);
+            bool shouldRestartVpn = isActive && (modeChanged || appsChanged);
+
+            DiagnosticLog.Write($"[AppRules] Save: prevMode={previousMode}, newMode={activeTemplate.Mode}, prevApps={previousIds.Count}, newApps={nextIds.Count}, vpnActive={isActive}, modeChanged={modeChanged}, appsChanged={appsChanged}, shouldRestart={shouldRestartVpn}");
+            DiagnosticLog.Write($"[AppRules] Save: templateId={activeAppRulesTemplateId}, configPath={normalizedCurrentConfigPath}, bindings={bindings.Count}");
 
             settingsHandler.UpdateUserSettings(new UserSettings
             {

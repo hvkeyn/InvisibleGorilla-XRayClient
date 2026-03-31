@@ -207,6 +207,10 @@
     <x:String x:Key="Lang.AppRules.RestartingVpn">Правила приложений сохранены. Android VPN перезапускается для применения изменений...</x:String>
     <x:String x:Key="Lang.AppRules.RestartRequired">Правила приложений сохранены, но Android VPN нужно перезапустить вручную для применения.</x:String>
     <x:String x:Key="Lang.AppRules.AppsRefreshed">Список установленных приложений обновлён.</x:String>
+    <x:String x:Key="Lang.AppRules.SelectApps">Выбор приложений</x:String>
+    <x:String x:Key="Lang.AppRules.SelectedCount">{0} приложений выбрано</x:String>
+    <x:String x:Key="Lang.AppRules.Loading">Загрузка приложений...</x:String>
+    <x:String x:Key="Lang.AppRules.Done">Готово</x:String>
 
     <x:String x:Key="Lang.Android.Runtime.NoneSelected">Не выбрано</x:String>
     <x:String x:Key="Lang.Android.Runtime.AppRoot">Корень приложения</x:String>

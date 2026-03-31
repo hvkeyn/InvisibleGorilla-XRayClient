@@ -296,14 +296,19 @@ namespace InvisibleGorillaXRay.Android.Services
 
         private void ApplyApplicationRules(Builder builder, AppRulesMode mode, IEnumerable<string> packages)
         {
+            string[] packageArray = packages as string[] ?? packages.ToArray();
+            DiagnosticLog.Write($"[AppRules] ApplyApplicationRules: mode={mode}, packageCount={packageArray.Length}");
+
             if (mode == AppRulesMode.ONLY_SELECTED_APPS)
             {
-                TryAllowUserSelectedApplications(builder, packages);
+                DiagnosticLog.Write("[AppRules] → TryAllowUserSelectedApplications (AddAllowedApplication)");
+                TryAllowUserSelectedApplications(builder, packageArray);
                 return;
             }
 
+            DiagnosticLog.Write("[AppRules] → TryExcludeOwnProcess + TryExcludeUserSelectedApplications (AddDisallowedApplication)");
             TryExcludeOwnProcess(builder);
-            TryExcludeUserSelectedApplications(builder, packages);
+            TryExcludeUserSelectedApplications(builder, packageArray);
         }
 
         private void TryExcludeOwnProcess(Builder builder)
@@ -320,6 +325,7 @@ namespace InvisibleGorillaXRay.Android.Services
 
         private void TryExcludeUserSelectedApplications(Builder builder, IEnumerable<string> packages)
         {
+            int added = 0;
             foreach (string packageName in packages)
             {
                 try
@@ -328,6 +334,8 @@ namespace InvisibleGorillaXRay.Android.Services
                         continue;
 
                     builder.AddDisallowedApplication(packageName);
+                    added++;
+                    DiagnosticLog.Write($"[AppRules] Disallowed: {packageName}");
                 }
                 catch (PackageManager.NameNotFoundException ex)
                 {
@@ -338,10 +346,13 @@ namespace InvisibleGorillaXRay.Android.Services
                     DiagnosticLog.WriteException($"AndroidVpnService.AddDisallowedApplication.{packageName}", ex);
                 }
             }
+
+            DiagnosticLog.Write($"[AppRules] Total disallowed: {added}");
         }
 
         private void TryAllowUserSelectedApplications(Builder builder, IEnumerable<string> packages)
         {
+            int added = 0;
             foreach (string packageName in packages)
             {
                 try
@@ -350,6 +361,8 @@ namespace InvisibleGorillaXRay.Android.Services
                         continue;
 
                     builder.AddAllowedApplication(packageName);
+                    added++;
+                    DiagnosticLog.Write($"[AppRules] Allowed: {packageName}");
                 }
                 catch (PackageManager.NameNotFoundException ex)
                 {
@@ -360,6 +373,8 @@ namespace InvisibleGorillaXRay.Android.Services
                     DiagnosticLog.WriteException($"AndroidVpnService.AddAllowedApplication.{packageName}", ex);
                 }
             }
+
+            DiagnosticLog.Write($"[AppRules] Total allowed: {added}");
         }
 
         private void TryEnableIpv6(Builder builder)

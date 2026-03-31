@@ -79,15 +79,26 @@ namespace InvisibleGorillaXRay.Android.Handlers.Tunnels
         {
             SettingsHandler settingsHandler = new(() => new AndroidStartup());
             UserSettings settings = settingsHandler.UserSettings;
+
+            string configPath = settings.GetCurrentConfigPath();
+            string boundTemplateId = settings.GetBoundAppRuleTemplateId();
             AppRulesMode mode = settings.GetEffectiveAppRulesMode();
+
+            DiagnosticLog.Write($"[AppRules] GetAppRulePackages: configPath={configPath}, boundTemplate={boundTemplateId}, mode={mode}");
+
             if (mode == AppRulesMode.ALL_APPS)
+            {
+                DiagnosticLog.Write("[AppRules] Mode=ALL_APPS → no packages to pass");
                 return (mode, Array.Empty<string>());
+            }
 
             string[] packages = settings.GetEffectiveEnabledAppRules()
                 .Select(rule => rule.AppId?.Trim())
                 .Where(appId => !string.IsNullOrWhiteSpace(appId))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray()!;
+
+            DiagnosticLog.Write($"[AppRules] Mode={mode}, packages count={packages.Length}: [{string.Join(", ", packages)}]");
 
             return (mode, packages);
         }
