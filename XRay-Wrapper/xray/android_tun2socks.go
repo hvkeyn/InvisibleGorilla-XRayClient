@@ -19,7 +19,6 @@ import (
 	"time"
 
 	tcore "github.com/eycorsican/go-tun2socks/core"
-	tsocks "github.com/eycorsican/go-tun2socks/proxy/socks"
 )
 
 const androidTunReadBufferSize = 64 * 1024
@@ -47,7 +46,7 @@ func (disabledUDPHandler) ReceiveTo(conn tcore.UDPConn, data []byte, addr *net.U
 }
 
 //export StartAndroidTun2Socks
-func StartAndroidTun2Socks(fd C.int, proxyPort C.int, isUdpEnabled C.bool) (errPtr *C.char) {
+func StartAndroidTun2Socks(fd C.int, proxyPort C.int, isUdpEnabled C.bool, username *C.char, password *C.char) (errPtr *C.char) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			message := fmt.Sprintf("android tun2socks panic: %v", recovered)
@@ -77,6 +76,13 @@ func StartAndroidTun2Socks(fd C.int, proxyPort C.int, isUdpEnabled C.bool) (errP
 		return C.CString(message)
 	}
 
+	auth := newLocalSocksAuth(C.GoString(username), C.GoString(password))
+	if auth == nil {
+		message := "missing Android SOCKS credentials"
+		androidTunLastError = message
+		return C.CString(message)
+	}
+
 	tunFile := os.NewFile(uintptr(fd), fmt.Sprintf("android-tun-%d", int(fd)))
 	if tunFile == nil {
 		message := "failed to open Android TUN file descriptor"
@@ -92,9 +98,9 @@ func StartAndroidTun2Socks(fd C.int, proxyPort C.int, isUdpEnabled C.bool) (errP
 		stop:    make(chan struct{}),
 	}
 
-	tcore.RegisterTCPConnHandler(tsocks.NewTCPHandler("127.0.0.1", uint16(proxyPort)))
+	tcore.RegisterTCPConnHandler(newAndroidTCPHandler("127.0.0.1", uint16(proxyPort), auth))
 	if bool(isUdpEnabled) {
-		tcore.RegisterUDPConnHandler(tsocks.NewUDPHandler("127.0.0.1", uint16(proxyPort), 30*time.Second))
+		tcore.RegisterUDPConnHandler(newAndroidUDPHandler("127.0.0.1", uint16(proxyPort), auth, 30*time.Second))
 	} else {
 		tcore.RegisterUDPConnHandler(disabledUDPHandler{})
 	}

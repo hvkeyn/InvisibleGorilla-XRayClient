@@ -3,7 +3,10 @@ import NetworkExtension
 
 struct TransparentProxyBridgeConfig: Decodable {
     let mode: String
+    let socksUri: String?
     let socksPort: Int
+    let socksUsername: String?
+    let socksPassword: String?
     let tunnelAddress: String
     let dns: String
     let bundleIdentifiers: [String]

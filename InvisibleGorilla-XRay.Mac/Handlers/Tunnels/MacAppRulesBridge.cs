@@ -12,7 +12,10 @@ namespace InvisibleGorillaXRay.Mac.Handlers.Tunnels
     internal sealed class MacTransparentProxyBridgeConfig
     {
         public string Mode { get; init; } = AppRulesMode.ALL_APPS.ToString();
+        public string SocksUri { get; init; } = string.Empty;
         public int SocksPort { get; init; }
+        public string SocksUsername { get; init; } = string.Empty;
+        public string SocksPassword { get; init; } = string.Empty;
         public string TunnelAddress { get; init; } = string.Empty;
         public string Dns { get; init; } = string.Empty;
         public List<string> BundleIdentifiers { get; init; } = new();
@@ -24,7 +27,7 @@ namespace InvisibleGorillaXRay.Mac.Handlers.Tunnels
         private static string ConfigPath => Path.Combine(Values.Directory.TUN, "mac-transparent-proxy-config.json");
         private static string HelperRoot => Path.Combine(Values.Directory.ROOT, "Native", "TransparentProxyExtension");
 
-        public static Status Prepare(UserSettings settings, int socksPort, string tunnelAddress, string dns)
+        public static Status Prepare(UserSettings settings, int socksPort, string tunnelAddress, string dns, LocalProxyCredentials localProxyCredentials)
         {
             try
             {
@@ -39,7 +42,12 @@ namespace InvisibleGorillaXRay.Mac.Handlers.Tunnels
                 MacTransparentProxyBridgeConfig config = new()
                 {
                     Mode = mode.ToString(),
+                    SocksUri = localProxyCredentials?.HasValue == true
+                        ? localProxyCredentials.BuildSocks5Uri("127.0.0.1", socksPort)
+                        : $"socks5://127.0.0.1:{socksPort}",
                     SocksPort = socksPort,
+                    SocksUsername = localProxyCredentials?.Username ?? string.Empty,
+                    SocksPassword = localProxyCredentials?.Password ?? string.Empty,
                     TunnelAddress = tunnelAddress ?? string.Empty,
                     Dns = dns ?? string.Empty,
                     BundleIdentifiers = bundleIds

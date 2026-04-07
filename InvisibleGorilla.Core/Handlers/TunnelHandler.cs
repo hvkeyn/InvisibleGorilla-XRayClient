@@ -49,7 +49,7 @@ namespace InvisibleGorillaXRay.Handlers
             Func<string, Status> executeCommand
         );
 
-        public abstract Status Enable(string ip, int port, string address, string server, string dns);
+        public abstract Status Enable(string ip, int port, string address, string server, string dns, LocalProxyCredentials localProxyCredentials);
         public abstract void Disable();
         public abstract void Cancel();
     }

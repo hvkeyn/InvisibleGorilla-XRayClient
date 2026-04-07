@@ -10,6 +10,8 @@ namespace InvisibleGorillaXRay.Android.Services
     internal sealed class AndroidVpnStartOptions
     {
         public int ProxyPort { get; init; }
+        public string ProxyUsername { get; init; } = string.Empty;
+        public string ProxyPassword { get; init; } = string.Empty;
         public bool UdpEnabled { get; init; }
         public string TunAddress { get; init; } = string.Empty;
         public string Dns { get; init; } = string.Empty;

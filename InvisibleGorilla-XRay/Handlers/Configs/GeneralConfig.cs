@@ -4,6 +4,7 @@ using System.Linq;
 namespace InvisibleGorillaXRay.Handlers.Configs
 {
     using Models;
+    using Utilities;
     using Values;
 
     public class GeneralConfig : BaseConfig
@@ -23,7 +24,7 @@ namespace InvisibleGorillaXRay.Handlers.Configs
             void SaveToDirectory()
             {
                 System.IO.Directory.CreateDirectory(Directory.CONFIGS);
-                File.WriteAllText(destinationPath, data);
+                File.WriteAllText(destinationPath, JsonUtility.SanitizeRuntimeManagedSections(data));
             }
         }
 
@@ -36,8 +37,9 @@ namespace InvisibleGorillaXRay.Handlers.Configs
 
             void CopyToConfigsDirectory()
             {
-                System.IO.Directory.CreateDirectory(Directory.CONFIGS);          
-                File.Copy(path, destinationPath, true);
+                System.IO.Directory.CreateDirectory(Directory.CONFIGS);
+                string rawConfig = File.ReadAllText(path);
+                File.WriteAllText(destinationPath, JsonUtility.SanitizeRuntimeManagedSections(rawConfig));
             }
         }
 

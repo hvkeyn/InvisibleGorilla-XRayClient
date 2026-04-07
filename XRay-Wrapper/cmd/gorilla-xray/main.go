@@ -37,6 +37,8 @@ func main() {
 	logPath := flag.String("log-path", "", "Directory for log files (access.log, error.log)")
 	useSocks := flag.Bool("socks", false, "Use SOCKS5 instead of HTTP proxy")
 	udpEnabled := flag.Bool("udp", false, "Enable UDP proxying (SOCKS5 only)")
+	socksUsername := flag.String("socks-user", "", "SOCKS5 username for the local listener")
+	socksPassword := flag.String("socks-pass", "", "SOCKS5 password for the local listener")
 	showVersion := flag.Bool("version", false, "Show version and exit")
 	testConn := flag.Bool("test", false, "Test connection and exit (prints latency in ms)")
 
@@ -69,13 +71,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	if (*socksUsername == "") != (*socksPassword == "") {
+		fmt.Fprintln(os.Stderr, "error: -socks-user and -socks-pass must be provided together")
+		os.Exit(1)
+	}
+
 	configObj, err := loadConfig(*configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: failed to load config: %v\n", err)
 		os.Exit(1)
 	}
 
-	configObj.Inbound = buildInbound(net.Port(*port), *useSocks, *udpEnabled)
+	configObj.Inbound = buildInbound(net.Port(*port), *useSocks, *udpEnabled, *socksUsername, *socksPassword)
 
 	severity := parseSeverity(*logLevel)
 	if severity != clog.Severity_Unknown && *logPath != "" {
@@ -126,7 +133,7 @@ func loadConfig(path string) (*core.Config, error) {
 	return configObj, nil
 }
 
-func buildInbound(port net.Port, isSocks bool, udpEnabled bool) []*core.InboundHandlerConfig {
+func buildInbound(port net.Port, isSocks bool, udpEnabled bool, socksUsername string, socksPassword string) []*core.InboundHandlerConfig {
 	receiver := &proxyman.ReceiverConfig{
 		PortList: &net.PortList{
 			Range: []*net.PortRange{net.SinglePortRange(port)},
@@ -138,7 +145,14 @@ func buildInbound(port net.Port, isSocks bool, udpEnabled bool) []*core.InboundH
 
 	var proxy *serial.TypedMessage
 	if isSocks {
-		proxy = serial.ToTypedMessage(&socks.ServerConfig{UdpEnabled: udpEnabled})
+		serverConfig := &socks.ServerConfig{UdpEnabled: udpEnabled}
+		if socksUsername != "" && socksPassword != "" {
+			serverConfig.AuthType = socks.AuthType_PASSWORD
+			serverConfig.Accounts = map[string]string{
+				socksUsername: socksPassword,
+			}
+		}
+		proxy = serial.ToTypedMessage(serverConfig)
 	} else {
 		proxy = serial.ToTypedMessage(&xhttp.ServerConfig{})
 	}

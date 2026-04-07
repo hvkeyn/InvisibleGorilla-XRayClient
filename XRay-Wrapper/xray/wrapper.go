@@ -17,8 +17,8 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/core"
 
-	_ "github.com/xtls/xray-core/main/distro/all"
 	clog "github.com/xtls/xray-core/common/log"
+	_ "github.com/xtls/xray-core/main/distro/all"
 )
 
 const (
@@ -32,7 +32,7 @@ var serverLifecycleActive bool
 var serverStopRequested bool
 
 //export StartServer
-func StartServer(config *C.char, port int, logLevel *C.char, logPath *C.char, isSocks bool, isUdpEnabled bool) {
+func StartServer(config *C.char, port int, logLevel *C.char, logPath *C.char, isSocks bool, isUdpEnabled bool, username *C.char, password *C.char) {
 	serverStopMutex.Lock()
 	serverLifecycleActive = true
 	serverStopRequested = false
@@ -41,7 +41,11 @@ func StartServer(config *C.char, port int, logLevel *C.char, logPath *C.char, is
 
 	logSeverity := convertLogLevelToSeverity(logLevel)
 	configObj := convertJsonToObject(config)
-	configObj.Inbound = overrideInbound(net.Port(port), isSocks, isUdpEnabled)
+	configObj.Inbound = overrideInbound(
+		net.Port(port),
+		isSocks,
+		isUdpEnabled,
+		newLocalSocksAuth(C.GoString(username), C.GoString(password)))
 
 	if logSeverity != clog.Severity_Unknown {
 		log := overrideLog(logSeverity, logPath)
@@ -107,7 +111,7 @@ func StopServer() {
 //export TestConnection
 func TestConnection(config *C.char, port int) int {
 	configObj := convertJsonToObject(config)
-	configObj.Inbound = overrideInbound(net.Port(port), false, false)
+	configObj.Inbound = overrideInbound(net.Port(port), false, false, nil)
 
 	server, err := core.New(configObj)
 	if err != nil {

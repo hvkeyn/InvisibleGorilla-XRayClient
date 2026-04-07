@@ -50,16 +50,17 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
             this.executeCommand = executeCommand;
         }
 
-        public Status Enable(string ip, int port, string address, string server, string dns)
+        public Status Enable(string ip, int port, string address, string server, string dns, LocalProxyCredentials localProxyCredentials)
         {
             DiagnosticLog.Write(
                 "WindowsTunnel",
-                $"Enable requested: proxy={ip}:{port}, address={address}, server={server}, dns={dns}");
+                $"Enable requested: proxy={ip}:{port}, address={address}, server={server}, dns={dns}, authEnabled={localProxyCredentials?.HasValue == true}");
 
             try
             {
                 FetchServerIP();
                 DiagnosticLog.Write("WindowsTunnel", $"Resolved server IP={server}");
+                string proxyArgument = BuildTunnelProxyArgument(ip, port, localProxyCredentials);
 
                 DiagnosticLog.Write("WindowsTunnel", "Starting tunneling service");
                 StartTunnelingService();
@@ -89,7 +90,7 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
                     command:
                         $"-command=enable " +
                         $"-device={NETWORK_INTERFACE_NAME} " +
-                        $"-proxy={ip}:{port} " +
+                        $"-proxy={proxyArgument} " +
                         $"-address={address} " +
                         $"-server={server} " + 
                         $"-dns={dns}" +
@@ -133,6 +134,14 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
             {
                 Uri serverUri = new UriBuilder(server).Uri;
                 server = Dns.GetHostAddresses(serverUri.Host)[0].ToString();
+            }
+
+            static string BuildTunnelProxyArgument(string host, int localPort, LocalProxyCredentials credentials)
+            {
+                if (credentials?.HasValue == true)
+                    return credentials.BuildSocks5Uri(host, localPort);
+
+                return $"{host}:{localPort}";
             }
 
             void StartTunnelingService() => onStartTunnelingService.Invoke();

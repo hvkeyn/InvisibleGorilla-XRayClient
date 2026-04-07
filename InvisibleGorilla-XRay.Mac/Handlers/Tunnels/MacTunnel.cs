@@ -25,7 +25,7 @@ namespace InvisibleGorillaXRay.Mac.Handlers.Tunnels
         private const string TUN_DEVICE = "utun9";
         private const string TUN2SOCKS_PATH = "./TUN/tun2socks";
 
-        public Status Enable(string ip, int port, string address, string server, string dns)
+        public Status Enable(string ip, int port, string address, string server, string dns, LocalProxyCredentials localProxyCredentials)
         {
             isCancelled = false;
 
@@ -39,13 +39,13 @@ namespace InvisibleGorillaXRay.Mac.Handlers.Tunnels
 
             try
             {
-                Status appRulesStatus = PrepareAppRulesBridge(port, address, dns);
+                Status appRulesStatus = PrepareAppRulesBridge(port, address, dns, localProxyCredentials);
                 if (appRulesStatus.Code == Code.ERROR)
                     return appRulesStatus;
 
                 SaveOriginalRoutes();
 
-                StartTun2Socks(ip, port);
+                StartTun2Socks(ip, port, localProxyCredentials);
 
                 if (isCancelled)
                     return new Status(Code.INFO, SubCode.CANCELED, null);
@@ -80,20 +80,24 @@ namespace InvisibleGorillaXRay.Mac.Handlers.Tunnels
             Disable();
         }
 
-        private static Status PrepareAppRulesBridge(int socksPort, string tunnelAddress, string dns)
+        private static Status PrepareAppRulesBridge(int socksPort, string tunnelAddress, string dns, LocalProxyCredentials localProxyCredentials)
         {
             SettingsHandler settingsHandler = new(() => new MacStartup());
             UserSettings settings = settingsHandler.UserSettings;
-            return MacAppRulesBridge.Prepare(settings, socksPort, tunnelAddress, dns);
+            return MacAppRulesBridge.Prepare(settings, socksPort, tunnelAddress, dns, localProxyCredentials);
         }
 
-        private void StartTun2Socks(string tunIp, int socksPort)
+        private void StartTun2Socks(string tunIp, int socksPort, LocalProxyCredentials localProxyCredentials)
         {
+            string proxyArgument = localProxyCredentials?.HasValue == true
+                ? localProxyCredentials.BuildSocks5Uri("127.0.0.1", socksPort)
+                : $"socks5://127.0.0.1:{socksPort}";
+
             tun2socksProcess = new Process();
             tun2socksProcess.StartInfo = new ProcessStartInfo
             {
                 FileName = TUN2SOCKS_PATH,
-                Arguments = $"-device {TUN_DEVICE} -proxy socks5://127.0.0.1:{socksPort} -interface 127.0.0.1",
+                Arguments = $"-device {TUN_DEVICE} -proxy {proxyArgument} -interface 127.0.0.1",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,

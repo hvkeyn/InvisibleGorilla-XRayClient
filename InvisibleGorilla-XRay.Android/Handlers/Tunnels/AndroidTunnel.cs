@@ -16,17 +16,19 @@ namespace InvisibleGorillaXRay.Android.Handlers.Tunnels
     {
         private LocalizationService LocalizationService => ServiceLocator.Get<LocalizationService>();
 
-        public Status Enable(string ip, int port, string address, string server, string dns)
+        public Status Enable(string ip, int port, string address, string server, string dns, LocalProxyCredentials localProxyCredentials)
         {
             DiagnosticLog.Write(
                 "AndroidTunnel",
-                $"TUN mode requested for proxy={ip}:{port}, address={address}, server={server}, dns={dns}");
+                $"TUN mode requested for proxy={ip}:{port}, address={address}, server={server}, dns={dns}, authEnabled={localProxyCredentials?.HasValue == true}");
 
             (AppRulesMode appRulesMode, string[] appPackages) = GetAppRulePackages();
 
             Status startStatus = AndroidVpnServiceController.Start(new AndroidVpnStartOptions
             {
                 ProxyPort = port,
+                ProxyUsername = localProxyCredentials?.Username ?? string.Empty,
+                ProxyPassword = localProxyCredentials?.Password ?? string.Empty,
                 UdpEnabled = true,
                 TunAddress = address,
                 Dns = dns,

@@ -26,6 +26,8 @@ namespace InvisibleGorillaXRay.Android.Services
         private const string ActionStart = "io.invisiblegorilla.xray.action.START_VPN";
         private const string ActionStop = "io.invisiblegorilla.xray.action.STOP_VPN";
         private const string ExtraProxyPort = "proxy_port";
+        private const string ExtraProxyUsername = "proxy_username";
+        private const string ExtraProxyPassword = "proxy_password";
         private const string ExtraUdpEnabled = "udp_enabled";
         private const string ExtraTunAddress = "tun_address";
         private const string ExtraDns = "dns";
@@ -44,6 +46,8 @@ namespace InvisibleGorillaXRay.Android.Services
             Intent intent = new Intent(context, typeof(AndroidVpnService));
             intent.SetAction(ActionStart);
             intent.PutExtra(ExtraProxyPort, options.ProxyPort);
+            intent.PutExtra(ExtraProxyUsername, options.ProxyUsername);
+            intent.PutExtra(ExtraProxyPassword, options.ProxyPassword);
             intent.PutExtra(ExtraUdpEnabled, options.UdpEnabled);
             intent.PutExtra(ExtraTunAddress, options.TunAddress);
             intent.PutExtra(ExtraDns, options.Dns);
@@ -140,6 +144,12 @@ namespace InvisibleGorillaXRay.Android.Services
             if (proxyPort <= 0)
                 throw new InvalidOperationException("Android VPN proxy port is missing.");
 
+            LocalProxyCredentials localProxyCredentials = new(
+                username: intent.GetStringExtra(ExtraProxyUsername) ?? string.Empty,
+                password: intent.GetStringExtra(ExtraProxyPassword) ?? string.Empty);
+            if (!localProxyCredentials.HasValue)
+                throw new InvalidOperationException("Android VPN local proxy credentials are missing.");
+
             bool udpEnabled = intent.GetBooleanExtra(ExtraUdpEnabled, true);
             string tunAddress = intent.GetStringExtra(ExtraTunAddress)?.Trim() ?? "10.0.236.10";
             string dns = intent.GetStringExtra(ExtraDns)?.Trim() ?? "8.8.8.8";
@@ -177,7 +187,11 @@ namespace InvisibleGorillaXRay.Android.Services
                 int tunFd = tunInterface.DetachFd();
                 tunInterface.Dispose();
 
-                string? bridgeError = XRayCoreWrapper.StartAndroidTunnel(tunFd, proxyPort, udpEnabled);
+                string? bridgeError = XRayCoreWrapper.StartAndroidTunnel(
+                    tunFd,
+                    proxyPort,
+                    udpEnabled,
+                    localProxyCredentials);
                 if (!string.IsNullOrWhiteSpace(bridgeError))
                 {
                     XRayCoreWrapper.StopAndroidTunnel();
@@ -189,7 +203,7 @@ namespace InvisibleGorillaXRay.Android.Services
 
             DiagnosticLog.Write(
                 "AndroidVpnService",
-                $"Android VPN established with proxyPort={proxyPort}, tunAddress={tunAddress}, dns={dns}, udpEnabled={udpEnabled}, appRulesMode={appRulesMode}, appPackages={string.Join(",", appPackages)}");
+                $"Android VPN established with proxyPort={proxyPort}, tunAddress={tunAddress}, dns={dns}, udpEnabled={udpEnabled}, authEnabled={localProxyCredentials.HasValue}, appRulesMode={appRulesMode}, appPackages={string.Join(",", appPackages)}");
         }
 
         private void StartForegroundCompat()

@@ -112,7 +112,7 @@ namespace InvisibleGorillaXRay.Core
             }
             else
             {
-                return EnableTunnel();
+                return EnableTunnel(LocalProxyCredentials.None);
             }
         }
 
@@ -141,10 +141,12 @@ namespace InvisibleGorillaXRay.Core
             bool isSocks = getProtocol.Invoke() == Protocol.SOCKS || mode == Mode.TUN;
             bool isUdpEnabled = getUdpEnabled.Invoke();
             bool systemProxy = getSystemProxyUsed.Invoke();
+            LocalProxyCredentials localProxyCredentials = CreateLocalProxyCredentials(mode, isSocks);
 
             // Xray always listens on the local proxy port; the TUN port is reserved for the control service.
             DiagnosticLog.Write("Run", $"mode={mode}, proxyPort={proxyPort}, tunnelServicePort={tunnelServicePort}, logLevel={logLevel}, isSocks={isSocks}, isUdpEnabled={isUdpEnabled}, systemProxy={systemProxy}");
             DiagnosticLog.Write("Run", $"logPath={logPath}");
+            DiagnosticLog.Write("Run", $"localSocksAuth={(localProxyCredentials.HasValue ? "enabled" : "disabled")}");
             DiagnosticLog.Write("Run", $"config length={config?.Length ?? 0}, first 200 chars: {(config?.Length > 200 ? config.Substring(0, 200) : config)}");
 
             SendServerStartEvent();
@@ -157,7 +159,14 @@ namespace InvisibleGorillaXRay.Core
                 try
                 {
                     DiagnosticLog.Write("ServerThread", "Calling XRayCoreWrapper.StartServer...");
-                    XRayCoreWrapper.StartServer(config, proxyPort, logLevel, logPath, isSocks, isUdpEnabled);
+                    XRayCoreWrapper.StartServer(
+                        config,
+                        proxyPort,
+                        logLevel,
+                        logPath,
+                        isSocks,
+                        isUdpEnabled,
+                        localProxyCredentials);
                     DiagnosticLog.Write("ServerThread", "StartServer returned (server stopped)");
                 }
                 catch (Exception ex)
@@ -207,7 +216,7 @@ namespace InvisibleGorillaXRay.Core
             else
             {
                 DiagnosticLog.Write("Run", "Enabling tunnel...");
-                Status tunnelStatus = EnableTunnel();
+                Status tunnelStatus = EnableTunnel(localProxyCredentials);
                 DiagnosticLog.Write("Run", $"EnableTunnel result: code={tunnelStatus.Code}, subCode={tunnelStatus.SubCode}");
 
                 if (tunnelStatus.Code == Code.ERROR)
@@ -327,7 +336,7 @@ namespace InvisibleGorillaXRay.Core
             proxy.Disable();
         }
 
-        private Status EnableTunnel()
+        private Status EnableTunnel(LocalProxyCredentials localProxyCredentials)
         {
             Status configStatus = LoadConfigFile();
             if (configStatus.Code == Code.ERROR)
@@ -349,7 +358,8 @@ namespace InvisibleGorillaXRay.Core
                 port: proxyPort,
                 address: address,
                 server: server,
-                dns: dns
+                dns: dns,
+                localProxyCredentials: localProxyCredentials
             );
 
             Status LoadConfigFile()
@@ -379,6 +389,14 @@ namespace InvisibleGorillaXRay.Core
         {
             ITunnel tunnel = getTunnel.Invoke();
             tunnel.Cancel();
+        }
+
+        private static LocalProxyCredentials CreateLocalProxyCredentials(Mode mode, bool isSocks)
+        {
+            if (mode != Mode.TUN || !isSocks)
+                return LocalProxyCredentials.None;
+
+            return LocalProxyCredentials.CreateSessionScoped();
         }
 
         private bool ShouldChangeSystemProxy() => getSystemProxyUsed.Invoke();

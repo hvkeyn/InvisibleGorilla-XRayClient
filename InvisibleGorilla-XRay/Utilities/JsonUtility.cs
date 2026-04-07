@@ -59,5 +59,39 @@ namespace InvisibleGorillaXRay.Utilities
                 return null;
             }
         }
+
+        public static string SanitizeRuntimeManagedSections(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+                return json;
+
+            try
+            {
+                JObject root = JObject.Parse(json);
+                bool changed = false;
+
+                changed |= RemoveTopLevelProperty(root, "api");
+                changed |= RemoveTopLevelProperty(root, "stats");
+                changed |= RemoveTopLevelProperty(root, "inbounds");
+
+                return changed ? root.ToString(Formatting.Indented) : json;
+            }
+            catch
+            {
+                return json;
+            }
+        }
+
+        private static bool RemoveTopLevelProperty(JObject root, string propertyName)
+        {
+            JProperty property = root.Properties()
+                .FirstOrDefault(candidate => candidate.Name.Equals(propertyName, StringComparison.OrdinalIgnoreCase));
+
+            if (property == null)
+                return false;
+
+            property.Remove();
+            return true;
+        }
     }
 }

@@ -59,16 +59,26 @@ namespace InvisibleGorillaXRay.Core
             static extern IntPtr LoadConfigNative(IntPtr formatPtr, IntPtr pathPtr);
         }
 
-        public static void StartServer(string config, int port, LogLevel logLevel, string logPath, bool isSocks, bool isUdpEnabled)
+        public static void StartServer(
+            string config,
+            int port,
+            LogLevel logLevel,
+            string logPath,
+            bool isSocks,
+            bool isUdpEnabled,
+            LocalProxyCredentials? localProxyCredentials = null)
         {
-            DiagnosticLog.Write("XRayWrapper", $"StartServer: port={port}, logLevel={logLevel}, logPath={logPath}, isSocks={isSocks}, isUdpEnabled={isUdpEnabled}");
+            LocalProxyCredentials credentials = localProxyCredentials ?? LocalProxyCredentials.None;
+            DiagnosticLog.Write("XRayWrapper", $"StartServer: port={port}, logLevel={logLevel}, logPath={logPath}, isSocks={isSocks}, isUdpEnabled={isUdpEnabled}, authEnabled={credentials.HasValue}");
             DiagnosticLog.Write("XRayWrapper", $"Config size: {config?.Length ?? 0} bytes");
 
             IntPtr logPathPtr = StringToUtf8Ptr(logPath);
+            IntPtr usernamePtr = StringToUtf8Ptr(credentials.Username);
+            IntPtr passwordPtr = StringToUtf8Ptr(credentials.Password);
             try
             {
                 DiagnosticLog.Write("XRayWrapper", "Calling native StartServer...");
-                StartServerNative(config, port, logLevel.ToString(), logPathPtr, isSocks, isUdpEnabled);
+                StartServerNative(config, port, logLevel.ToString(), logPathPtr, isSocks, isUdpEnabled, usernamePtr, passwordPtr);
                 DiagnosticLog.Write("XRayWrapper", "Native StartServer returned normally");
             }
             catch (Exception ex)
@@ -79,10 +89,12 @@ namespace InvisibleGorillaXRay.Core
             finally
             {
                 Marshal.FreeHGlobal(logPathPtr);
+                Marshal.FreeHGlobal(usernamePtr);
+                Marshal.FreeHGlobal(passwordPtr);
             }
 
             [DllImport(Path.XRAY_CORE_DLL, EntryPoint = "StartServer")]
-            static extern void StartServerNative(string config, int port, string logLevel, IntPtr logPathPtr, bool isSocks, bool isUdpEnabled);
+            static extern void StartServerNative(string config, int port, string logLevel, IntPtr logPathPtr, bool isSocks, bool isUdpEnabled, IntPtr usernamePtr, IntPtr passwordPtr);
         }
 
         public static void StopServer()
