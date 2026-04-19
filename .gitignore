@@ -5,6 +5,9 @@
 /InvisibleGorilla-XRay.Mac/obj
 /InvisibleGorilla-XRay.Android/bin
 /InvisibleGorilla-XRay.Android/obj
+/InvisibleGorilla-XRay.Linux/bin
+/InvisibleGorilla-XRay.Linux/obj
+/InvisibleGorilla-XRay.Linux/TUN
 /InvisibleGorilla.Core/bin
 /InvisibleGorilla.Core/obj
 *.dll
@@ -16,7 +19,9 @@
 # Build outputs
 /publish
 /publish-android
+/publish-linux
 /dist
+/dist-linux
 /XRay-Wrapper/gorilla-xray
 .cursorrules
 memory-bank/activeContext.md
