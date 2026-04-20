@@ -34,7 +34,7 @@ set -euo pipefail
 
 # ─── Settings ─────────────────────────────────────────────────────────────────
 
-readonly VERSION="3.2.5.0"
+readonly APP_VERSION="3.2.5.0"
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly WRAPPER_DIR="$SCRIPT_DIR/XRay-Wrapper"
 readonly LINUX_DIR="$SCRIPT_DIR/InvisibleGorilla-XRay.Linux"
@@ -118,12 +118,36 @@ DISTRO_FAMILY=""
 PKG_INSTALL=""
 SUDO=""
 
+read_os_release_field() {
+    # Pure-text parser instead of `. /etc/os-release`, because sourcing it
+    # assigns keys like VERSION=, NAME=, ID= into the current shell, and any
+    # collision with an existing readonly variable aborts the script under
+    # `set -e` (this is exactly how ALT Linux bit us with `readonly VERSION`).
+    # `readonly` also propagates into subshells, so a `( . /etc/os-release )`
+    # wouldn't help either. Parse the file instead.
+    local field="$1"
+    [[ -r /etc/os-release ]] || { printf ''; return 0; }
+    local line
+    line="$(grep -E "^${field}=" /etc/os-release 2>/dev/null | tail -n 1)" || true
+    [[ -z "$line" ]] && { printf ''; return 0; }
+    local value="${line#*=}"
+    # Strip surrounding single or double quotes if present
+    if [[ "$value" == \"*\" ]]; then
+        value="${value#\"}"; value="${value%\"}"
+    elif [[ "$value" == \'*\' ]]; then
+        value="${value#\'}"; value="${value%\'}"
+    fi
+    printf '%s' "$value"
+}
+
 detect_distro() {
+    local pretty_name=""
     if [[ -r /etc/os-release ]]; then
-        # shellcheck disable=SC1091
-        . /etc/os-release
-        DISTRO_ID="${ID:-unknown}"
-        local id_like="${ID_LIKE:-}"
+        DISTRO_ID="$(read_os_release_field ID)"
+        [[ -z "$DISTRO_ID" ]] && DISTRO_ID="unknown"
+        local id_like
+        id_like="$(read_os_release_field ID_LIKE)"
+        pretty_name="$(read_os_release_field PRETTY_NAME)"
 
         case "$DISTRO_ID:$id_like" in
             altlinux:*|*:altlinux*)
@@ -158,7 +182,7 @@ detect_distro() {
         SUDO="sudo"
     fi
 
-    ok "Distro: ${PRETTY_NAME:-unknown} (family=$DISTRO_FAMILY, arch=$ARCH)"
+    ok "Distro: ${pretty_name:-unknown} (family=$DISTRO_FAMILY, arch=$ARCH)"
 }
 
 install_packages() {
@@ -325,7 +349,7 @@ build_go_wrapper() {
     go build \
         -o gorilla-xray \
         -trimpath \
-        -ldflags "-s -w -buildid= -X main.version=$VERSION" \
+        -ldflags "-s -w -buildid= -X main.version=$APP_VERSION" \
         ./cmd/gorilla-xray/
     ok "gorilla-xray built ($(format_size "$(stat -c%s gorilla-xray)"))"
 
@@ -537,7 +561,7 @@ INSTALL
     ok "Bundled: install.sh"
 
     pushd "$SCRIPT_DIR/$DIST_DIR" >/dev/null
-    local archive="InvisibleGorilla-XRay-Linux-${RUNTIME}-v${VERSION}.tar.gz"
+    local archive="InvisibleGorilla-XRay-Linux-${RUNTIME}-v${APP_VERSION}.tar.gz"
     tar -czf "$archive" "$(basename "$stage")"
     popd >/dev/null
 
@@ -626,7 +650,7 @@ SECONDS=0
 
 echo
 echo -e "${MAGENTA}  Invisible Gorilla - XRay Client :: Linux Build Script${NC}"
-echo -e "${DIM}  v${VERSION} | $RUNTIME | $(uname -srm)${NC}"
+echo -e "${DIM}  v${APP_VERSION} | $RUNTIME | $(uname -srm)${NC}"
 echo
 
 detect_distro
