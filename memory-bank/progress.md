@@ -103,6 +103,7 @@
 
 ## Recently Fixed (Windows build)
 - `build.ps1` now reads `global.json` and requires the pinned .NET SDK (`8.0.419`) instead of accepting any installed SDK 7.x. This fixes clean Windows machines where `dotnet restore` failed with `A compatible .NET SDK was not found` after dependency checks incorrectly reported `.NET SDK 7.0.410` as OK.
+- `build.ps1` now restores/builds/publishes `InvisibleGorilla-XRay/InvisibleGorilla-XRay.csproj` for the Windows desktop app instead of the full solution. This prevents a clean Windows desktop build from requiring the Android workload because of `InvisibleGorilla-XRay.Android.csproj`.
 
 ## Remaining Risks (Linux head)
 - Tray icon depends on `StatusNotifierItem` over D-Bus; on stock GNOME this requires the AppIndicator extension. Without it, Avalonia falls back to no tray, but `notify-send` notifications and the main window keep working.

@@ -80,6 +80,7 @@ $AppDir       = Join-Path $RootDir "InvisibleGorilla-XRay"
 $LibrariesDir = Join-Path $AppDir "Libraries"
 $TunDir       = Join-Path $AppDir "TUN"
 $SolutionFile = Join-Path $RootDir "InvisibleGorilla-XRay.sln"
+$WindowsProjectFile = Join-Path $AppDir "InvisibleGorilla-XRay.csproj"
 $LocalTunRepoDir = Join-Path (Split-Path $RootDir -Parent) "InvisibleGorilla-TUN"
 $LocalTunBuildScript = Join-Path $LocalTunRepoDir "build.ps1"
 $LocalTunProject = Join-Path $LocalTunRepoDir "InvisibleGorilla-TUN\InvisibleGorilla-TUN.csproj"
@@ -921,15 +922,15 @@ function Build-DotNetApp {
         Write-StepHeader "Шаг 4: Сборка .NET ($Configuration)"
     }
 
-    if (-not (Test-Path $SolutionFile)) {
-        Write-Err "Файл решения не найден: $SolutionFile"
+    if (-not (Test-Path $WindowsProjectFile)) {
+        Write-Err "Проект Windows-приложения не найден: $WindowsProjectFile"
         exit 1
     }
 
     Push-Location $RootDir
     try {
         Write-Info "Восстановление NuGet-пакетов..."
-        & dotnet restore $SolutionFile
+        & dotnet restore $WindowsProjectFile
         if ($LASTEXITCODE -ne 0) {
             Write-Err "dotnet restore: ошибка (код: $LASTEXITCODE)"
             exit $LASTEXITCODE
@@ -940,7 +941,7 @@ function Build-DotNetApp {
             $absOutput = [System.IO.Path]::GetFullPath((Join-Path $RootDir $OutputDir))
 
             Write-Info "Публикация приложения..."
-            & dotnet publish $SolutionFile `
+            & dotnet publish $WindowsProjectFile `
                 -c $Configuration `
                 -r $Runtime `
                 --self-contained true `
@@ -954,7 +955,7 @@ function Build-DotNetApp {
         }
         else {
             Write-Info "Сборка приложения..."
-            & dotnet build $SolutionFile -c $Configuration
+            & dotnet build $WindowsProjectFile -c $Configuration
 
             if ($LASTEXITCODE -ne 0) {
                 Write-Err "dotnet build: ошибка (код: $LASTEXITCODE)"
