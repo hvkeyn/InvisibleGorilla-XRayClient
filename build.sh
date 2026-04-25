@@ -8,7 +8,7 @@
 #   1. Detect distribution and install dependencies
 #      (build tools, Go, .NET SDK 7.0, GTK runtime, libnotify, policykit-1,
 #       iproute2 — used by the TUN handler at runtime).
-#   2. Build the Go wrapper: XRayCore.so (c-shared) + gorilla-xray (CLI).
+#   2. Build the Go wrapper: libXRayCore.so (c-shared) + gorilla-xray (CLI).
 #   3. Fetch xjasonlyu/tun2socks into TUN/ (used by LinuxTunnel).
 #   4. Download geoip.dat / geosite.dat.
 #   5. Publish the Avalonia GUI for linux-x64 (or linux-arm64).
@@ -82,6 +82,14 @@ info() { echo -e "${YELLOW}[..]${NC} $1"; }
 err()  { echo -e "${RED}[!!]${NC} $1" >&2; }
 
 command_exists() { command -v "$1" &>/dev/null; }
+
+resolve_path() {
+    local path="$1"
+    case "$path" in
+        /*) printf '%s' "$path" ;;
+        *)  printf '%s' "$SCRIPT_DIR/$path" ;;
+    esac
+}
 
 format_size() {
     local bytes=$1
@@ -321,7 +329,7 @@ ensure_dotnet() {
 # ─── Step 1: Build Go wrapper ─────────────────────────────────────────────────
 
 build_go_wrapper() {
-    step_header "Step 1: Build XRayCore.so + gorilla-xray (Go)"
+    step_header "Step 1: Build libXRayCore.so + gorilla-xray (Go)"
 
     if [[ ! -d "$WRAPPER_DIR" ]]; then
         err "XRay-Wrapper directory not found: $WRAPPER_DIR"
@@ -330,19 +338,21 @@ build_go_wrapper() {
 
     pushd "$WRAPPER_DIR" >/dev/null
 
-    info "Building XRayCore.so for $RUNTIME..."
+    local native_lib="libXRayCore.so"
+
+    info "Building $native_lib for $RUNTIME..."
     CGO_ENABLED=1 GOOS=linux GOARCH="$GO_ARCH" \
     go build \
         --buildmode=c-shared \
-        -o XRayCore.so \
+        -o "$native_lib" \
         -trimpath \
         -ldflags "-s -w -buildid=" \
         .
-    ok "XRayCore.so built ($(format_size "$(stat -c%s XRayCore.so)"))"
+    ok "$native_lib built ($(format_size "$(stat -c%s "$native_lib")"))"
 
     mkdir -p "$LIBRARIES_DIR"
-    cp XRayCore.so "$LIBRARIES_DIR/"
-    rm -f XRayCore.h XRayCore.so
+    cp "$native_lib" "$LIBRARIES_DIR/"
+    rm -f libXRayCore.h "$native_lib"
 
     info "Building gorilla-xray CLI binary..."
     CGO_ENABLED=1 GOOS=linux GOARCH="$GO_ARCH" \
@@ -415,14 +425,17 @@ build_dotnet_app() {
     info "Restoring NuGet packages..."
     dotnet restore "$csproj"
 
-    local abs_output; abs_output="$(mkdir -p "$OUTPUT_DIR" && cd "$OUTPUT_DIR" && pwd)"
+    local output_base; output_base="$(resolve_path "$OUTPUT_DIR")"
+    local abs_output="$output_base/$RUNTIME"
+    mkdir -p "$abs_output"
 
-    info "Publishing self-contained Linux build..."
+    info "Publishing self-contained single-file Linux build..."
     dotnet publish "$csproj" \
         -c "$CONFIGURATION" \
         -r "$RUNTIME" \
         --self-contained true \
-        -p:PublishSingleFile=false \
+        -p:PublishSingleFile=true \
+        -p:IncludeNativeLibrariesForSelfExtract=true \
         -o "$abs_output"
 
     ok "Published to: $abs_output"
@@ -467,19 +480,33 @@ PY
 package_bundle() {
     step_header "Step 5: Package Linux distribution"
 
-    local stage="$SCRIPT_DIR/$DIST_DIR/InvisibleGorilla-XRay-${RUNTIME}"
+    local dist_base; dist_base="$(resolve_path "$DIST_DIR")"
+    local stage="$dist_base/InvisibleGorilla-XRay-${RUNTIME}"
     rm -rf "$stage"
     mkdir -p "$stage/bin" "$stage/share/applications" "$stage/share/icons" "$stage/share/autostart"
 
-    local publish_dir="$SCRIPT_DIR/$OUTPUT_DIR"
-    if [[ ! -d "$publish_dir" ]] || ! ls "$publish_dir"/*.dll &>/dev/null; then
-        err "Avalonia publish output missing — run 'dotnet' step first."
+    local publish_dir="$(resolve_path "$OUTPUT_DIR")/$RUNTIME"
+    local app_binary="$publish_dir/InvisibleGorilla-XRay.Linux"
+    if [[ ! -x "$app_binary" ]]; then
+        err "Avalonia Linux binary missing — run './build.sh --step dotnet' first."
+        err "Expected: $app_binary"
         exit 1
     fi
 
     cp -R "$publish_dir/"* "$stage/bin/"
-    chmod +x "$stage/bin/InvisibleGorilla-XRay.Linux" 2>/dev/null || true
-    ok "Bundled: Avalonia GUI files"
+    chmod +x "$stage/bin/InvisibleGorilla-XRay.Linux"
+    ok "Bundled: Avalonia GUI binary"
+
+    local libraries_src="$APP_DIR/Libraries/libXRayCore.so"
+    if [[ -f "$libraries_src" ]]; then
+        mkdir -p "$stage/bin/Libraries"
+        cp "$libraries_src" "$stage/bin/Libraries/"
+        chmod +x "$stage/bin/Libraries/libXRayCore.so"
+        ok "Bundled: libXRayCore.so"
+    else
+        err "libXRayCore.so missing — run './build.sh --step go' first."
+        exit 1
+    fi
 
     local cli_src="$WRAPPER_DIR/gorilla-xray"
     if [[ -f "$cli_src" ]]; then
@@ -560,7 +587,7 @@ INSTALL
     chmod +x "$stage/install.sh"
     ok "Bundled: install.sh"
 
-    pushd "$SCRIPT_DIR/$DIST_DIR" >/dev/null
+    pushd "$dist_base" >/dev/null
     local archive="InvisibleGorilla-XRay-Linux-${RUNTIME}-v${APP_VERSION}.tar.gz"
     tar -czf "$archive" "$(basename "$stage")"
     popd >/dev/null

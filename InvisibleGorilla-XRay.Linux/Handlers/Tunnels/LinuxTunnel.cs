@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
+using CorePath = InvisibleGorillaXRay.Values.Path;
 
 namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
 {
@@ -24,18 +25,17 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
         private string? originalGateway;
         private string? originalInterface;
         private const string TUN_DEVICE = "tun-igxray";
-        private const string TUN2SOCKS_PATH = "./TUN/tun2socks";
 
         public Status Enable(string ip, int port, string address, string server, string dns, LocalProxyCredentials localProxyCredentials)
         {
             isCancelled = false;
 
-            if (!File.Exists(TUN2SOCKS_PATH))
+            if (!File.Exists(CorePath.TUN_EXE))
             {
                 return new Status(
                     Code.ERROR,
                     SubCode.CANT_TUNNEL,
-                    "tun2socks binary not found. Run ./build.sh to fetch it into TUN/.");
+                    $"tun2socks binary not found at {CorePath.TUN_EXE}. Run ./build.sh to fetch and bundle it.");
             }
 
             string privileged = ResolvePrivilegedFront();
@@ -133,7 +133,7 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
             tun2socksProcess = new Process();
             tun2socksProcess.StartInfo = new ProcessStartInfo
             {
-                FileName = TUN2SOCKS_PATH,
+                FileName = CorePath.TUN_EXE,
                 Arguments = $"-device {TUN_DEVICE} -proxy {proxyArgument} -interface lo",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
