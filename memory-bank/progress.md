@@ -115,3 +115,13 @@
 - Linux project: `InvisibleGorilla-XRay.Linux/InvisibleGorilla-XRay.Linux.csproj`
 - Per-RID publish output (gitignored): `publish-linux/<rid>/`
 - Distributable bundle (gitignored): `dist-linux/<rid>/`
+
+# Progress
+
+## Recently Fixed (config export)
+- Windows desktop config sharing is no longer QR-only. The server config export panel now lets the user choose QR code, `.json` configuration file, or a clipboard import link.
+- Exported links use `invxray://config-data/...` with a base64-encoded JSON config payload and can be imported back through the existing config-link import flow.
+
+## Validation
+- Windows desktop project build succeeds after the UI/export changes.
+- Shared Core build succeeds after adding exported data-config link parsing.

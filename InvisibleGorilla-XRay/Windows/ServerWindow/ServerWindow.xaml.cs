@@ -1,8 +1,11 @@
 using System;
+using System.IO;
+using System.Text;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Controls;
 using System.Collections.Generic;
+using Microsoft.Win32;
 using QRCoder;
 using QRCoder.Xaml;
 
@@ -22,6 +25,8 @@ namespace InvisibleGorillaXRay
         private Func<bool> isCurrentPathEqualRootConfigPath;
         private Func<string, int> testConnection;
         private Func<string> getLogPath;
+        private string pendingShareContent;
+        private string pendingShareConfigName;
 
         private AnalyticsService AnalyticsService => ServiceLocator.Get<AnalyticsService>();
 
@@ -113,6 +118,84 @@ namespace InvisibleGorillaXRay
             SetActiveSharePanel(false);
         }
 
+        private void OnShareQrButtonClick(object sender, RoutedEventArgs e)
+        {
+            if (!HasPendingShareContent())
+                return;
+
+            QRCodeGenerator qrGenerator = new QRCodeGenerator();
+            QRCodeData qrCodeData = qrGenerator.CreateQrCode(
+                plainText: pendingShareContent,
+                eccLevel: QRCodeGenerator.ECCLevel.Default
+            );
+
+            XamlQRCode qrCode = new XamlQRCode(qrCodeData);
+            DrawingImage qrCodeAsXaml = qrCode.GetGraphic(20);
+            imageQrCode.Source = qrCodeAsXaml;
+            imageQrCode.Visibility = Visibility.Visible;
+        }
+
+        private void OnShareFileButtonClick(object sender, RoutedEventArgs e)
+        {
+            if (!HasPendingShareContent())
+                return;
+
+            SaveFileDialog fileDialog = new SaveFileDialog
+            {
+                Title = GetResourceText("Lang.Share.ConfigFile"),
+                FileName = GetPendingShareFileName(),
+                Filter = "Config files|*.json|All files|*.*",
+                AddExtension = true,
+                DefaultExt = ".json"
+            };
+
+            if (fileDialog.ShowDialog(this) != true)
+                return;
+
+            try
+            {
+                File.WriteAllText(fileDialog.FileName, pendingShareContent, Encoding.UTF8);
+                MessageBox.Show(
+                    this,
+                    GetResourceText("Lang.Share.FileSaved"),
+                    Values.Caption.INFO,
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information
+                );
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, Values.Caption.ERROR, MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void OnShareLinkButtonClick(object sender, RoutedEventArgs e)
+        {
+            if (!HasPendingShareContent())
+                return;
+
+            try
+            {
+                string shareLink = BuildShareLink(pendingShareContent, pendingShareConfigName);
+                Clipboard.SetText(shareLink);
+                textBoxShareLink.Text = shareLink;
+                textBoxShareLink.Visibility = Visibility.Visible;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, Values.Caption.ERROR, MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            MessageBox.Show(
+                this,
+                GetResourceText("Lang.Share.LinkCopied"),
+                Values.Caption.INFO,
+                MessageBoxButton.OK,
+                MessageBoxImage.Information
+            );
+        }
+
         private void ShowServersPanel()
         {
             panelAddConfigs.Visibility = Visibility.Hidden;
@@ -193,16 +276,12 @@ namespace InvisibleGorillaXRay
                         }
                     },
                     onShare: (content) => {
-                        QRCodeGenerator qrGenerator = new QRCodeGenerator();
-                        QRCodeData qrCodeData = qrGenerator.CreateQrCode(
-                            plainText: content,
-                            eccLevel: QRCodeGenerator.ECCLevel.Default
-                        );
-                        
-                        XamlQRCode qrCode = new XamlQRCode(qrCodeData);
-                        DrawingImage qrCodeAsXaml = qrCode.GetGraphic(20);
-                        imageQrCode.Source = qrCodeAsXaml;
-
+                        pendingShareContent = content;
+                        pendingShareConfigName = config.Name;
+                        imageQrCode.Source = null;
+                        imageQrCode.Visibility = Visibility.Collapsed;
+                        textBoxShareLink.Text = null;
+                        textBoxShareLink.Visibility = Visibility.Collapsed;
                         SetActiveSharePanel(true);
                     },
                     getServerWindow: () => this,
@@ -233,6 +312,38 @@ namespace InvisibleGorillaXRay
         private bool IsAnyConfigExists(List<Config> configs)
         {
             return configs != null && configs.Count > 0;
+        }
+
+        private bool HasPendingShareContent()
+        {
+            return !string.IsNullOrWhiteSpace(pendingShareContent);
+        }
+
+        private string BuildShareLink(string content, string configName)
+        {
+            string configNameWithoutExtension = System.IO.Path.GetFileNameWithoutExtension(configName);
+            string metadataName = Uri.EscapeDataString(
+                string.IsNullOrWhiteSpace(configNameWithoutExtension)
+                    ? "config"
+                    : configNameWithoutExtension);
+            string base64Config = Convert.ToBase64String(Encoding.UTF8.GetBytes(content));
+            string dataConfigLink = $"data:application/json;name={metadataName};base64,{base64Config}";
+
+            return $"{DeepLink.CONFIG_DATA}{Uri.EscapeDataString(dataConfigLink)}";
+        }
+
+        private string GetPendingShareFileName()
+        {
+            string fileName = System.IO.Path.GetFileName(pendingShareConfigName);
+            if (string.IsNullOrWhiteSpace(fileName))
+                return "config.json";
+
+            return System.IO.Path.HasExtension(fileName) ? fileName : $"{fileName}.json";
+        }
+
+        private string GetResourceText(string key)
+        {
+            return TryFindResource(key)?.ToString() ?? key;
         }
 
         private void AddConfigHintAtTheEndOfList(StackPanel list)
@@ -300,7 +411,20 @@ namespace InvisibleGorillaXRay
             SelectConfig(getCurrentConfigPath.Invoke());
         }
 
-        private void SetActiveSharePanel(bool isActive) => SetActivePanel(panelShare, isActive);
+        private void SetActiveSharePanel(bool isActive)
+        {
+            if (!isActive)
+            {
+                pendingShareContent = null;
+                pendingShareConfigName = null;
+                imageQrCode.Source = null;
+                imageQrCode.Visibility = Visibility.Collapsed;
+                textBoxShareLink.Text = null;
+                textBoxShareLink.Visibility = Visibility.Collapsed;
+            }
+
+            SetActivePanel(panelShare, isActive);
+        }
 
         private void SetActiveLoadingPanel(bool isActive) => SetActivePanel(panelLoading, isActive);
 

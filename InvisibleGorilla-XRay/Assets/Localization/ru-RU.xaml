@@ -143,6 +143,14 @@
     <system:String x:Key="Lang.ToolTip.Check">Проверить</system:String>
     <system:String x:Key="Lang.ToolTip.Update">Обновить</system:String>
 
+    <system:String x:Key="Lang.Share.Title">Выберите формат экспорта</system:String>
+    <system:String x:Key="Lang.Share.Description">Экспортируйте эту конфигурацию сервера как QR-код, конфигурационный файл или ссылку для импорта.</system:String>
+    <system:String x:Key="Lang.Share.QrCode">QR-код</system:String>
+    <system:String x:Key="Lang.Share.ConfigFile">Файл</system:String>
+    <system:String x:Key="Lang.Share.Link">Ссылка</system:String>
+    <system:String x:Key="Lang.Share.LinkCopied">Ссылка для импорта скопирована в буфер обмена.</system:String>
+    <system:String x:Key="Lang.Share.FileSaved">Файл конфигурации сохранен.</system:String>
+
     <system:String x:Key="Lang.Notify.Open">Открыть Invisible Gorilla XRay</system:String>
     <system:String x:Key="Lang.Notify.Mode">Режим</system:String>
     <system:String x:Key="Lang.Notify.Update">Проверить обновления</system:String>

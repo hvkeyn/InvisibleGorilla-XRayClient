@@ -143,6 +143,14 @@
     <system:String x:Key="Lang.ToolTip.Check">Check</system:String>
     <system:String x:Key="Lang.ToolTip.Update">Update</system:String>
 
+    <system:String x:Key="Lang.Share.Title">Choose export format</system:String>
+    <system:String x:Key="Lang.Share.Description">Export this server configuration as a QR code, a configuration file, or an import link.</system:String>
+    <system:String x:Key="Lang.Share.QrCode">QR code</system:String>
+    <system:String x:Key="Lang.Share.ConfigFile">File</system:String>
+    <system:String x:Key="Lang.Share.Link">Link</system:String>
+    <system:String x:Key="Lang.Share.LinkCopied">The import link was copied to the clipboard.</system:String>
+    <system:String x:Key="Lang.Share.FileSaved">The configuration file was saved.</system:String>
+
     <system:String x:Key="Lang.Notify.Open">Open Invisible Gorilla XRay</system:String>
     <system:String x:Key="Lang.Notify.Mode">Mode</system:String>
     <system:String x:Key="Lang.Notify.Update">Check for updates</system:String>

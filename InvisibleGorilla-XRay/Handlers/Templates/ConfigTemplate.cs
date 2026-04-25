@@ -1,5 +1,7 @@
 ﻿using System;
+using System.IO;
 using System.Linq;
+using System.Text;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 
@@ -8,6 +10,7 @@ namespace InvisibleGorillaXRay.Handlers.Templates
     using Services;
     using Models;
     using Models.Templates.Configs;
+    using Utilities;
     using Values;
 
     public class ConfigTemplate : ITemplate
@@ -31,6 +34,9 @@ namespace InvisibleGorillaXRay.Handlers.Templates
 
         public Status ConverLinkToConfig(string link)
         {
+            if (TryConvertDataConfigLink(link, out Status dataConfigStatus))
+                return dataConfigStatus;
+
             Template template = FindTemplate(type: FetchConfigType());
             if (template == null)
                 return new Status(
@@ -53,6 +59,69 @@ namespace InvisibleGorillaXRay.Handlers.Templates
             );
 
             string FetchConfigType() => link.Split("://").First();
+
+            bool TryConvertDataConfigLink(string value, out Status status)
+            {
+                status = null;
+                if (string.IsNullOrWhiteSpace(value) ||
+                    !value.StartsWith("data:application/json;", StringComparison.OrdinalIgnoreCase))
+                    return false;
+
+                status = ConvertDataConfigLink(value);
+                return true;
+            }
+
+            Status ConvertDataConfigLink(string value)
+            {
+                try
+                {
+                    int separatorIndex = value.IndexOf(',');
+                    if (separatorIndex <= 0)
+                        throw new FormatException();
+
+                    string metadata = value.Substring(0, separatorIndex);
+                    string payload = value.Substring(separatorIndex + 1);
+                    if (!metadata.Split(';').Any(part => part.Equals("base64", StringComparison.OrdinalIgnoreCase)))
+                        throw new FormatException();
+
+                    string configJson = Encoding.UTF8.GetString(Convert.FromBase64String(payload));
+                    if (!JsonUtility.IsJsonValid(configJson))
+                        return new Status(
+                            code: Code.ERROR,
+                            subCode: SubCode.INVALID_CONFIG,
+                            content: LocalizationService.GetTerm(Localization.INVALID_CONFIG)
+                        );
+
+                    return new Status(
+                        code: Code.SUCCESS,
+                        subCode: SubCode.SUCCESS,
+                        content: new string[] { GetDataConfigRemark(metadata), configJson }
+                    );
+                }
+                catch
+                {
+                    return new Status(
+                        code: Code.ERROR,
+                        subCode: SubCode.INVALID_CONFIG,
+                        content: LocalizationService.GetTerm(Localization.INVALID_CONFIG)
+                    );
+                }
+            }
+
+            string GetDataConfigRemark(string metadata)
+            {
+                string name = metadata
+                    .Split(';')
+                    .FirstOrDefault(part => part.StartsWith("name=", StringComparison.OrdinalIgnoreCase))
+                    ?.Substring("name=".Length);
+
+                name = string.IsNullOrWhiteSpace(name)
+                    ? "config"
+                    : Uri.UnescapeDataString(name);
+
+                name = System.IO.Path.GetFileNameWithoutExtension(name);
+                return FileUtility.GetValidFileName(string.IsNullOrWhiteSpace(name) ? "config" : name);
+            }
 
             Template FindTemplate(string type)
             {

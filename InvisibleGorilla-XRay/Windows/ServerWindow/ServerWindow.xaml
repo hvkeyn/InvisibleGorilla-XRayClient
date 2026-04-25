@@ -329,7 +329,44 @@
                 <RowDefinition Height="50"/>
             </Grid.RowDefinitions>
 
-            <Image x:Name="imageQrCode" Margin="20 20"/>
+            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="30 20">
+                    <TextBlock Text="{DynamicResource Lang.Share.Title}" Foreground="White"
+                        FontFamily="{StaticResource SegoeUI}" FontWeight="SemiBold" FontSize="16"
+                        HorizontalAlignment="Center" Margin="0 0 0 5"/>
+
+                    <TextBlock Text="{DynamicResource Lang.Share.Description}" Foreground="{StaticResource Color.LightGray}"
+                        FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="12"
+                        TextAlignment="Center" TextWrapping="Wrap" Margin="0 0 0 15"/>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0 0 0 15">
+                        <Button Width="90" Height="30" Content="{DynamicResource Lang.Share.QrCode}" 
+                            Style="{StaticResource Button.Rectangle.Green}" 
+                            FontFamily="{StaticResource SegoeUI}" FontWeight="Bold" FontSize="12" 
+                            Foreground="{StaticResource Color.Gray}"
+                            Click="OnShareQrButtonClick"/>
+
+                        <Button Width="90" Height="30" Content="{DynamicResource Lang.Share.ConfigFile}" Margin="10 0 0 0"
+                            Style="{StaticResource Button.Rectangle.Green}" 
+                            FontFamily="{StaticResource SegoeUI}" FontWeight="Bold" FontSize="12" 
+                            Foreground="{StaticResource Color.Gray}"
+                            Click="OnShareFileButtonClick"/>
+
+                        <Button Width="90" Height="30" Content="{DynamicResource Lang.Share.Link}" Margin="10 0 0 0"
+                            Style="{StaticResource Button.Rectangle.Green}" 
+                            FontFamily="{StaticResource SegoeUI}" FontWeight="Bold" FontSize="12" 
+                            Foreground="{StaticResource Color.Gray}"
+                            Click="OnShareLinkButtonClick"/>
+                    </StackPanel>
+
+                    <Image x:Name="imageQrCode" Margin="0 0 0 10" Height="230" Visibility="Collapsed"/>
+
+                    <TextBox x:Name="textBoxShareLink" Visibility="Collapsed" IsReadOnly="True"
+                        TextWrapping="Wrap" AcceptsReturn="True" Height="70"
+                        Style="{StaticResource TextBox.Default}" FontFamily="{StaticResource SegoeUI}" 
+                        FontWeight="Normal" FontSize="11"/>
+                </StackPanel>
+            </ScrollViewer>
 
             <StackPanel Grid.Row="1" Orientation="Horizontal" 
                 HorizontalAlignment="Right" Margin="15 0">

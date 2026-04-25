@@ -107,3 +107,17 @@ Add a Linux head (ALT Linux + GNOME first, distro-agnostic in practice) that reu
 - Run `./build.sh` on an actual ALT Linux + GNOME box, confirm gsettings proxy mode toggles reachability, exercise TUN mode end-to-end, and verify tray + notify-send + autostart + xdg-mime deep-link handoff.
 - Decide whether to add cgroups + `iptables -m owner` enforcement for the Linux app-rules bridge once the JSON contract has shipped.
 - Consider promoting the linked-view + `<AdditionalFiles SourceItemGroup="AvaloniaXaml">` pattern into a shared build prop file so future heads (e.g. additional desktops) do not have to re-discover it.
+
+# Active Context
+
+## Current Focus
+Improve desktop configuration export so users can choose QR code, configuration file, or an import link instead of being forced into QR-only sharing.
+
+## Recent Changes
+- Reworked the Windows `ServerWindow` share panel into a three-option export chooser: QR code rendering, `.json` save dialog, and clipboard copy of a self-contained `invxray://config-data/...` import link.
+- Added shared parsing for exported `data:application/json;name=...;base64,...` configuration links in both the Windows duplicate and `InvisibleGorilla.Core`, so a generated import link can round-trip back through the existing link import flow.
+- Added `DeepLink.CONFIG_DATA` and taught Windows/Core deep-link handlers to decode the new import-link payload before forwarding it to the config import UI.
+
+## Validation Snapshot
+- `dotnet build InvisibleGorilla-XRay/InvisibleGorilla-XRay.csproj -c Debug` succeeds after the share panel changes.
+- `dotnet build InvisibleGorilla.Core/InvisibleGorilla.Core.csproj -c Debug` succeeds for both target frameworks after the shared parser changes.
