@@ -447,14 +447,16 @@ function Install-DotNetSdk {
 
     Invoke-Download -Uri "https://dot.net/v1/dotnet-install.ps1" -OutFile $installScript -Label "Скачивание dotnet-install.ps1..."
 
-    $installArgs = @("-InstallDir", "$env:LOCALAPPDATA\Microsoft\dotnet")
+    $installArgs = @{
+        InstallDir = "$env:LOCALAPPDATA\Microsoft\dotnet"
+    }
     if (-not [string]::IsNullOrWhiteSpace($Version)) {
         Write-Info "Установка .NET SDK $Version..."
-        $installArgs = @("-Version", $Version) + $installArgs
+        $installArgs["Version"] = $Version
     }
     else {
         Write-Info "Установка .NET SDK $Channel..."
-        $installArgs = @("-Channel", $Channel) + $installArgs
+        $installArgs["Channel"] = $Channel
     }
 
     & $installScript @installArgs
