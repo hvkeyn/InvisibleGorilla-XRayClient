@@ -37,6 +37,7 @@
 - JDK path used for Android publish: `C:\Program Files\Eclipse Adoptium\jdk-17.0.18.8-hotspot`
 
 ## Build Notes
+- `global.json` pins the SDK to `8.0.419`; Windows `build.ps1` must check and install that exact SDK with `dotnet-install.ps1 -Version 8.0.419`, not treat SDK 7.x as sufficient.
 - Rebuild both Android native libraries after Go bridge changes.
 - Rebuild the Windows `XRayCore.dll` after shared Go wrapper changes that affect the local listener contract.
 - Publish emulator APK with RID `android-x64`.

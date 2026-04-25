@@ -438,14 +438,30 @@ function Install-GCC {
 # ─── Установка .NET SDK через официальный скрипт Microsoft ───────────────────
 
 function Install-DotNetSdk {
-    param([string]$Channel = "7.0")
+    param(
+        [string]$Version,
+        [string]$Channel = "8.0"
+    )
 
     $installScript = Join-Path $env:TEMP "dotnet-install.ps1"
 
     Invoke-Download -Uri "https://dot.net/v1/dotnet-install.ps1" -OutFile $installScript -Label "Скачивание dotnet-install.ps1..."
 
-    Write-Info "Установка .NET SDK $Channel..."
-    & $installScript -Channel $Channel -InstallDir "$env:LOCALAPPDATA\Microsoft\dotnet"
+    $installArgs = @("-InstallDir", "$env:LOCALAPPDATA\Microsoft\dotnet")
+    if (-not [string]::IsNullOrWhiteSpace($Version)) {
+        Write-Info "Установка .NET SDK $Version..."
+        $installArgs = @("-Version", $Version) + $installArgs
+    }
+    else {
+        Write-Info "Установка .NET SDK $Channel..."
+        $installArgs = @("-Channel", $Channel) + $installArgs
+    }
+
+    & $installScript @installArgs
+    if ($LASTEXITCODE -ne 0) {
+        Write-Err "dotnet-install.ps1 завершился с ошибкой (код: $LASTEXITCODE)"
+        exit $LASTEXITCODE
+    }
 
     Remove-Item $installScript -Force -ErrorAction SilentlyContinue
 
@@ -462,7 +478,39 @@ function Install-DotNetSdk {
         }
     }
 
-    Write-Success ".NET SDK $Channel установлен"
+    if (-not [string]::IsNullOrWhiteSpace($Version)) {
+        Write-Success ".NET SDK $Version установлен"
+    }
+    else {
+        Write-Success ".NET SDK $Channel установлен"
+    }
+}
+
+function Get-RequiredDotNetSdkVersion {
+    $globalJsonPath = Join-Path $RootDir "global.json"
+    if (Test-Path $globalJsonPath) {
+        try {
+            $json = Get-Content $globalJsonPath -Raw | ConvertFrom-Json
+            if ($json.sdk -and $json.sdk.version) {
+                return [string]$json.sdk.version
+            }
+        }
+        catch {
+            Write-Info "Не удалось прочитать global.json, будет использован .NET SDK 8.0"
+        }
+    }
+
+    return "8.0"
+}
+
+function Get-DotNetSdkChannel {
+    param([Parameter(Mandatory)][string]$Version)
+
+    if ($Version -match '^(\d+\.\d+)') {
+        return $Matches[1]
+    }
+
+    return $Version
 }
 
 # ─── Проверка и установка зависимостей ────────────────────────────────────────
@@ -545,21 +593,36 @@ function Ensure-GCC {
 }
 
 function Ensure-DotNet {
+    $requiredSdk = Get-RequiredDotNetSdkVersion
+    $requiredChannel = Get-DotNetSdkChannel -Version $requiredSdk
+
+    $dotnetDir = "$env:LOCALAPPDATA\Microsoft\dotnet"
+    if ((Test-Path $dotnetDir) -and ($env:Path -notlike "*$dotnetDir*")) {
+        $env:Path = "$dotnetDir;$env:Path"
+    }
+
     if (Test-Command "dotnet") {
         $sdkList = & dotnet --list-sdks 2>&1
-        $has7 = $sdkList | Select-String -Pattern '^7\.'
-        if ($has7) {
-            $ver = ($has7 | Select-Object -First 1).ToString().Split(' ')[0]
+        $requiredRegex = "^$([regex]::Escape($requiredSdk))\s"
+        $matchingSdk = $sdkList | Select-String -Pattern $requiredRegex
+        if ($matchingSdk) {
+            $ver = ($matchingSdk | Select-Object -First 1).ToString().Split(' ')[0]
             Write-Success ".NET SDK $ver"
             return
         }
-        Write-Info ".NET SDK найден, но версия 7.x отсутствует"
+
+        Write-Info ".NET SDK найден, но версия из global.json отсутствует: $requiredSdk"
     }
     else {
         Write-Info ".NET SDK не найден, начинаю установку..."
     }
 
-    Install-DotNetSdk -Channel "7.0"
+    if ($requiredSdk -match '^\d+\.\d+\.\d+$') {
+        Install-DotNetSdk -Version $requiredSdk
+    }
+    else {
+        Install-DotNetSdk -Channel $requiredChannel
+    }
 
     if (-not (Test-Command "dotnet")) {
         Write-Err ".NET SDK установлен, но не найден в PATH."
@@ -567,7 +630,16 @@ function Ensure-DotNet {
         exit 1
     }
 
-    $ver = (& dotnet --version 2>&1).Trim()
+    $sdkList = & dotnet --list-sdks 2>&1
+    $matchingSdk = $sdkList | Select-String -Pattern "^$([regex]::Escape($requiredSdk))\s"
+    if (-not $matchingSdk) {
+        Write-Err ".NET SDK $requiredSdk установлен не был или не виден dotnet."
+        Write-Err "Текущие SDK:"
+        $sdkList | ForEach-Object { Write-Err "  $_" }
+        exit 1
+    }
+
+    $ver = ($matchingSdk | Select-Object -First 1).ToString().Split(' ')[0]
     Write-Success ".NET SDK $ver (установлен)"
 }
 

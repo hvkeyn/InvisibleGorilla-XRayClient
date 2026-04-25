@@ -101,6 +101,9 @@
 - Linux native bridge packaging now uses the correct filename/path `Libraries/libXRayCore.so`; the previous `XRayCore.so` output name did not match the Linux `XRayCoreWrapper` resolver.
 - Linux TUN startup now resolves `tun2socks` from `AppContext.BaseDirectory/TUN/tun2socks` via `Values.Path.TUN_EXE`, so `.desktop` launches no longer depend on the current working directory.
 
+## Recently Fixed (Windows build)
+- `build.ps1` now reads `global.json` and requires the pinned .NET SDK (`8.0.419`) instead of accepting any installed SDK 7.x. This fixes clean Windows machines where `dotnet restore` failed with `A compatible .NET SDK was not found` after dependency checks incorrectly reported `.NET SDK 7.0.410` as OK.
+
 ## Remaining Risks (Linux head)
 - Tray icon depends on `StatusNotifierItem` over D-Bus; on stock GNOME this requires the AppIndicator extension. Without it, Avalonia falls back to no tray, but `notify-send` notifications and the main window keep working.
 - `LinuxTunnel` shells out to `pkexec`/`sudo`. On non-systemd or non-`resolvectl` distros the DNS override path will fall back to `/etc/resolv.conf` and may need extra packaging on locked-down hosts.
