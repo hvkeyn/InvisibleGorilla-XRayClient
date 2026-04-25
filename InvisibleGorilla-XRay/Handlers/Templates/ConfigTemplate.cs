@@ -63,12 +63,23 @@ namespace InvisibleGorillaXRay.Handlers.Templates
             bool TryConvertDataConfigLink(string value, out Status status)
             {
                 status = null;
+                value = NormalizeDataConfigLink(value);
+
                 if (string.IsNullOrWhiteSpace(value) ||
                     !value.StartsWith("data:application/json;", StringComparison.OrdinalIgnoreCase))
                     return false;
 
                 status = ConvertDataConfigLink(value);
                 return true;
+            }
+
+            string NormalizeDataConfigLink(string value)
+            {
+                string normalized = value?.Trim() ?? string.Empty;
+                if (normalized.StartsWith(DeepLink.CONFIG_DATA, StringComparison.OrdinalIgnoreCase))
+                    return Uri.UnescapeDataString(normalized.Substring(DeepLink.CONFIG_DATA.Length).Trim());
+
+                return normalized;
             }
 
             Status ConvertDataConfigLink(string value)

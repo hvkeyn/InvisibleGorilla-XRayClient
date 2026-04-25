@@ -75,6 +75,12 @@ namespace InvisibleGorillaXRay.Android.Handlers.DeepLinks
                 return DispatchConfigLink(normalizedValue[InvisibleGorillaXRay.Values.DeepLink.CONFIG.Length..]);
             }
 
+            if (normalizedValue.StartsWith(InvisibleGorillaXRay.Values.DeepLink.CONFIG_DATA, StringComparison.OrdinalIgnoreCase))
+            {
+                OnReceiveArg(normalizedValue);
+                return DispatchConfigLink(normalizedValue);
+            }
+
             if (normalizedValue.StartsWith(InvisibleGorillaXRay.Values.DeepLink.SUBSCRIPTION, StringComparison.OrdinalIgnoreCase))
             {
                 OnReceiveArg(normalizedValue);

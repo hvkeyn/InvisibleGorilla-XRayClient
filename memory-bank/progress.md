@@ -121,7 +121,10 @@
 ## Recently Fixed (config export)
 - Windows desktop config sharing is no longer QR-only. The server config export panel now lets the user choose QR code, `.json` configuration file, or a clipboard import link.
 - Exported links use `invxray://config-data/...` with a base64-encoded JSON config payload and can be imported back through the existing config-link import flow.
+- Full exported `invxray://config-data/...` links can now be pasted directly into the normal config-link import field; previously only the decoded inner `data:application/json...` payload was accepted.
+- Android external import dispatch now recognizes the same exported config-data link format.
 
 ## Validation
 - Windows desktop project build succeeds after the UI/export changes.
 - Shared Core build succeeds after adding exported data-config link parsing.
+- Android project build succeeds after the exported config-data dispatch update.

@@ -117,7 +117,10 @@ Improve desktop configuration export so users can choose QR code, configuration 
 - Reworked the Windows `ServerWindow` share panel into a three-option export chooser: QR code rendering, `.json` save dialog, and clipboard copy of a self-contained `invxray://config-data/...` import link.
 - Added shared parsing for exported `data:application/json;name=...;base64,...` configuration links in both the Windows duplicate and `InvisibleGorilla.Core`, so a generated import link can round-trip back through the existing link import flow.
 - Added `DeepLink.CONFIG_DATA` and taught Windows/Core deep-link handlers to decode the new import-link payload before forwarding it to the config import UI.
+- Fixed manual import of exported links: `ConfigTemplate` now accepts the full `invxray://config-data/...` wrapper as well as the decoded `data:application/json...` payload, so users can paste exported links into the regular Add Config Link field on another machine.
+- Android external share/deep-link dispatch now recognizes `invxray://config-data/...` and forwards it into the same config import path.
 
 ## Validation Snapshot
 - `dotnet build InvisibleGorilla-XRay/InvisibleGorilla-XRay.csproj -c Debug` succeeds after the share panel changes.
 - `dotnet build InvisibleGorilla.Core/InvisibleGorilla.Core.csproj -c Debug` succeeds for both target frameworks after the shared parser changes.
+- `dotnet build InvisibleGorilla-XRay.Android/InvisibleGorilla-XRay.Android.csproj -c Debug` succeeds after adding Android dispatch for exported config-data links.
