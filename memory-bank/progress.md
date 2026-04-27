@@ -128,3 +128,14 @@
 - Windows desktop project build succeeds after the UI/export changes.
 - Shared Core build succeeds after adding exported data-config link parsing.
 - Android project build succeeds after the exported config-data dispatch update.
+
+# Progress
+
+## Recently Fixed (Linux bundle)
+- Linux archives now include a top-level `run-igxray` launcher so users can run the app immediately after unpacking without hunting for `bin/InvisibleGorilla-XRay.Linux`.
+- Installed Linux bundles now expose `/usr/local/bin/invisible-gorilla-xray` and `igxray`, while the application menu launcher points to the same command wrapper.
+- Linux deep-link metadata now includes `invxray://`, matching the shared app deep-link scheme used by exported config links.
+
+## Validation
+- `bash -n build.sh` succeeds.
+- `dotnet build InvisibleGorilla-XRay.Linux/InvisibleGorilla-XRay.Linux.csproj -c Release` succeeds.

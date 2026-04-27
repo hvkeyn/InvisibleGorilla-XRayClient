@@ -124,3 +124,18 @@ Improve desktop configuration export so users can choose QR code, configuration 
 - `dotnet build InvisibleGorilla-XRay/InvisibleGorilla-XRay.csproj -c Debug` succeeds after the share panel changes.
 - `dotnet build InvisibleGorilla.Core/InvisibleGorilla.Core.csproj -c Debug` succeeds for both target frameworks after the shared parser changes.
 - `dotnet build InvisibleGorilla-XRay.Android/InvisibleGorilla-XRay.Android.csproj -c Debug` succeeds after adding Android dispatch for exported config-data links.
+
+# Active Context
+
+## Current Focus
+Harden Linux bundle launchability after remote testing of an older Linux package reported that users could not find the executable after unpack/install.
+
+## Recent Changes
+- Updated `build.sh` packaging so every Linux archive contains an obvious top-level `run-igxray` launcher plus a `bin/invisible-gorilla-xray` command wrapper that execs the real `bin/InvisibleGorilla-XRay.Linux` binary.
+- `install.sh` now removes stale installed `bin`/`share` folders before copying the new bundle, installs `/usr/local/bin/invisible-gorilla-xray`, and adds an `igxray` symlink.
+- The generated `.desktop` file now launches the command wrapper and advertises the `invxray://` scheme along with `vless://`, `vmess://`, and the legacy `ig-xray://` handler.
+- Linux runtime deep-link registration now also binds `x-scheme-handler/invxray`.
+
+## Validation Snapshot
+- `bash -n build.sh` succeeds after the launcher/install changes.
+- `dotnet build InvisibleGorilla-XRay.Linux/InvisibleGorilla-XRay.Linux.csproj -c Release` succeeds on Windows.

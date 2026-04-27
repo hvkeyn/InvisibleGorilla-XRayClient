@@ -7,7 +7,7 @@ namespace InvisibleGorillaXRay.Linux.Handlers.DeepLinks
     using InvisibleGorillaXRay.Handlers.DeepLinks;
 
     /// <summary>
-    /// Registers vless:// / vmess:// MIME associations through xdg-mime.
+    /// Registers config/share URI scheme associations through xdg-mime.
     /// Required pieces (the bundled .desktop file) are written by the build script;
     /// at runtime we just rebind the scheme handlers in case they were lost.
     /// </summary>
@@ -17,6 +17,7 @@ namespace InvisibleGorillaXRay.Linux.Handlers.DeepLinks
         {
             "x-scheme-handler/vless",
             "x-scheme-handler/vmess",
+            "x-scheme-handler/invxray",
             "x-scheme-handler/ig-xray"
         };
 

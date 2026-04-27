@@ -40,6 +40,10 @@ readonly WRAPPER_DIR="$SCRIPT_DIR/XRay-Wrapper"
 readonly LINUX_DIR="$SCRIPT_DIR/InvisibleGorilla-XRay.Linux"
 readonly APP_DIR="$SCRIPT_DIR/InvisibleGorilla-XRay"
 readonly LIBRARIES_DIR="$APP_DIR/Libraries"
+readonly APP_BINARY_NAME="InvisibleGorilla-XRay.Linux"
+readonly APP_COMMAND_NAME="invisible-gorilla-xray"
+readonly APP_RUNNER_NAME="run-igxray"
+readonly INSTALL_DIR="/opt/invisible-gorilla-xray"
 
 readonly GEOIP_URL="https://github.com/v2fly/geoip/releases/latest/download/geoip.dat"
 readonly GEOSITE_URL="https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat"
@@ -486,16 +490,39 @@ package_bundle() {
     mkdir -p "$stage/bin" "$stage/share/applications" "$stage/share/icons" "$stage/share/autostart"
 
     local publish_dir="$(resolve_path "$OUTPUT_DIR")/$RUNTIME"
-    local app_binary="$publish_dir/InvisibleGorilla-XRay.Linux"
-    if [[ ! -x "$app_binary" ]]; then
+    local app_binary="$publish_dir/$APP_BINARY_NAME"
+    if [[ ! -f "$app_binary" ]]; then
         err "Avalonia Linux binary missing — run './build.sh --step dotnet' first."
         err "Expected: $app_binary"
+        if [[ -d "$publish_dir" ]]; then
+            err "Publish directory contents:"
+            (cd "$publish_dir" && find . -maxdepth 2 -type f | sort) >&2 || true
+        fi
         exit 1
     fi
+    chmod +x "$app_binary"
 
     cp -R "$publish_dir/"* "$stage/bin/"
-    chmod +x "$stage/bin/InvisibleGorilla-XRay.Linux"
+    chmod +x "$stage/bin/$APP_BINARY_NAME"
     ok "Bundled: Avalonia GUI binary"
+
+    cat > "$stage/$APP_RUNNER_NAME" <<'RUNNER'
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec "$SCRIPT_DIR/bin/InvisibleGorilla-XRay.Linux" "$@"
+RUNNER
+    chmod +x "$stage/$APP_RUNNER_NAME"
+    ok "Bundled: $APP_RUNNER_NAME launcher"
+
+    cat > "$stage/bin/$APP_COMMAND_NAME" <<'COMMAND'
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec "$SCRIPT_DIR/InvisibleGorilla-XRay.Linux" "$@"
+COMMAND
+    chmod +x "$stage/bin/$APP_COMMAND_NAME"
+    ok "Bundled: $APP_COMMAND_NAME command wrapper"
 
     local libraries_src="$APP_DIR/Libraries/libXRayCore.so"
     if [[ -f "$libraries_src" ]]; then
@@ -540,14 +567,31 @@ Type=Application
 Name=Invisible Gorilla XRay
 GenericName=XRay client
 Comment=Secure local proxy / TUN client
-Exec=/opt/invisible-gorilla-xray/bin/InvisibleGorilla-XRay.Linux %u
+Exec=/opt/invisible-gorilla-xray/bin/invisible-gorilla-xray %u
 Icon=invisible-gorilla-xray
 Terminal=false
 Categories=Network;
-MimeType=x-scheme-handler/vless;x-scheme-handler/vmess;x-scheme-handler/ig-xray;
+MimeType=x-scheme-handler/vless;x-scheme-handler/vmess;x-scheme-handler/invxray;x-scheme-handler/ig-xray;
 StartupWMClass=InvisibleGorilla-XRay.Linux
 DESKTOP
     ok "Bundled: invisible-gorilla-xray.desktop"
+
+    cat > "$stage/README-LINUX.txt" <<README
+Invisible Gorilla XRay Linux bundle
+
+Run without installing:
+  ./$APP_RUNNER_NAME
+
+Install system-wide:
+  ./install.sh
+
+After install you can start it from the application menu or by command:
+  $APP_COMMAND_NAME
+
+Installed binary path:
+  $INSTALL_DIR/bin/$APP_BINARY_NAME
+README
+    ok "Bundled: README-LINUX.txt"
 
     cat > "$stage/install.sh" <<'INSTALL'
 #!/usr/bin/env bash
@@ -559,6 +603,7 @@ INSTALL_DIR="/opt/invisible-gorilla-xray"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 $SUDO mkdir -p "$INSTALL_DIR"
+$SUDO rm -rf "$INSTALL_DIR/bin" "$INSTALL_DIR/share"
 $SUDO cp -R "$SCRIPT_DIR/bin" "$INSTALL_DIR/"
 $SUDO cp -R "$SCRIPT_DIR/share" "$INSTALL_DIR/"
 
@@ -566,6 +611,9 @@ $SUDO install -Dm644 "$SCRIPT_DIR/share/applications/invisible-gorilla-xray.desk
     /usr/share/applications/invisible-gorilla-xray.desktop
 $SUDO install -Dm644 "$SCRIPT_DIR/share/icons/invisible-gorilla-xray.png" \
     /usr/share/icons/hicolor/256x256/apps/invisible-gorilla-xray.png || true
+$SUDO install -Dm755 "$INSTALL_DIR/bin/invisible-gorilla-xray" \
+    /usr/local/bin/invisible-gorilla-xray
+$SUDO ln -sfn /usr/local/bin/invisible-gorilla-xray /usr/local/bin/igxray
 
 if command -v update-desktop-database >/dev/null 2>&1; then
     $SUDO update-desktop-database /usr/share/applications || true
@@ -578,10 +626,13 @@ cat <<DONE
 Installed.
 
   Launcher:       Invisible Gorilla XRay (in your application menu)
+  Command:        invisible-gorilla-xray
+  Short command:  igxray
   Binary:         $INSTALL_DIR/bin/InvisibleGorilla-XRay.Linux
 
 To uninstall: $SUDO rm -rf $INSTALL_DIR /usr/share/applications/invisible-gorilla-xray.desktop \\
-              /usr/share/icons/hicolor/256x256/apps/invisible-gorilla-xray.png
+              /usr/share/icons/hicolor/256x256/apps/invisible-gorilla-xray.png \\
+              /usr/local/bin/invisible-gorilla-xray /usr/local/bin/igxray
 DONE
 INSTALL
     chmod +x "$stage/install.sh"
@@ -592,11 +643,12 @@ INSTALL
     tar -czf "$archive" "$(basename "$stage")"
     popd >/dev/null
 
-    local archive_path="$SCRIPT_DIR/$DIST_DIR/$archive"
+    local archive_path="$dist_base/$archive"
     echo
     ok "Distribution ready:"
     echo -e "     ${DIM}Stage:    $stage${NC}"
     echo -e "     ${DIM}Archive:  $archive_path ($(format_size "$(stat -c%s "$archive_path")"))${NC}"
+    echo -e "     ${DIM}Run:      cd $stage && ./$APP_RUNNER_NAME${NC}"
     echo -e "     ${DIM}Install:  cd $stage && ./install.sh${NC}"
 }
 
