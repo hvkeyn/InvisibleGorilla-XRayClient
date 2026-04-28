@@ -5,7 +5,7 @@
 <h1 align="center">Invisible Gorilla XRay</h1>
 
 <p align="center">
-  Free, open-source Xray client for Windows, macOS, and Android (experimental)<br>
+  Free, open-source Xray client for Windows, macOS, Android (experimental), and Linux (GNOME-first)<br>
   powered by <a href="https://github.com/XTLS/Xray-core">Xray-core</a>
 </p>
 
@@ -22,13 +22,25 @@
 |---|---|---|
 | **Windows** | [Latest Release (.exe)](https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/latest) | Windows 10+ |
 | **macOS** | [Latest Release (.app)](https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/latest) | macOS 13+ (Apple Silicon & Intel) |
+| **Linux** | Build from source with `./build.sh` | ALT Linux + GNOME first; also supports Debian/Ubuntu, Fedora/RHEL, openSUSE, and Arch families |
 | **Android** | Build from source with `.\build-android.ps1` | .NET Android workload, Android SDK, JDK 11+, Android NDK, arm64 device |
 
 ## What Is This?
 
 Invisible Gorilla XRay wraps [Xray-core](https://github.com/XTLS/Xray-core) with desktop and mobile clients, shared config management, and platform-specific routing logic.
 
-On Windows and macOS, the project already provides desktop-ready flows. Android support is now present as an experimental Avalonia head with APK packaging groundwork, local proxy workflow, shared config management, and storage/runtime preparation for mobile packaging.
+On Windows and macOS, the project already provides desktop-ready flows. Linux support is available through a GNOME-first Avalonia desktop head that reuses the macOS UI and integrates with Linux desktop services. Android support is present as an experimental Avalonia head with APK packaging groundwork, local proxy workflow, shared config management, and storage/runtime preparation for mobile packaging.
+
+## Current Linux Status
+
+Linux support is **GNOME-first** and build-script driven.
+
+- The repo includes an `InvisibleGorilla-XRay.Linux` project built with Avalonia UI 11 and shared `InvisibleGorilla.Core` logic.
+- The Linux head reuses the macOS Avalonia views and adds Linux-specific handlers for proxy, TUN, notifications, startup, deep links, and app rules metadata.
+- `./build.sh` is the main Linux entry point. It detects common distro families, installs/fetches required dependencies where possible, builds the Go wrapper as `libXRayCore.so`, downloads `tun2socks` and geo databases, publishes a self-contained Linux GUI, and creates a distributable bundle.
+- The generated bundle includes `run-igxray` for direct launch after unpacking, plus `install.sh` for system installation. After install, the app can be launched from the menu or with `invisible-gorilla-xray` / `igxray`.
+- GNOME system proxy mode uses `gsettings`; TUN mode uses `tun2socks` with privileged `ip`/DNS steps through `pkexec` or `sudo`.
+- Linux app-rules support currently persists the shared app-rules contract as a JSON bridge for future kernel-level enforcement.
 
 ## Current Android Status
 
@@ -43,7 +55,7 @@ Android support is **experimental**.
 
 - **One-click connect** on desktop - import config and press Run
 - **VLESS, VMess, Trojan, Shadowsocks** - all major protocols supported
-- **Proxy and TUN modes** - Windows and macOS desktop routing, Android groundwork for local proxy and future mobile VPN
+- **Proxy and TUN modes** - Windows/macOS desktop routing, Linux GNOME proxy + TUN support, Android groundwork for local proxy and future mobile VPN
 - **Server management** - add, test, switch between multiple servers
 - **Connection testing** - check latency with one click
 - **Subscription support** - auto-update server lists from provider links
@@ -63,6 +75,7 @@ Android support is **experimental**.
 ### 1. Download or build
 
 - Windows and macOS: use the latest release from the [Releases page](https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/latest).
+- Linux: build from source with `./build.sh`, then run `dist-linux/<rid>/InvisibleGorilla-XRay-<rid>/run-igxray` or install the generated bundle.
 - Android: build the APK from source with `.\build-android.ps1`.
 
 ### 2. Add a server
@@ -72,6 +85,7 @@ Open the app, import a raw JSON config, config link, or subscription, then selec
 ### 3. Connect
 
 - Desktop: choose your mode and click **Run**.
+- Linux: use Proxy mode on GNOME for `gsettings`-based system proxy, or TUN mode for full-route tunneling through bundled `tun2socks`.
 - Android: use the experimental Android head to manage configs and start the local proxy workflow while the mobile tunnel bridge is being finalized.
 
 ## Build from Source
@@ -114,6 +128,46 @@ Tested on macOS Sequoia 15.7+ (Apple Silicon and Intel). Builds an `.app` bundle
 | `./build-macos.sh --publish` | Build + distributable archive |
 | `./build-macos.sh --step go` | Only build `XRayCore.dylib` |
 | `./build-macos.sh --step bundle` | Only package the `.app` bundle |
+
+</details>
+
+<details>
+<summary><b>Linux</b></summary>
+
+```bash
+git clone https://github.com/hvkeyn/InvisibleGorilla-XRayClient.git
+cd InvisibleGorilla-XRayClient
+chmod +x build.sh
+./build.sh
+```
+
+The Linux build targets ALT Linux + GNOME first, but the script also covers Debian/Ubuntu, Fedora/RHEL, openSUSE, and Arch package families. It publishes `InvisibleGorilla-XRay.Linux` for `linux-x64` or `linux-arm64` and bundles runtime files into `dist-linux/<rid>/`.
+
+After a successful build:
+
+```bash
+cd dist-linux/linux-x64/InvisibleGorilla-XRay-linux-x64
+./run-igxray
+```
+
+For system installation:
+
+```bash
+./install.sh
+invisible-gorilla-xray
+# or
+igxray
+```
+
+| Command | Description |
+|---|---|
+| `./build.sh` | Full Linux build + distributable bundle |
+| `./build.sh --runtime linux-arm64` | Build for Linux ARM64 |
+| `./build.sh --skip-deps` | Skip system package installation |
+| `./build.sh --step go` | Only build `Libraries/libXRayCore.so` |
+| `./build.sh --step tun2socks` | Only fetch bundled `tun2socks` |
+| `./build.sh --step dotnet` | Only publish the Avalonia Linux GUI |
+| `./build.sh --step bundle` | Only create the `dist-linux/<rid>/` bundle |
 
 </details>
 
@@ -165,11 +219,13 @@ The Android build script:
 |---|---|---|
 | Windows GUI | WPF (.NET 7, C#) | Windows |
 | macOS GUI | Avalonia UI 11 (.NET 7, C#) | macOS |
+| Linux GUI | Avalonia UI 11 (.NET 7, C#) | Linux |
 | Android GUI | Avalonia UI 11 (.NET 8 Android, C#) | Android |
 | Shared logic | `InvisibleGorilla.Core` (.NET class library) | Cross-platform |
 | Proxy engine | [Xray-core](https://github.com/XTLS/Xray-core) v25.1.30 | Cross-platform |
-| Native bridge | Go 1.23 -> cgo shared library (`.dll` / `.dylib` / `.so`) | Windows / macOS / Android |
+| Native bridge | Go 1.23 -> cgo shared library (`.dll` / `.dylib` / `.so`) | Windows / macOS / Linux / Android |
 | Windows tunnel service | [InvisibleGorilla-TUN](https://github.com/hvkeyn/InvisibleGorilla-TUN) | Windows only |
+| Linux tunnel layer | `tun2socks`, `iproute2`, `pkexec` / `sudo`, GNOME `gsettings` proxy integration | Linux |
 | Android mobile VPN layer | `VpnService` groundwork in Android head | Android |
 | Geo routing | [v2fly geoip](https://github.com/v2fly/geoip) + [domain-list](https://github.com/v2fly/domain-list-community) | Cross-platform |
 
@@ -178,6 +234,9 @@ The Android build script:
 | Problem | Solution |
 |---|---|
 | App shows "Running" but traffic does not change on desktop | Check `diagnostic.log` in the app folder. Try a different server or protocol. |
+| Linux archive was unpacked but the executable is hard to find | Run `./run-igxray` from the unpacked bundle root, or run `./install.sh` and then start `invisible-gorilla-xray` / `igxray`. |
+| Linux TUN mode cannot start | Make sure `pkexec` or passwordless/current-user `sudo` can run privileged `ip`/DNS commands. The app fails closed if TUN setup is denied. |
+| Linux proxy mode does nothing | GNOME proxy mode depends on `gsettings org.gnome.system.proxy`; on non-GNOME desktops it may no-op while TUN mode remains available. |
 | Android proxy mode starts but apps do not route automatically | Android currently starts a local listener; point apps to `127.0.0.1:<proxy-port>` or wait for the follow-up mobile tunnel bridge. |
 | Android TUN mode reports an error | This repository now contains the Android groundwork, but the native mobile tunnel bridge is still a follow-up task. |
 | Android native bridge asset is missing during packaging | Run `.\build-android.ps1` with a valid `ANDROID_NDK_ROOT` so the wrapper can build and package the Android shared library runtime asset. |
