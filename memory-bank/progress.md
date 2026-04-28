@@ -136,6 +136,11 @@
 - Installed Linux bundles now expose `/usr/local/bin/invisible-gorilla-xray` and `igxray`, while the application menu launcher points to the same command wrapper.
 - Linux deep-link metadata now includes `invxray://`, matching the shared app deep-link scheme used by exported config links.
 
+## Recently Fixed (Windows build)
+- `build.ps1` now handles the common `MSB3026` / `MSB3027` failure where `Invisible Gorilla XRay.exe` is already running from the project's output folder and blocks MSBuild from replacing the apphost. The script closes the matching running process before restore/build/publish by default, or reports the blocking PID/path early when `-NoStopRunningApp` is used.
+
 ## Validation
 - `bash -n build.sh` succeeds.
 - `dotnet build InvisibleGorilla-XRay.Linux/InvisibleGorilla-XRay.Linux.csproj -c Release` succeeds.
+- PowerShell parse validation for `build.ps1` succeeds.
+- `.\build.ps1 -Step DotNet -Configuration Debug -NoStopRunningApp` succeeds; only existing warnings remain.

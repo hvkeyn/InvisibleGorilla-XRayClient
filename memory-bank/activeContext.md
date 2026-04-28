@@ -128,14 +128,17 @@ Improve desktop configuration export so users can choose QR code, configuration 
 # Active Context
 
 ## Current Focus
-Harden Linux bundle launchability after remote testing of an older Linux package reported that users could not find the executable after unpack/install.
+Harden release/build scripts so remote Windows and Linux builders get actionable behavior instead of ambiguous packaging or file-lock failures.
 
 ## Recent Changes
 - Updated `build.sh` packaging so every Linux archive contains an obvious top-level `run-igxray` launcher plus a `bin/invisible-gorilla-xray` command wrapper that execs the real `bin/InvisibleGorilla-XRay.Linux` binary.
 - `install.sh` now removes stale installed `bin`/`share` folders before copying the new bundle, installs `/usr/local/bin/invisible-gorilla-xray`, and adds an `igxray` symlink.
 - The generated `.desktop` file now launches the command wrapper and advertises the `invxray://` scheme along with `vless://`, `vmess://`, and the legacy `ig-xray://` handler.
 - Linux runtime deep-link registration now also binds `x-scheme-handler/invxray`.
+- Windows `build.ps1` now detects a running build-output `Invisible Gorilla XRay.exe` before `.NET` restore/build/publish. By default it closes that matching process so MSBuild can replace the exe; `-NoStopRunningApp` keeps the old safe behavior and fails early with the blocking PID/path.
 
 ## Validation Snapshot
 - `bash -n build.sh` succeeds after the launcher/install changes.
 - `dotnet build InvisibleGorilla-XRay.Linux/InvisibleGorilla-XRay.Linux.csproj -c Release` succeeds on Windows.
+- PowerShell parse validation for `build.ps1` succeeds.
+- `.\build.ps1 -Step DotNet -Configuration Debug -NoStopRunningApp` succeeds; only existing project warnings remain.

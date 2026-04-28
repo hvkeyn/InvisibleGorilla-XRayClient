@@ -35,6 +35,9 @@
 .PARAMETER SkipTUN
     Пропустить скачивание InvisibleGorilla-TUN.
 
+.PARAMETER NoStopRunningApp
+    Не закрывать автоматически запущенный Invisible Gorilla XRay перед .NET build/publish.
+
 .EXAMPLE
     .\build.ps1
     Полная сборка со всеми шагами (с автоустановкой зависимостей).
@@ -66,7 +69,9 @@ param(
 
     [string]$OutputDir = ".\publish",
 
-    [switch]$SkipTUN
+    [switch]$SkipTUN,
+
+    [switch]$NoStopRunningApp
 )
 
 # ─── Настройки ────────────────────────────────────────────────────────────────
@@ -914,6 +919,100 @@ function Get-TunService {
 
 # ─── Шаг 4: Сборка .NET приложения ───────────────────────────────────────────
 
+function Stop-RunningWindowsAppForBuild {
+    param(
+        [string]$Configuration,
+        [string]$PublishOutputDir
+    )
+
+    $buildOutputExe = Join-Path $AppDir "bin\$Configuration\net7.0-windows\Invisible Gorilla XRay.exe"
+    $publishOutputExe = if ($PublishOutputDir) {
+        Join-Path $PublishOutputDir "Invisible Gorilla XRay.exe"
+    }
+    else {
+        $null
+    }
+
+    $targetExePaths = @($buildOutputExe, $publishOutputExe) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        ForEach-Object { [System.IO.Path]::GetFullPath($_) }
+
+    $processes = @()
+    try {
+        $processes = @(Get-CimInstance Win32_Process -Filter "Name = 'Invisible Gorilla XRay.exe'" -ErrorAction SilentlyContinue)
+    }
+    catch {
+        Write-Info "Не удалось проверить запущенный Invisible Gorilla XRay: $($_.Exception.Message)"
+        return
+    }
+
+    if ($processes.Count -eq 0) {
+        return
+    }
+
+    $blockingProcesses = @(
+        foreach ($process in $processes) {
+            $processPath = $process.ExecutablePath
+            if ([string]::IsNullOrWhiteSpace($processPath)) {
+                continue
+            }
+
+            $fullProcessPath = [System.IO.Path]::GetFullPath($processPath)
+            foreach ($targetExePath in $targetExePaths) {
+                if ($fullProcessPath.Equals($targetExePath, [StringComparison]::OrdinalIgnoreCase)) {
+                    $process
+                    break
+                }
+            }
+        }
+    )
+
+    if ($blockingProcesses.Count -eq 0) {
+        return
+    }
+
+    if ($NoStopRunningApp) {
+        Write-Err "Выходной файл занят запущенным приложением:"
+        foreach ($process in $blockingProcesses) {
+            Write-Err "  PID $($process.ProcessId): $($process.ExecutablePath)"
+        }
+        Write-Err "Закройте Invisible Gorilla XRay и повторите сборку."
+        exit 1
+    }
+
+    Write-Info "Найден запущенный Invisible Gorilla XRay, который блокирует выходной exe."
+    Write-Info "Закрываю его перед сборкой, чтобы MSBuild смог заменить файл..."
+
+    foreach ($process in $blockingProcesses) {
+        Write-Info "PID $($process.ProcessId): $($process.ExecutablePath)"
+
+        try {
+            $runningProcess = Get-Process -Id $process.ProcessId -ErrorAction Stop
+            if ($runningProcess.MainWindowHandle -ne 0) {
+                [void]$runningProcess.CloseMainWindow()
+                if ($runningProcess.WaitForExit(5000)) {
+                    Write-Success "Процесс $($process.ProcessId) закрыт"
+                    continue
+                }
+            }
+
+            Write-Info "Процесс $($process.ProcessId) не закрылся штатно, завершаю принудительно..."
+            Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop
+
+            $runningProcess = Get-Process -Id $process.ProcessId -ErrorAction SilentlyContinue
+            if ($runningProcess) {
+                Start-Sleep -Milliseconds 500
+            }
+            Write-Success "Процесс $($process.ProcessId) завершён"
+        }
+        catch {
+            Write-Err "Не удалось закрыть процесс $($process.ProcessId): $($_.Exception.Message)"
+            Write-Err "Закройте Invisible Gorilla XRay вручную и повторите сборку."
+            exit 1
+        }
+    }
+}
+
 function Build-DotNetApp {
     if ($Publish) {
         Write-StepHeader "Шаг 4: Публикация .NET ($Configuration, $Runtime)"
@@ -929,6 +1028,9 @@ function Build-DotNetApp {
 
     Push-Location $RootDir
     try {
+        $absOutput = [System.IO.Path]::GetFullPath((Join-Path $RootDir $OutputDir))
+        Stop-RunningWindowsAppForBuild -Configuration $Configuration -PublishOutputDir $absOutput
+
         Write-Info "Восстановление NuGet-пакетов..."
         & dotnet restore $WindowsProjectFile
         if ($LASTEXITCODE -ne 0) {
@@ -938,8 +1040,6 @@ function Build-DotNetApp {
         Write-Success "NuGet-пакеты восстановлены"
 
         if ($Publish) {
-            $absOutput = [System.IO.Path]::GetFullPath((Join-Path $RootDir $OutputDir))
-
             Write-Info "Публикация приложения..."
             & dotnet publish $WindowsProjectFile `
                 -c $Configuration `
