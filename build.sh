@@ -56,6 +56,7 @@ CONFIGURATION="Release"
 OUTPUT_DIR="./publish-linux"
 DIST_DIR="./dist-linux"
 SKIP_DEPS=false
+DOTNET_CMD=""
 
 ARCH="$(uname -m)"
 case "$ARCH" in
@@ -86,6 +87,15 @@ info() { echo -e "${YELLOW}[..]${NC} $1"; }
 err()  { echo -e "${RED}[!!]${NC} $1" >&2; }
 
 command_exists() { command -v "$1" &>/dev/null; }
+
+prepend_path_once() {
+    local dir="$1"
+    [[ -n "$dir" && -d "$dir" ]] || return 0
+    case ":$PATH:" in
+        *":$dir:"*) ;;
+        *) export PATH="$dir:$PATH" ;;
+    esac
+}
 
 resolve_path() {
     local path="$1"
@@ -283,9 +293,58 @@ ensure_go() {
     ok "Go $(go version | grep -oE 'go[0-9]+\.[0-9]+(\.[0-9]+)?') (installed)"
 }
 
+try_use_dotnet() {
+    local candidate="$1"
+    [[ -n "$candidate" ]] || return 1
+
+    if [[ "$candidate" != "dotnet" && ! -x "$candidate" ]]; then
+        return 1
+    fi
+
+    if "$candidate" --list-sdks 2>/dev/null | grep -q '^7\.'; then
+        DOTNET_CMD="$candidate"
+        if [[ "$candidate" != "dotnet" ]]; then
+            local dotnet_dir
+            dotnet_dir="$(dirname "$candidate")"
+            if [[ -d "$dotnet_dir/sdk" ]]; then
+                export DOTNET_ROOT="$dotnet_dir"
+            fi
+            prepend_path_once "$dotnet_dir"
+            prepend_path_once "$dotnet_dir/tools"
+        fi
+        return 0
+    fi
+
+    return 1
+}
+
+resolve_dotnet() {
+    local system_dotnet=""
+    system_dotnet="$(command -v dotnet 2>/dev/null || true)"
+
+    local candidates=(
+        "$system_dotnet"
+        "$HOME/.dotnet/dotnet"
+        "/usr/share/dotnet/dotnet"
+        "/usr/local/share/dotnet/dotnet"
+        "/usr/local/bin/dotnet"
+        "/usr/bin/dotnet"
+        "/root/.dotnet/dotnet"
+    )
+
+    local candidate
+    for candidate in "${candidates[@]}"; do
+        if try_use_dotnet "$candidate"; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 ensure_dotnet() {
-    if command_exists dotnet && dotnet --list-sdks 2>/dev/null | grep -q '^7\.'; then
-        local ver; ver="$(dotnet --list-sdks | grep '^7\.' | head -1 | awk '{print $1}')"
+    if resolve_dotnet; then
+        local ver; ver="$("$DOTNET_CMD" --list-sdks | grep '^7\.' | head -1 | awk '{print $1}')"
         ok ".NET SDK $ver"
         return
     fi
@@ -304,8 +363,8 @@ ensure_dotnet() {
         esac
     fi
 
-    if command_exists dotnet && dotnet --list-sdks 2>/dev/null | grep -q '^7\.'; then
-        local ver; ver="$(dotnet --list-sdks | grep '^7\.' | head -1 | awk '{print $1}')"
+    if resolve_dotnet; then
+        local ver; ver="$("$DOTNET_CMD" --list-sdks | grep '^7\.' | head -1 | awk '{print $1}')"
         ok ".NET SDK $ver (from packages)"
         return
     fi
@@ -319,15 +378,18 @@ ensure_dotnet() {
     rm -f "$installer"
 
     export DOTNET_ROOT="$HOME/.dotnet"
-    export PATH="$DOTNET_ROOT:$DOTNET_ROOT/tools:$PATH"
+    prepend_path_once "$DOTNET_ROOT"
+    prepend_path_once "$DOTNET_ROOT/tools"
 
-    if ! command_exists dotnet; then
-        err ".NET SDK installed but not on PATH. Add \$HOME/.dotnet to PATH."
+    if ! resolve_dotnet; then
+        err ".NET SDK installed, but build script cannot find a usable dotnet executable."
+        err "Expected path: $HOME/.dotnet/dotnet"
+        err "For manual commands run: export PATH=\"\$HOME/.dotnet:\$HOME/.dotnet/tools:\$PATH\""
         exit 1
     fi
 
-    local ver; ver="$(dotnet --version 2>/dev/null)"
-    ok ".NET SDK $ver (installed)"
+    local ver; ver="$("$DOTNET_CMD" --version 2>/dev/null)"
+    ok ".NET SDK $ver (installed at $DOTNET_CMD)"
 }
 
 # ─── Step 1: Build Go wrapper ─────────────────────────────────────────────────
@@ -427,14 +489,14 @@ build_dotnet_app() {
     pushd "$SCRIPT_DIR" >/dev/null
 
     info "Restoring NuGet packages..."
-    dotnet restore "$csproj"
+    "$DOTNET_CMD" restore "$csproj"
 
     local output_base; output_base="$(resolve_path "$OUTPUT_DIR")"
     local abs_output="$output_base/$RUNTIME"
     mkdir -p "$abs_output"
 
     info "Publishing self-contained single-file Linux build..."
-    dotnet publish "$csproj" \
+    "$DOTNET_CMD" publish "$csproj" \
         -c "$CONFIGURATION" \
         -r "$RUNTIME" \
         --self-contained true \

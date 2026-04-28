@@ -135,6 +135,7 @@
 - Linux archives now include a top-level `run-igxray` launcher so users can run the app immediately after unpacking without hunting for `bin/InvisibleGorilla-XRay.Linux`.
 - Installed Linux bundles now expose `/usr/local/bin/invisible-gorilla-xray` and `igxray`, while the application menu launcher points to the same command wrapper.
 - Linux deep-link metadata now includes `invxray://`, matching the shared app deep-link scheme used by exported config links.
+- Linux `build.sh` no longer depends on `dotnet` being visible in the current shell PATH after fallback installation. It now resolves `.NET SDK 7` from system locations, `$HOME/.dotnet/dotnet`, and `/root/.dotnet/dotnet`, then uses that executable for restore/publish.
 
 ## Recently Fixed (Windows build)
 - `build.ps1` now handles the common `MSB3026` / `MSB3027` failure where `Invisible Gorilla XRay.exe` is already running from the project's output folder and blocks MSBuild from replacing the apphost. The script closes the matching running process before restore/build/publish by default, or reports the blocking PID/path early when `-NoStopRunningApp` is used.
@@ -144,3 +145,4 @@
 - `dotnet build InvisibleGorilla-XRay.Linux/InvisibleGorilla-XRay.Linux.csproj -c Release` succeeds.
 - PowerShell parse validation for `build.ps1` succeeds.
 - `.\build.ps1 -Step DotNet -Configuration Debug -NoStopRunningApp` succeeds; only existing warnings remain.
+- `bash -n build.sh` succeeds after the Linux `DOTNET_CMD` resolver change.
