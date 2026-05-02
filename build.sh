@@ -221,10 +221,22 @@ install_packages() {
     case "$DISTRO_FAMILY" in
         alt|debian)
             $SUDO apt-get update -y || true
-            $SUDO $PKG_INSTALL "${pkgs[@]}" || err "Some packages failed to install (non-fatal)."
+            if ! $SUDO $PKG_INSTALL "${pkgs[@]}"; then
+                err "Package group install failed; retrying packages one by one (non-fatal)."
+                local pkg
+                for pkg in "${pkgs[@]}"; do
+                    $SUDO $PKG_INSTALL "$pkg" || err "Optional package not installed: $pkg"
+                done
+            fi
             ;;
         rhel|suse|arch)
-            $SUDO $PKG_INSTALL "${pkgs[@]}" || err "Some packages failed to install (non-fatal)."
+            if ! $SUDO $PKG_INSTALL "${pkgs[@]}"; then
+                err "Package group install failed; retrying packages one by one (non-fatal)."
+                local pkg
+                for pkg in "${pkgs[@]}"; do
+                    $SUDO $PKG_INSTALL "$pkg" || err "Optional package not installed: $pkg"
+                done
+            fi
             ;;
     esac
 }
@@ -247,7 +259,7 @@ ensure_runtime_libs() {
     # libnotify (notify-send), policykit-1 (pkexec), iproute2 (ip).
     if $SKIP_DEPS; then return 0; fi
     case "$DISTRO_FAMILY" in
-        alt)    install_packages libgtk+3 libnotify-tools polkit iproute2 fontconfig libICE libSM libX11 libXi libXrandr libxcb-cursor ;;
+        alt)    install_packages libgtk+3 notify-send polkit iproute2 fontconfig libICE libSM libX11 libXi libXrandr libxcb-cursor ;;
         debian) install_packages libgtk-3-0 libnotify-bin policykit-1 iproute2 fontconfig libice6 libsm6 libx11-6 libxi6 libxrandr2 libxcb-cursor0 ;;
         rhel)   install_packages gtk3 libnotify polkit iproute fontconfig libICE libSM libX11 libXi libXrandr xcb-util-cursor ;;
         suse)   install_packages gtk3 libnotify-tools polkit iproute2 fontconfig libICE6 libSM6 libX11-6 libXi6 libXrandr2 xcb-util-cursor0 ;;
@@ -504,7 +516,18 @@ build_dotnet_app() {
         -p:IncludeNativeLibrariesForSelfExtract=true \
         -o "$abs_output"
 
+    local app_binary="$abs_output/$APP_BINARY_NAME"
+    if [[ ! -f "$app_binary" ]]; then
+        err "dotnet publish finished, but Linux binary was not created."
+        err "Expected: $app_binary"
+        err "Publish directory contents:"
+        (cd "$abs_output" && find . -maxdepth 2 -type f | sort) >&2 || true
+        exit 1
+    fi
+
+    chmod +x "$app_binary"
     ok "Published to: $abs_output"
+    ok "Linux binary: $app_binary ($(format_size "$(stat -c%s "$app_binary")"))"
     popd >/dev/null
 }
 

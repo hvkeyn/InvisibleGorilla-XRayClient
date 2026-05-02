@@ -70,7 +70,7 @@
 ## Linux Build Notes
 - Single entry point: `./build.sh` at repo root.
 - Detects ALT (apt-rpm), Debian/Ubuntu (apt), Fedora/RHEL (dnf), openSUSE (zypper), Arch (pacman). Asks for sudo before installing build deps.
-- Installs `.NET SDK 7` (via Microsoft script when distro doesn't ship it), `golang`, `wget`, `curl`, `git`, `tar`, plus runtime libs Avalonia needs (`libfontconfig`, `libice`, `libsm`, `libx11`, `libxrandr`, `libxcursor`, `libxi`, `libgl`, etc.).
+- Installs `.NET SDK 7` (via Microsoft script when distro doesn't ship it), `golang`, `wget`, `curl`, `git`, `tar`, plus runtime libs Avalonia needs (`libfontconfig`, `libice`, `libsm`, `libx11`, `libxrandr`, `libxcursor`, `libxi`, `libgl`, etc.). Package groups can fail on ALT when one optional package is absent, so `build.sh` retries package installs individually and uses ALT's `notify-send` package name.
 - On ALT Linux, `dotnet-sdk-7.0` may be absent from apt-rpm and `dotnet-install.sh` may install SDK 7 under `$HOME/.dotnet` without making `dotnet` available to the interactive shell. `build.sh` must resolve the executable into `DOTNET_CMD` and use that path for restore/publish instead of relying on a later `dotnet` lookup.
 - Builds Go wrapper as `libXRayCore.so` for the host arch (not `XRayCore.so`; the Linux DllImport resolver looks for `Libraries/libXRayCore.so`), downloads matching `tun2socks-linux-<arch>` from the upstream GitHub release, and pulls `geosite.dat` / `geoip.dat`.
 - `dotnet publish -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true` (or `linux-arm64`) into `publish-linux/<rid>/`, producing the executable `InvisibleGorilla-XRay.Linux`.

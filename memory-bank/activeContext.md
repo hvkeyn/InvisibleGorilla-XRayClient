@@ -137,6 +137,7 @@ Harden release/build scripts so remote Windows and Linux builders get actionable
 - Linux runtime deep-link registration now also binds `x-scheme-handler/invxray`.
 - Windows `build.ps1` now detects a running build-output `Invisible Gorilla XRay.exe` before `.NET` restore/build/publish. By default it closes that matching process so MSBuild can replace the exe; `-NoStopRunningApp` keeps the old safe behavior and fails early with the blocking PID/path.
 - Linux `build.sh` now resolves the usable .NET 7 SDK into `DOTNET_CMD` and calls restore/publish through that absolute executable. This fixes ALT Linux cases where `dotnet-install.sh` installs SDK 7 into `$HOME/.dotnet`, but the interactive shell still cannot find `dotnet` afterward.
+- Linux dependency installation now retries packages one by one after a grouped package install fails, and ALT uses `notify-send` instead of the missing `libnotify-tools` package. The publish step also verifies and prints the exact `InvisibleGorilla-XRay.Linux` binary path.
 
 ## Validation Snapshot
 - `bash -n build.sh` succeeds after the launcher/install changes.
@@ -144,3 +145,4 @@ Harden release/build scripts so remote Windows and Linux builders get actionable
 - PowerShell parse validation for `build.ps1` succeeds.
 - `.\build.ps1 -Step DotNet -Configuration Debug -NoStopRunningApp` succeeds; only existing project warnings remain.
 - `bash -n build.sh` still succeeds after the `DOTNET_CMD` resolver change.
+- `bash -n build.sh` succeeds after the ALT package fallback and publish-output verification changes.
