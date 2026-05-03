@@ -44,6 +44,7 @@ readonly APP_BINARY_NAME="InvisibleGorilla-XRay.Linux"
 readonly APP_COMMAND_NAME="invisible-gorilla-xray"
 readonly APP_RUNNER_NAME="run-igxray"
 readonly INSTALL_DIR="/opt/invisible-gorilla-xray"
+readonly DOTNET_FALLBACK_DIR="$SCRIPT_DIR/.dotnet-sdk"
 
 readonly GEOIP_URL="https://github.com/v2fly/geoip/releases/latest/download/geoip.dat"
 readonly GEOSITE_URL="https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat"
@@ -358,6 +359,7 @@ resolve_dotnet() {
 
     local candidates=(
         "$system_dotnet"
+        "$DOTNET_FALLBACK_DIR/dotnet"
         "$HOME/.dotnet/dotnet"
         "/usr/share/dotnet/dotnet"
         "/usr/local/share/dotnet/dotnet"
@@ -409,18 +411,19 @@ ensure_dotnet() {
     download_file "https://dot.net/v1/dotnet-install.sh" "$installer" \
         "Downloading dotnet-install.sh..." 1024
     chmod +x "$installer"
-    "$installer" --version "$required_sdk" --install-dir "$HOME/.dotnet"
+    mkdir -p "$DOTNET_FALLBACK_DIR"
+    "$installer" --version "$required_sdk" --install-dir "$DOTNET_FALLBACK_DIR"
     rm -f "$installer"
 
-    export DOTNET_ROOT="$HOME/.dotnet"
+    export DOTNET_ROOT="$DOTNET_FALLBACK_DIR"
     prepend_path_once "$DOTNET_ROOT"
     prepend_path_once "$DOTNET_ROOT/tools"
 
     if ! resolve_dotnet; then
         err ".NET SDK installed, but build script cannot find a usable dotnet executable."
         err "Required SDK: $required_sdk"
-        err "Expected path: $HOME/.dotnet/dotnet"
-        err "For manual commands run: export PATH=\"\$HOME/.dotnet:\$HOME/.dotnet/tools:\$PATH\""
+        err "Expected path: $DOTNET_FALLBACK_DIR/dotnet"
+        err "For manual commands run: export PATH=\"$DOTNET_FALLBACK_DIR:$DOTNET_FALLBACK_DIR/tools:\$PATH\""
         exit 1
     fi
 

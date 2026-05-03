@@ -137,6 +137,7 @@
 - Linux deep-link metadata now includes `invxray://`, matching the shared app deep-link scheme used by exported config links.
 - Linux `build.sh` no longer depends on `dotnet` being visible in the current shell PATH after fallback installation. It now reads the required SDK from `global.json`, installs/resolves that SDK from system locations, `$HOME/.dotnet/dotnet`, and `/root/.dotnet/dotnet`, then uses that executable for restore/publish.
 - ALT/Simply Linux dependency installation no longer treats a missing package in a group as a black box: `build.sh` retries packages individually, uses `notify-send` instead of the missing `libnotify-tools`, and verifies that `publish-linux/<rid>/InvisibleGorilla-XRay.Linux` exists immediately after publish.
+- Pinned .NET fallback installs now go into repo-local `.dotnet-sdk/` instead of `$HOME/.dotnet`, avoiding permission failures when the home SDK cache was previously created by root.
 
 ## Recently Fixed (Windows build)
 - `build.ps1` now handles the common `MSB3026` / `MSB3027` failure where `Invisible Gorilla XRay.exe` is already running from the project's output folder and blocks MSBuild from replacing the apphost. The script closes the matching running process before restore/build/publish by default, or reports the blocking PID/path early when `-NoStopRunningApp` is used.
@@ -149,3 +150,4 @@
 - `bash -n build.sh` succeeds after the Linux `DOTNET_CMD` resolver change.
 - `bash -n build.sh` succeeds after the ALT package fallback and publish-output verification changes.
 - `bash -n build.sh` succeeds after switching Linux SDK bootstrap from hard-coded SDK 7 to the `global.json` SDK.
+- `bash -n build.sh` succeeds after moving the pinned SDK fallback install dir to `.dotnet-sdk/`.

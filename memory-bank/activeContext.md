@@ -138,6 +138,7 @@ Harden release/build scripts so remote Windows and Linux builders get actionable
 - Windows `build.ps1` now detects a running build-output `Invisible Gorilla XRay.exe` before `.NET` restore/build/publish. By default it closes that matching process so MSBuild can replace the exe; `-NoStopRunningApp` keeps the old safe behavior and fails early with the blocking PID/path.
 - Linux `build.sh` now reads the required SDK from `global.json`, resolves that SDK into `DOTNET_CMD`, and calls restore/publish through the resolved executable. This fixes ALT Linux cases where only SDK 7 is installed while repo-level `global.json` requires SDK `8.0.419`.
 - Linux dependency installation now retries packages one by one after a grouped package install fails, and ALT uses `notify-send` instead of the missing `libnotify-tools` package. The publish step also verifies and prints the exact `InvisibleGorilla-XRay.Linux` binary path.
+- The pinned Linux .NET fallback no longer installs into `$HOME/.dotnet`; it uses repo-local `.dotnet-sdk/` so a root-owned or otherwise unwritable home SDK cache cannot block ALT/Simply Linux builds.
 
 ## Validation Snapshot
 - `bash -n build.sh` succeeds after the launcher/install changes.
@@ -147,3 +148,4 @@ Harden release/build scripts so remote Windows and Linux builders get actionable
 - `bash -n build.sh` still succeeds after the `DOTNET_CMD` resolver change.
 - `bash -n build.sh` succeeds after the ALT package fallback and publish-output verification changes.
 - `bash -n build.sh` succeeds after switching Linux SDK bootstrap from hard-coded SDK 7 to the `global.json` SDK.
+- `bash -n build.sh` succeeds after moving the pinned SDK fallback install dir to `.dotnet-sdk/`.
