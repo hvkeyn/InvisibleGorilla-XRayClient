@@ -6,7 +6,7 @@
 #
 # Automates the full build cycle:
 #   1. Detect distribution and install dependencies
-#      (build tools, Go, .NET SDK 7.0, GTK runtime, libnotify, policykit-1,
+#      (build tools, Go, .NET SDK from global.json, GTK runtime, libnotify, policykit-1,
 #       iproute2 — used by the TUN handler at runtime).
 #   2. Build the Go wrapper: libXRayCore.so (c-shared) + gorilla-xray (CLI).
 #   3. Fetch xjasonlyu/tun2socks into TUN/ (used by LinuxTunnel).
@@ -57,6 +57,7 @@ OUTPUT_DIR="./publish-linux"
 DIST_DIR="./dist-linux"
 SKIP_DEPS=false
 DOTNET_CMD=""
+DOTNET_SDK_VERSION=""
 
 ARCH="$(uname -m)"
 case "$ARCH" in
@@ -95,6 +96,25 @@ prepend_path_once() {
         *":$dir:"*) ;;
         *) export PATH="$dir:$PATH" ;;
     esac
+}
+
+get_required_dotnet_sdk_version() {
+    if [[ -n "$DOTNET_SDK_VERSION" ]]; then
+        printf '%s' "$DOTNET_SDK_VERSION"
+        return 0
+    fi
+
+    local global_json="$SCRIPT_DIR/global.json"
+    if [[ -f "$global_json" ]]; then
+        DOTNET_SDK_VERSION="$(
+            grep -E '"version"[[:space:]]*:' "$global_json" |
+            head -1 |
+            sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/'
+        )"
+    fi
+
+    [[ -z "$DOTNET_SDK_VERSION" ]] && DOTNET_SDK_VERSION="8.0.419"
+    printf '%s' "$DOTNET_SDK_VERSION"
 }
 
 resolve_path() {
@@ -307,13 +327,15 @@ ensure_go() {
 
 try_use_dotnet() {
     local candidate="$1"
+    local required_sdk
+    required_sdk="$(get_required_dotnet_sdk_version)"
     [[ -n "$candidate" ]] || return 1
 
     if [[ "$candidate" != "dotnet" && ! -x "$candidate" ]]; then
         return 1
     fi
 
-    if "$candidate" --list-sdks 2>/dev/null | grep -q '^7\.'; then
+    if "$candidate" --list-sdks 2>/dev/null | awk '{print $1}' | grep -Fxq "$required_sdk"; then
         DOTNET_CMD="$candidate"
         if [[ "$candidate" != "dotnet" ]]; then
             local dotnet_dir
@@ -355,20 +377,22 @@ resolve_dotnet() {
 }
 
 ensure_dotnet() {
+    local required_sdk
+    required_sdk="$(get_required_dotnet_sdk_version)"
+
     if resolve_dotnet; then
-        local ver; ver="$("$DOTNET_CMD" --list-sdks | grep '^7\.' | head -1 | awk '{print $1}')"
-        ok ".NET SDK $ver"
+        ok ".NET SDK $required_sdk"
         return
     fi
 
     if ! $SKIP_DEPS; then
         case "$DISTRO_FAMILY" in
             alt|debian|rhel|suse|arch)
-                # Distro packages can be too old / missing 7.0 channel; try them but expect fallback.
+                # Distro packages can be too old / missing the pinned SDK; try them but expect fallback.
                 case "$DISTRO_FAMILY" in
-                    alt|debian) install_packages dotnet-sdk-7.0 || true ;;
-                    rhel)       install_packages dotnet-sdk-7.0 || true ;;
-                    suse)       install_packages dotnet-sdk-7.0 || true ;;
+                    alt|debian) install_packages dotnet-sdk-8.0 || true ;;
+                    rhel)       install_packages dotnet-sdk-8.0 || true ;;
+                    suse)       install_packages dotnet-sdk-8.0 || true ;;
                     arch)       install_packages dotnet-sdk || true ;;
                 esac
                 ;;
@@ -376,17 +400,16 @@ ensure_dotnet() {
     fi
 
     if resolve_dotnet; then
-        local ver; ver="$("$DOTNET_CMD" --list-sdks | grep '^7\.' | head -1 | awk '{print $1}')"
-        ok ".NET SDK $ver (from packages)"
+        ok ".NET SDK $required_sdk (from packages)"
         return
     fi
 
-    info "Falling back to dotnet-install.sh (channel 7.0)"
+    info "Falling back to dotnet-install.sh (version $required_sdk)"
     local installer="/tmp/dotnet-install.sh"
     download_file "https://dot.net/v1/dotnet-install.sh" "$installer" \
         "Downloading dotnet-install.sh..." 1024
     chmod +x "$installer"
-    "$installer" --channel 7.0 --install-dir "$HOME/.dotnet"
+    "$installer" --version "$required_sdk" --install-dir "$HOME/.dotnet"
     rm -f "$installer"
 
     export DOTNET_ROOT="$HOME/.dotnet"
@@ -395,6 +418,7 @@ ensure_dotnet() {
 
     if ! resolve_dotnet; then
         err ".NET SDK installed, but build script cannot find a usable dotnet executable."
+        err "Required SDK: $required_sdk"
         err "Expected path: $HOME/.dotnet/dotnet"
         err "For manual commands run: export PATH=\"\$HOME/.dotnet:\$HOME/.dotnet/tools:\$PATH\""
         exit 1
