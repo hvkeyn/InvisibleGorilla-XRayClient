@@ -23,6 +23,8 @@
 /dist
 /dist-linux
 /.dotnet-sdk
+/.dotnet-home
+/.nuget
 /XRay-Wrapper/gorilla-xray
 .cursorrules
 memory-bank/activeContext.md

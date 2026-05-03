@@ -45,6 +45,8 @@ readonly APP_COMMAND_NAME="invisible-gorilla-xray"
 readonly APP_RUNNER_NAME="run-igxray"
 readonly INSTALL_DIR="/opt/invisible-gorilla-xray"
 readonly DOTNET_FALLBACK_DIR="$SCRIPT_DIR/.dotnet-sdk"
+readonly DOTNET_CLI_HOME_DIR="$SCRIPT_DIR/.dotnet-home"
+readonly NUGET_PACKAGES_DIR="$SCRIPT_DIR/.nuget/packages"
 
 readonly GEOIP_URL="https://github.com/v2fly/geoip/releases/latest/download/geoip.dat"
 readonly GEOSITE_URL="https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat"
@@ -97,6 +99,14 @@ prepend_path_once() {
         *":$dir:"*) ;;
         *) export PATH="$dir:$PATH" ;;
     esac
+}
+
+configure_dotnet_cli_environment() {
+    mkdir -p "$DOTNET_CLI_HOME_DIR" "$NUGET_PACKAGES_DIR"
+    export DOTNET_CLI_HOME="$DOTNET_CLI_HOME_DIR"
+    export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+    export DOTNET_CLI_TELEMETRY_OPTOUT=1
+    export NUGET_PACKAGES="$NUGET_PACKAGES_DIR"
 }
 
 get_required_dotnet_sdk_version() {
@@ -336,6 +346,8 @@ try_use_dotnet() {
         return 1
     fi
 
+    configure_dotnet_cli_environment
+
     if "$candidate" --list-sdks 2>/dev/null | awk '{print $1}' | grep -Fxq "$required_sdk"; then
         DOTNET_CMD="$candidate"
         if [[ "$candidate" != "dotnet" ]]; then
@@ -415,6 +427,7 @@ ensure_dotnet() {
     "$installer" --version "$required_sdk" --install-dir "$DOTNET_FALLBACK_DIR"
     rm -f "$installer"
 
+    configure_dotnet_cli_environment
     export DOTNET_ROOT="$DOTNET_FALLBACK_DIR"
     prepend_path_once "$DOTNET_ROOT"
     prepend_path_once "$DOTNET_ROOT/tools"

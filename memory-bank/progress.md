@@ -138,6 +138,7 @@
 - Linux `build.sh` no longer depends on `dotnet` being visible in the current shell PATH after fallback installation. It now reads the required SDK from `global.json`, installs/resolves that SDK from system locations, `$HOME/.dotnet/dotnet`, and `/root/.dotnet/dotnet`, then uses that executable for restore/publish.
 - ALT/Simply Linux dependency installation no longer treats a missing package in a group as a black box: `build.sh` retries packages individually, uses `notify-send` instead of the missing `libnotify-tools`, and verifies that `publish-linux/<rid>/InvisibleGorilla-XRay.Linux` exists immediately after publish.
 - Pinned .NET fallback installs now go into repo-local `.dotnet-sdk/` instead of `$HOME/.dotnet`, avoiding permission failures when the home SDK cache was previously created by root.
+- `dotnet restore` no longer writes first-run sentinel files or NuGet packages into `$HOME/.dotnet` / `$HOME/.nuget`; `build.sh` points `DOTNET_CLI_HOME` and `NUGET_PACKAGES` at repo-local `.dotnet-home/` and `.nuget/`.
 
 ## Recently Fixed (Windows build)
 - `build.ps1` now handles the common `MSB3026` / `MSB3027` failure where `Invisible Gorilla XRay.exe` is already running from the project's output folder and blocks MSBuild from replacing the apphost. The script closes the matching running process before restore/build/publish by default, or reports the blocking PID/path early when `-NoStopRunningApp` is used.
@@ -151,3 +152,4 @@
 - `bash -n build.sh` succeeds after the ALT package fallback and publish-output verification changes.
 - `bash -n build.sh` succeeds after switching Linux SDK bootstrap from hard-coded SDK 7 to the `global.json` SDK.
 - `bash -n build.sh` succeeds after moving the pinned SDK fallback install dir to `.dotnet-sdk/`.
+- `bash -n build.sh` succeeds after moving .NET CLI home and NuGet packages to repo-local folders.
