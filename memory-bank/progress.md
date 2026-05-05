@@ -143,6 +143,11 @@
 ## Recently Fixed (Windows build)
 - `build.ps1` now handles the common `MSB3026` / `MSB3027` failure where `Invisible Gorilla XRay.exe` is already running from the project's output folder and blocks MSBuild from replacing the apphost. The script closes the matching running process before restore/build/publish by default, or reports the blocking PID/path early when `-NoStopRunningApp` is used.
 
+## Recently Fixed (macOS build)
+- `build-macos.sh` no longer hard-codes .NET SDK 7.0. It reads the exact SDK from `global.json`, resolves an existing matching `dotnet`, or installs the pinned SDK into repo-local `.dotnet-sdk/`.
+- macOS `dotnet restore` / `publish` now use repo-local `.dotnet-home/` and `.nuget/packages/`, avoiding hidden writes to a broken or root-owned home SDK/cache.
+- macOS build artifacts now have clear locations: raw publish output in `publish-macos/<rid>/`, and the runnable bundle in `dist-macos/<rid>/` with `InvisibleGorilla-XRay.app`, `run-igxray`, `README-MACOS.txt`, and a tarball archive. The script prints those paths and fails explicitly if required runtime files are missing.
+
 ## Validation
 - `bash -n build.sh` succeeds.
 - `dotnet build InvisibleGorilla-XRay.Linux/InvisibleGorilla-XRay.Linux.csproj -c Release` succeeds.
@@ -153,3 +158,4 @@
 - `bash -n build.sh` succeeds after switching Linux SDK bootstrap from hard-coded SDK 7 to the `global.json` SDK.
 - `bash -n build.sh` succeeds after moving the pinned SDK fallback install dir to `.dotnet-sdk/`.
 - `bash -n build.sh` succeeds after moving .NET CLI home and NuGet packages to repo-local folders.
+- `bash -lc "tr -d '\\r' < build-macos.sh | bash -n"` succeeds for the macOS script after SDK/output hardening.

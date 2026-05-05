@@ -140,6 +140,8 @@ Harden release/build scripts so remote Windows and Linux builders get actionable
 - Linux dependency installation now retries packages one by one after a grouped package install fails, and ALT uses `notify-send` instead of the missing `libnotify-tools` package. The publish step also verifies and prints the exact `InvisibleGorilla-XRay.Linux` binary path.
 - The pinned Linux .NET fallback no longer installs into `$HOME/.dotnet`; it uses repo-local `.dotnet-sdk/` so a root-owned or otherwise unwritable home SDK cache cannot block ALT/Simply Linux builds.
 - Linux `build.sh` now also sets `DOTNET_CLI_HOME`, `NUGET_PACKAGES`, and first-run/telemetry flags to repo-local `.dotnet-home/` and `.nuget/`, preventing `dotnet restore` from writing sentinel files into an unwritable `$HOME/.dotnet`.
+- macOS `build-macos.sh` now mirrors the hardened SDK/bootstrap behavior: reads the exact SDK from `global.json`, installs fallback SDKs into repo-local `.dotnet-sdk/`, isolates `.NET` CLI/NuGet state into `.dotnet-home/` and `.nuget/`, and always invokes restore/publish through the resolved `DOTNET_CMD`.
+- macOS build outputs now land in a single runnable folder `dist-macos/<runtime>/` containing `InvisibleGorilla-XRay.app`, a top-level `run-igxray` launcher, `README-MACOS.txt`, and a tarball. The script prints the raw publish path, app bundle path, internal binary path, launcher path, and archive path; missing runtime files fail the build explicitly.
 
 ## Validation Snapshot
 - `bash -n build.sh` succeeds after the launcher/install changes.
@@ -151,3 +153,4 @@ Harden release/build scripts so remote Windows and Linux builders get actionable
 - `bash -n build.sh` succeeds after switching Linux SDK bootstrap from hard-coded SDK 7 to the `global.json` SDK.
 - `bash -n build.sh` succeeds after moving the pinned SDK fallback install dir to `.dotnet-sdk/`.
 - `bash -n build.sh` succeeds after moving .NET CLI home and NuGet packages to repo-local folders.
+- `bash -lc "tr -d '\\r' < build-macos.sh | bash -n"` succeeds after the macOS SDK/output hardening. The local Windows checkout still reports CRLF in the working tree, but repository `.gitattributes` already enforces LF for `*.sh` when committed/pulled.

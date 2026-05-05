@@ -5,7 +5,7 @@
 # Tested on: macOS Sequoia 15.7.x (Apple Silicon & Intel)
 #
 # Automates the full build cycle:
-#   1. Check & auto-install dependencies (Go, Xcode CLT, .NET SDK 7.0)
+#   1. Check & auto-install dependencies (Go, Xcode CLT, .NET SDK from global.json)
 #   2. Build Go wrapper: XRayCore.dylib (c-shared) + gorilla-xray (CLI binary)
 #   3. Download geoip.dat and geosite.dat
 #   4. Build/publish .NET application (if cross-platform UI is available)
@@ -26,7 +26,7 @@
 #   ./build-macos.sh --help                 # Show help
 #
 
-set -euo pipefail
+set -Eeuo pipefail
 
 # ─── Settings ─────────────────────────────────────────────────────────────────
 
@@ -38,6 +38,12 @@ readonly MAC_DIR="$SCRIPT_DIR/InvisibleGorilla-XRay.Mac"
 readonly CORE_DIR="$SCRIPT_DIR/InvisibleGorilla.Core"
 readonly LIBRARIES_DIR="$APP_DIR/Libraries"
 readonly SOLUTION_FILE="$SCRIPT_DIR/InvisibleGorilla-XRay.sln"
+readonly APP_BINARY_NAME="InvisibleGorilla-XRay.Mac"
+readonly APP_BUNDLE_NAME="InvisibleGorilla-XRay.app"
+readonly APP_RUNNER_NAME="run-igxray"
+readonly DOTNET_FALLBACK_DIR="$SCRIPT_DIR/.dotnet-sdk"
+readonly DOTNET_CLI_HOME_DIR="$SCRIPT_DIR/.dotnet-home"
+readonly NUGET_PACKAGES_DIR="$SCRIPT_DIR/.nuget/packages"
 
 readonly GEOIP_URL="https://github.com/v2fly/geoip/releases/latest/download/geoip.dat"
 readonly GEOSITE_URL="https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat"
@@ -46,9 +52,11 @@ readonly GEOSITE_URL="https://github.com/v2fly/domain-list-community/releases/la
 STEP="all"
 CONFIGURATION="Release"
 PUBLISH=false
-OUTPUT_DIR="./publish"
-DIST_DIR="./dist"
+OUTPUT_DIR="./publish-macos"
+DIST_DIR="./dist-macos"
 SKIP_DOTNET=false
+DOTNET_CMD=""
+DOTNET_SDK_VERSION=""
 
 # Detect architecture
 ARCH="$(uname -m)"
@@ -82,9 +90,64 @@ step_header() {
 
 ok()   { echo -e "${GREEN}[OK]${NC} $1"; }
 info() { echo -e "${YELLOW}[..]${NC} $1"; }
-err()  { echo -e "${RED}[!!]${NC} $1"; }
+err()  { echo -e "${RED}[!!]${NC} $1" >&2; }
 
 command_exists() { command -v "$1" &>/dev/null; }
+
+on_error() {
+    local exit_code="$1" line_no="$2" command="$3"
+    echo "" >&2
+    err "Build failed at line $line_no (exit code $exit_code)"
+    err "Command: $command"
+    err "Working directory: $(pwd)"
+    err "If this happened during publish, check the output above for the first compiler/SDK error."
+}
+
+trap 'on_error "$?" "$LINENO" "$BASH_COMMAND"' ERR
+
+prepend_path_once() {
+    local dir="$1"
+    [[ -n "$dir" && -d "$dir" ]] || return 0
+    case ":$PATH:" in
+        *":$dir:"*) ;;
+        *) export PATH="$dir:$PATH" ;;
+    esac
+}
+
+resolve_path() {
+    local path="$1"
+    case "$path" in
+        /*) printf '%s' "$path" ;;
+        *)  printf '%s' "$SCRIPT_DIR/$path" ;;
+    esac
+}
+
+get_required_dotnet_sdk_version() {
+    if [[ -n "$DOTNET_SDK_VERSION" ]]; then
+        printf '%s' "$DOTNET_SDK_VERSION"
+        return 0
+    fi
+
+    local global_json="$SCRIPT_DIR/global.json"
+    if [[ -f "$global_json" ]]; then
+        DOTNET_SDK_VERSION="$(
+            grep -E '"version"[[:space:]]*:' "$global_json" |
+            head -1 |
+            sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/'
+        )" || DOTNET_SDK_VERSION=""
+    fi
+
+    [[ -z "$DOTNET_SDK_VERSION" ]] && DOTNET_SDK_VERSION="8.0.419"
+    printf '%s' "$DOTNET_SDK_VERSION"
+}
+
+configure_dotnet_cli_environment() {
+    mkdir -p "$DOTNET_CLI_HOME_DIR" "$NUGET_PACKAGES_DIR"
+    export DOTNET_CLI_HOME="$DOTNET_CLI_HOME_DIR"
+    export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+    export DOTNET_CLI_TELEMETRY_OPTOUT=1
+    export NUGET_PACKAGES="$NUGET_PACKAGES_DIR"
+}
 
 format_size() {
     local bytes=$1
@@ -178,8 +241,8 @@ Options:
   --config <CFG>      Build configuration: Debug or Release (default: Release)
   --publish           Publish as self-contained single binary
   --runtime <RID>     .NET runtime identifier (default: auto-detected)
-  --output <DIR>      Output directory for publish (default: ./publish)
-  --dist <DIR>        Distribution bundle directory (default: ./dist)
+  --output <DIR>      Output directory for raw publish files (default: ./publish-macos)
+  --dist <DIR>        Distribution bundle directory (default: ./dist-macos)
   --skip-dotnet       Skip .NET build step (for WPF-only projects)
   --help              Show this help
 
@@ -193,8 +256,10 @@ Platform Notes:
     - XRayCore.dylib              (xray-core proxy engine, Go c-shared)
     - geoip.dat / geosite.dat     (geo routing databases)
     - InvisibleGorilla-XRay.app   (macOS application bundle)
+    - run-igxray                 (launcher next to the app bundle)
 
-  The resulting .app can be dragged into /Applications.
+  The final runnable bundle is written to dist-macos/<runtime>/.
+  The resulting .app can be launched there or dragged into /Applications.
 
 Examples:
   ./build-macos.sh                              # Full build
@@ -336,60 +401,76 @@ ensure_go() {
     ok "Go $go_ver (installed)"
 }
 
-# ─── Dependency: .NET SDK 7.0 ────────────────────────────────────────────────
+# ─── Dependency: .NET SDK from global.json ───────────────────────────────────
 
 ensure_dotnet() {
-    if command_exists dotnet; then
-        local sdk_list
-        sdk_list="$(dotnet --list-sdks 2>/dev/null || true)"
-        if echo "$sdk_list" | grep -q '^7\.'; then
-            local ver
-            ver="$(echo "$sdk_list" | grep '^7\.' | head -1 | awk '{print $1}')"
-            ok ".NET SDK $ver"
-            return
+    configure_dotnet_cli_environment
+
+    local required_sdk
+    required_sdk="$(get_required_dotnet_sdk_version)"
+    info "Required .NET SDK from global.json: $required_sdk"
+
+    local candidates=()
+    [[ -x "$DOTNET_FALLBACK_DIR/dotnet" ]] && candidates+=("$DOTNET_FALLBACK_DIR/dotnet")
+    [[ -n "${DOTNET_ROOT:-}" && -x "${DOTNET_ROOT:-}/dotnet" ]] && candidates+=("$DOTNET_ROOT/dotnet")
+    command_exists dotnet && candidates+=("$(command -v dotnet)")
+    [[ -x "$HOME/.dotnet/dotnet" ]] && candidates+=("$HOME/.dotnet/dotnet")
+    [[ -x "/usr/local/share/dotnet/dotnet" ]] && candidates+=("/usr/local/share/dotnet/dotnet")
+    [[ -x "/opt/homebrew/bin/dotnet" ]] && candidates+=("/opt/homebrew/bin/dotnet")
+    [[ -x "/usr/local/bin/dotnet" ]] && candidates+=("/usr/local/bin/dotnet")
+
+    local candidate sdk_list
+    for candidate in "${candidates[@]}"; do
+        sdk_list="$("$candidate" --list-sdks 2>/dev/null || true)"
+        if echo "$sdk_list" | grep -q "^$required_sdk[[:space:]]"; then
+            DOTNET_CMD="$candidate"
+            DOTNET_ROOT="$(cd "$(dirname "$candidate")" && pwd)"
+            export DOTNET_ROOT
+            prepend_path_once "$DOTNET_ROOT"
+            ok ".NET SDK $required_sdk ($DOTNET_CMD)"
+            return 0
         fi
-        info ".NET SDK found, but version 7.x is missing"
+    done
+
+    if ((${#candidates[@]} > 0)); then
+        info ".NET exists, but required SDK $required_sdk is missing"
+        for candidate in "${candidates[@]}"; do
+            info "Installed SDKs visible to $candidate:"
+            "$candidate" --list-sdks 2>/dev/null | sed 's/^/     /' || true
+        done
     else
         info ".NET SDK not found, installing..."
     fi
 
-    local install_script="/tmp/dotnet-install.sh"
+    mkdir -p "$DOTNET_FALLBACK_DIR"
+
+    local install_script="/tmp/dotnet-install-igxray.sh"
     download_file "https://dot.net/v1/dotnet-install.sh" "$install_script" \
         "Downloading dotnet-install.sh..." 1024
 
     chmod +x "$install_script"
-    info "Installing .NET SDK 7.0..."
-    "$install_script" --channel 7.0 --install-dir "$HOME/.dotnet"
+    info "Installing .NET SDK $required_sdk to $DOTNET_FALLBACK_DIR..."
+    "$install_script" --version "$required_sdk" --install-dir "$DOTNET_FALLBACK_DIR"
     rm -f "$install_script"
 
-    export DOTNET_ROOT="$HOME/.dotnet"
-    export PATH="$DOTNET_ROOT:$DOTNET_ROOT/tools:$PATH"
-
-    # Add to shell profile if not already there
-    local shell_rc="$HOME/.zshrc"
-    [[ -f "$HOME/.bash_profile" && ! -f "$HOME/.zshrc" ]] && shell_rc="$HOME/.bash_profile"
-
-    if [[ -f "$shell_rc" ]] && ! grep -q 'DOTNET_ROOT' "$shell_rc" 2>/dev/null; then
-        {
-            echo ""
-            echo "# .NET SDK"
-            echo "export DOTNET_ROOT=\"\$HOME/.dotnet\""
-            echo "export PATH=\"\$DOTNET_ROOT:\$DOTNET_ROOT/tools:\$PATH\""
-        } >> "$shell_rc"
-        info "Added .NET to $shell_rc"
-    fi
-
-    if ! command_exists dotnet; then
-        err ".NET SDK installed but not found in PATH."
-        err "Add to your shell profile:"
-        err "  export DOTNET_ROOT=\"\$HOME/.dotnet\""
-        err "  export PATH=\"\$DOTNET_ROOT:\$PATH\""
+    if [[ ! -x "$DOTNET_FALLBACK_DIR/dotnet" ]]; then
+        err ".NET SDK install finished, but dotnet executable was not created:"
+        err "  $DOTNET_FALLBACK_DIR/dotnet"
         exit 1
     fi
 
-    local ver
-    ver="$(dotnet --version 2>/dev/null)"
-    ok ".NET SDK $ver (installed)"
+    sdk_list="$("$DOTNET_FALLBACK_DIR/dotnet" --list-sdks 2>/dev/null || true)"
+    if ! echo "$sdk_list" | grep -q "^$required_sdk[[:space:]]"; then
+        err ".NET SDK $required_sdk is still not visible after installation."
+        err "Installed SDKs in fallback directory:"
+        echo "$sdk_list" | sed 's/^/     /' >&2
+        exit 1
+    fi
+
+    DOTNET_CMD="$DOTNET_FALLBACK_DIR/dotnet"
+    export DOTNET_ROOT="$DOTNET_FALLBACK_DIR"
+    prepend_path_once "$DOTNET_ROOT"
+    ok ".NET SDK $required_sdk installed at $DOTNET_CMD"
 }
 
 # ─── Prerequisites check ─────────────────────────────────────────────────────
@@ -509,20 +590,33 @@ build_dotnet_app() {
     pushd "$SCRIPT_DIR" >/dev/null
 
     info "Restoring NuGet packages..."
-    dotnet restore "$mac_csproj"
+    "$DOTNET_CMD" restore "$mac_csproj"
     ok "NuGet packages restored"
 
     local abs_output
-    abs_output="$(mkdir -p "$OUTPUT_DIR" && cd "$OUTPUT_DIR" && pwd)"
+    abs_output="$(resolve_path "$OUTPUT_DIR")/$RUNTIME"
+    rm -rf "$abs_output"
+    mkdir -p "$abs_output"
 
     info "Publishing Avalonia GUI..."
-    dotnet publish "$mac_csproj" \
+    "$DOTNET_CMD" publish "$mac_csproj" \
         -c "$CONFIGURATION" \
         -r "$RUNTIME" \
         --self-contained true \
         -p:PublishSingleFile=false \
         -o "$abs_output"
-    ok "Published to: $abs_output"
+
+    local published_binary="$abs_output/$APP_BINARY_NAME"
+    if [[ ! -x "$published_binary" ]]; then
+        err "Publish finished but the expected macOS binary was not created:"
+        err "  $published_binary"
+        err "Directory contents:"
+        ls -la "$abs_output" >&2 || true
+        exit 1
+    fi
+
+    ok "Published raw files to: $abs_output"
+    ok "Published binary: $published_binary"
 
     popd >/dev/null
 }
@@ -594,26 +688,34 @@ with open(sys.argv[1], 'wb') as f:
 package_bundle() {
     step_header "Step 4: Package macOS .app bundle"
 
-    local app_bundle="$SCRIPT_DIR/$DIST_DIR/InvisibleGorilla-XRay.app"
+    local bundle_root
+    bundle_root="$(resolve_path "$DIST_DIR")/$RUNTIME"
+    local app_bundle="$bundle_root/$APP_BUNDLE_NAME"
     local contents="$app_bundle/Contents"
     local macos_dir="$contents/MacOS"
     local resources="$contents/Resources"
     local frameworks="$contents/Frameworks"
 
-    rm -rf "$app_bundle"
+    rm -rf "$bundle_root"
     mkdir -p "$macos_dir" "$resources" "$frameworks"
 
     local found_items=0
-    local publish_dir="$SCRIPT_DIR/$OUTPUT_DIR"
+    local missing_required=0
+    local publish_dir
+    publish_dir="$(resolve_path "$OUTPUT_DIR")/$RUNTIME"
 
     # Copy published Avalonia app files
-    if [[ -d "$publish_dir" ]] && ls "$publish_dir"/*.dll &>/dev/null 2>&1; then
+    if [[ -x "$publish_dir/$APP_BINARY_NAME" ]]; then
         cp -R "$publish_dir/"* "$macos_dir/"
-        chmod +x "$macos_dir/InvisibleGorilla-XRay.Mac" 2>/dev/null || true
-        ok "Bundled: Avalonia GUI files"
+        chmod +x "$macos_dir/$APP_BINARY_NAME" 2>/dev/null || true
+        ok "Bundled: Avalonia GUI files from $publish_dir"
         found_items=$((found_items + 1))
     else
-        info "Avalonia publish output not found, checking for CLI binary..."
+        err "Avalonia publish output not found or missing executable:"
+        err "  $publish_dir/$APP_BINARY_NAME"
+        err "Run: ./build-macos.sh --step dotnet --runtime $RUNTIME"
+        rm -rf "$bundle_root"
+        exit 1
     fi
 
     # Copy CLI binary as fallback
@@ -623,6 +725,8 @@ package_bundle() {
         chmod +x "$macos_dir/gorilla-xray"
         ok "Bundled: gorilla-xray (CLI binary)"
         found_items=$((found_items + 1))
+    else
+        info "gorilla-xray CLI binary not found; GUI bundle can still run without CLI fallback"
     fi
 
     # Copy XRayCore.dylib
@@ -635,6 +739,7 @@ package_bundle() {
         found_items=$((found_items + 1))
     else
         err "XRayCore.dylib not found — run build step 'go' first"
+        missing_required=$((missing_required + 1))
     fi
 
     # Copy geo databases
@@ -647,6 +752,7 @@ package_bundle() {
             found_items=$((found_items + 1))
         else
             err "$dat not found — run build step 'geo' first"
+            missing_required=$((missing_required + 1))
         fi
     done
 
@@ -660,6 +766,13 @@ package_bundle() {
         err "No files to bundle. Run the full build first."
         rm -rf "$app_bundle"
         return 1
+    fi
+
+    if (( missing_required > 0 )); then
+        err "Bundle is incomplete: $missing_required required runtime file(s) are missing."
+        err "Run a full build: ./build-macos.sh --runtime $RUNTIME"
+        rm -rf "$bundle_root"
+        exit 1
     fi
 
     # Create Info.plist
@@ -679,7 +792,7 @@ package_bundle() {
     <key>CFBundleShortVersionString</key>
     <string>$VERSION</string>
     <key>CFBundleExecutable</key>
-    <string>InvisibleGorilla-XRay.Mac</string>
+    <string>$APP_BINARY_NAME</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundlePackageType</key>
@@ -708,22 +821,64 @@ package_bundle() {
 PLIST
     ok "Bundled: Info.plist"
 
+    local app_binary="$macos_dir/$APP_BINARY_NAME"
+    if [[ ! -x "$app_binary" ]]; then
+        err "Bundle was created, but the expected executable is missing:"
+        err "  $app_binary"
+        rm -rf "$bundle_root"
+        exit 1
+    fi
+
+    cat > "$bundle_root/$APP_RUNNER_NAME" <<RUNNER
+#!/usr/bin/env bash
+set -euo pipefail
+DIR="\$(cd "\$(dirname "\$0")" && pwd)"
+open "\$DIR/$APP_BUNDLE_NAME"
+RUNNER
+    chmod +x "$bundle_root/$APP_RUNNER_NAME"
+
+    cat > "$bundle_root/README-MACOS.txt" <<README
+Invisible Gorilla XRay Client for macOS
+Version: $VERSION
+Runtime: $RUNTIME
+
+Run from this folder:
+  ./$APP_RUNNER_NAME
+
+Or open:
+  $APP_BUNDLE_NAME
+
+Internal app executable:
+  $APP_BUNDLE_NAME/Contents/MacOS/$APP_BINARY_NAME
+
+Install manually:
+  drag $APP_BUNDLE_NAME to /Applications
+
+The folder contains everything needed to run the app bundle.
+README
+    ok "Bundled: $APP_RUNNER_NAME"
+    ok "Bundled: README-MACOS.txt"
+
     # Create archive
-    local archive_name="InvisibleGorilla-XRay-macOS-${ARCH}-v${VERSION}.tar.gz"
-    pushd "$SCRIPT_DIR/$DIST_DIR" >/dev/null
-    tar -czf "$archive_name" "InvisibleGorilla-XRay.app"
+    local archive_name="InvisibleGorilla-XRay-macOS-${RUNTIME}-v${VERSION}.tar.gz"
+    pushd "$bundle_root" >/dev/null
+    tar -czf "$archive_name" "$APP_BUNDLE_NAME" "$APP_RUNNER_NAME" "README-MACOS.txt"
     popd >/dev/null
 
-    local archive_path="$SCRIPT_DIR/$DIST_DIR/$archive_name"
+    local archive_path="$bundle_root/$archive_name"
     local archive_size
     archive_size="$(format_size "$(stat -f%z "$archive_path" 2>/dev/null || stat -c%s "$archive_path")")"
 
     echo ""
-    ok ".app bundle created:"
-    echo -e "     ${DIM}App:     $app_bundle${NC}"
-    echo -e "     ${DIM}Archive: $archive_path ($archive_size)${NC}"
+    ok "macOS bundle created:"
+    echo -e "     ${DIM}Bundle folder: $bundle_root${NC}"
+    echo -e "     ${DIM}App:           $app_bundle${NC}"
+    echo -e "     ${DIM}Executable:    $app_binary${NC}"
+    echo -e "     ${DIM}Launcher:      $bundle_root/$APP_RUNNER_NAME${NC}"
+    echo -e "     ${DIM}Archive:       $archive_path ($archive_size)${NC}"
     echo ""
-    echo -e "     ${DIM}To install: drag InvisibleGorilla-XRay.app to /Applications${NC}"
+    echo -e "     ${DIM}Run:     $bundle_root/$APP_RUNNER_NAME${NC}"
+    echo -e "     ${DIM}Install: drag $APP_BUNDLE_NAME to /Applications${NC}"
 }
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
@@ -734,6 +889,11 @@ echo ""
 echo -e "${MAGENTA}  Invisible Gorilla - XRay Client :: macOS Build Script${NC}"
 echo -e "${DIM}  v${VERSION} | $(uname -m) | macOS $(sw_vers -productVersion 2>/dev/null || echo 'unknown')${NC}"
 echo ""
+
+if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    info "Script is running as root/sudo. Build outputs may be owned by root."
+    info "Recommended command for normal builds: ./build-macos.sh"
+fi
 
 # Validate step
 case "$STEP" in
@@ -768,4 +928,18 @@ echo ""
 echo -e "${GREEN}============================================================${NC}"
 printf "${GREEN}  Done in %d:%02d${NC}\n" "$mins" "$secs"
 echo -e "${GREEN}============================================================${NC}"
+
+final_bundle_root="$(resolve_path "$DIST_DIR")/$RUNTIME"
+final_app="$final_bundle_root/$APP_BUNDLE_NAME"
+final_binary="$final_app/Contents/MacOS/$APP_BINARY_NAME"
+final_runner="$final_bundle_root/$APP_RUNNER_NAME"
+
+if [[ -d "$final_bundle_root" ]]; then
+    echo ""
+    ok "Final macOS output:"
+    echo -e "     ${DIM}Folder:     $final_bundle_root${NC}"
+    [[ -d "$final_app" ]] && echo -e "     ${DIM}App:        $final_app${NC}"
+    [[ -x "$final_binary" ]] && echo -e "     ${DIM}Binary:     $final_binary${NC}"
+    [[ -x "$final_runner" ]] && echo -e "     ${DIM}Run script: $final_runner${NC}"
+fi
 echo ""

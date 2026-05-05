@@ -122,10 +122,13 @@ chmod +x build-macos.sh
 
 Tested on macOS Sequoia 15.7+ (Apple Silicon and Intel). Builds an `.app` bundle with Avalonia UI.
 
+The raw publish output is written to `publish-macos/<rid>/`. The runnable bundle is written to `dist-macos/<rid>/` and contains `InvisibleGorilla-XRay.app`, `run-igxray`, `README-MACOS.txt`, and a `.tar.gz` archive. The internal executable is `dist-macos/<rid>/InvisibleGorilla-XRay.app/Contents/MacOS/InvisibleGorilla-XRay.Mac`.
+
 | Command | Description |
 |---|---|
 | `./build-macos.sh` | Full macOS build |
-| `./build-macos.sh --publish` | Build + distributable archive |
+| `./build-macos.sh --runtime osx-arm64` | Build Apple Silicon output |
+| `./build-macos.sh --runtime osx-x64` | Build Intel output |
 | `./build-macos.sh --step go` | Only build `XRayCore.dylib` |
 | `./build-macos.sh --step bundle` | Only package the `.app` bundle |
 

@@ -40,6 +40,8 @@
 - `global.json` pins the SDK to `8.0.419`; Windows `build.ps1` must check and install that exact SDK with `dotnet-install.ps1 -Version 8.0.419`, not treat SDK 7.x as sufficient.
 - Windows `build.ps1` targets `InvisibleGorilla-XRay/InvisibleGorilla-XRay.csproj` for restore/build/publish. Do not restore the full `.sln` in the default Windows desktop build, because that requires Android workload on machines that only need the WPF client.
 - Windows `build.ps1` preflights a running output `Invisible Gorilla XRay.exe` before `.NET` build/publish. Default behavior is to close the matching process to avoid MSBuild file-lock errors; use `-NoStopRunningApp` when validating without terminating a local app instance.
+- macOS `build-macos.sh` must also read `global.json` and install/resolve the exact pinned SDK (`8.0.419`) instead of accepting or installing SDK 7.x. Its fallback install dir is repo-local `.dotnet-sdk/`; `DOTNET_CLI_HOME` and `NUGET_PACKAGES` point to repo-local `.dotnet-home/` and `.nuget/packages/`.
+- macOS raw publish output lives under `publish-macos/<rid>/`; the runnable deliverable lives under `dist-macos/<rid>/` with `InvisibleGorilla-XRay.app`, `run-igxray`, `README-MACOS.txt`, and `InvisibleGorilla-XRay-macOS-<rid>-v<version>.tar.gz`. The internal app binary is `InvisibleGorilla-XRay.app/Contents/MacOS/InvisibleGorilla-XRay.Mac`.
 - Rebuild both Android native libraries after Go bridge changes.
 - Rebuild the Windows `XRayCore.dll` after shared Go wrapper changes that affect the local listener contract.
 - Publish emulator APK with RID `android-x64`.

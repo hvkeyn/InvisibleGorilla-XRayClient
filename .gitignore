@@ -20,8 +20,10 @@
 /publish
 /publish-android
 /publish-linux
+/publish-macos
 /dist
 /dist-linux
+/dist-macos
 /.dotnet-sdk
 /.dotnet-home
 /.nuget
