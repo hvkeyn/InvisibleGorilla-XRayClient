@@ -9,6 +9,7 @@ namespace InvisibleGorillaXRay.Mac.Handlers.Tunnels
     using InvisibleGorillaXRay.Handlers.Tunnels;
     using InvisibleGorillaXRay.Handlers;
     using InvisibleGorillaXRay.Models;
+    using CorePath = InvisibleGorillaXRay.Values.Path;
 
     /// <summary>
     /// macOS TUN implementation using tun2socks.
@@ -23,18 +24,17 @@ namespace InvisibleGorillaXRay.Mac.Handlers.Tunnels
         private string? originalGateway;
         private string? originalInterface;
         private const string TUN_DEVICE = "utun9";
-        private const string TUN2SOCKS_PATH = "./TUN/tun2socks";
 
         public Status Enable(string ip, int port, string address, string server, string dns, LocalProxyCredentials localProxyCredentials)
         {
             isCancelled = false;
 
-            if (!File.Exists(TUN2SOCKS_PATH))
+            if (!File.Exists(CorePath.TUN_EXE))
             {
                 return new Status(
                     Code.ERROR,
                     SubCode.CANT_TUNNEL,
-                    "tun2socks binary not found. Please ensure TUN/tun2socks exists.");
+                    $"tun2socks binary not found at {CorePath.TUN_EXE}. Please ensure the app bundle contains TUN/tun2socks.");
             }
 
             try
@@ -96,7 +96,7 @@ namespace InvisibleGorillaXRay.Mac.Handlers.Tunnels
             tun2socksProcess = new Process();
             tun2socksProcess.StartInfo = new ProcessStartInfo
             {
-                FileName = TUN2SOCKS_PATH,
+                FileName = CorePath.TUN_EXE,
                 Arguments = $"-device {TUN_DEVICE} -proxy {proxyArgument} -interface 127.0.0.1",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,

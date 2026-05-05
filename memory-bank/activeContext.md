@@ -142,6 +142,8 @@ Harden release/build scripts so remote Windows and Linux builders get actionable
 - Linux `build.sh` now also sets `DOTNET_CLI_HOME`, `NUGET_PACKAGES`, and first-run/telemetry flags to repo-local `.dotnet-home/` and `.nuget/`, preventing `dotnet restore` from writing sentinel files into an unwritable `$HOME/.dotnet`.
 - macOS `build-macos.sh` now mirrors the hardened SDK/bootstrap behavior: reads the exact SDK from `global.json`, installs fallback SDKs into repo-local `.dotnet-sdk/`, isolates `.NET` CLI/NuGet state into `.dotnet-home/` and `.nuget/`, and always invokes restore/publish through the resolved `DOTNET_CMD`.
 - macOS build outputs now land in a single runnable folder `dist-macos/<runtime>/` containing `InvisibleGorilla-XRay.app`, a top-level `run-igxray` launcher, `README-MACOS.txt`, and a tarball. The script prints the raw publish path, app bundle path, internal binary path, launcher path, and archive path; missing runtime files fail the build explicitly.
+- macOS startup now separates runtime files from writable user data. Runtime assets still load from `.app/Contents/MacOS`, while settings/configs/logs/diagnostics write under `~/Library/Application Support/InvisibleGorilla-XRay`; Linux uses `$XDG_DATA_HOME/InvisibleGorilla-XRay` or `~/.local/share/InvisibleGorilla-XRay`. This avoids first-launch crashes when a bundle was built or unpacked with root-owned files.
+- macOS startup now writes unhandled startup exceptions to `~/Library/Application Support/InvisibleGorilla-XRay/Logs/startup-crash.log` in addition to `diagnostic.log`.
 
 ## Validation Snapshot
 - `bash -n build.sh` succeeds after the launcher/install changes.
@@ -154,3 +156,4 @@ Harden release/build scripts so remote Windows and Linux builders get actionable
 - `bash -n build.sh` succeeds after moving the pinned SDK fallback install dir to `.dotnet-sdk/`.
 - `bash -n build.sh` succeeds after moving .NET CLI home and NuGet packages to repo-local folders.
 - `bash -lc "tr -d '\\r' < build-macos.sh | bash -n"` succeeds after the macOS SDK/output hardening. The local Windows checkout still reports CRLF in the working tree, but repository `.gitattributes` already enforces LF for `*.sh` when committed/pulled.
+- `dotnet build InvisibleGorilla-XRay.Mac/InvisibleGorilla-XRay.Mac.csproj -c Debug`, `dotnet build InvisibleGorilla.Core/InvisibleGorilla.Core.csproj -c Debug`, and `dotnet build InvisibleGorilla-XRay.Linux/InvisibleGorilla-XRay.Linux.csproj -c Debug` succeed after the runtime/data root split. The only remaining Linux/Mac warnings are existing `net7.0` EOL warnings.

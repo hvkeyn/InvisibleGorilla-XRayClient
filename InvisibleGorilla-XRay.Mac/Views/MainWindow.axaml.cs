@@ -7,6 +7,7 @@ using Avalonia.Threading;
 
 namespace InvisibleGorillaXRay.Mac.Views
 {
+    using Core;
     using Models;
     using Values;
     using InvisibleGorillaXRay.Services;
@@ -98,12 +99,19 @@ namespace InvisibleGorillaXRay.Mac.Views
 
         private void OnWindowOpened(object sender, EventArgs e)
         {
-            TryOpenPolicyWindow();
-            TryStartHidden();
-            TryAutoConnect();
-            RunUpdateCheck();
+            try
+            {
+                TryOpenPolicyWindow();
+                TryStartHidden();
+                TryAutoConnect();
+                RunUpdateCheck();
 
-            AnalyticsService.SendEvent(new AppOpenedEvent());
+                AnalyticsService.SendEvent(new AppOpenedEvent());
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MacMainWindow.OnWindowOpened", ex);
+            }
         }
 
         public void UpdateUI()

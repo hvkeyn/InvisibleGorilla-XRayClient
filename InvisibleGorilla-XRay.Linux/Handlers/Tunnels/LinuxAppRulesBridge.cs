@@ -32,7 +32,7 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
     /// </summary>
     internal static class LinuxAppRulesBridge
     {
-        private static string ConfigPath => Path.Combine(Values.Directory.TUN, "linux-transparent-proxy-config.json");
+        private static string ConfigPath => Path.Combine(Values.Directory.DATA_TUN, "linux-transparent-proxy-config.json");
 
         public static Status Prepare(UserSettings settings, int socksPort, string tunnelAddress, string dns, LocalProxyCredentials localProxyCredentials)
         {

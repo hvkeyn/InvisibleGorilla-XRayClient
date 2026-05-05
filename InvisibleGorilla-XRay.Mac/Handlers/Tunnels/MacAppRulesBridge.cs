@@ -24,8 +24,8 @@ namespace InvisibleGorillaXRay.Mac.Handlers.Tunnels
 
     internal static class MacAppRulesBridge
     {
-        private static string ConfigPath => Path.Combine(Values.Directory.TUN, "mac-transparent-proxy-config.json");
-        private static string HelperRoot => Path.Combine(Values.Directory.ROOT, "Native", "TransparentProxyExtension");
+        private static string ConfigPath => Path.Combine(Values.Directory.DATA_TUN, "mac-transparent-proxy-config.json");
+        private static string HelperRoot => Path.Combine(Values.Directory.RUNTIME_ROOT, "Native", "TransparentProxyExtension");
 
         public static Status Prepare(UserSettings settings, int socksPort, string tunnelAddress, string dns, LocalProxyCredentials localProxyCredentials)
         {

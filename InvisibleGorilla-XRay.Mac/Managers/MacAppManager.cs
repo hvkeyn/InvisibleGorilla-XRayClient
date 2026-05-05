@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -69,8 +70,29 @@ namespace InvisibleGorillaXRay.Mac.Managers
 
         private void SetApplicationCurrentDirectory()
         {
-            Environment.CurrentDirectory = System.IO.Path.GetDirectoryName(
-                Environment.ProcessPath) ?? Environment.CurrentDirectory;
+            string runtimeRoot = Path.GetDirectoryName(Environment.ProcessPath)
+                ?? AppContext.BaseDirectory;
+            string dataRoot = ResolveDataRoot();
+
+            InvisibleGorillaXRay.Values.Directory.ConfigureRoots(dataRoot, runtimeRoot);
+            InvisibleGorillaXRay.Values.Directory.EnsureWritableDirectories();
+
+            Environment.CurrentDirectory = runtimeRoot;
+            DiagnosticLog.Write(
+                "MacAppManager",
+                $"runtimeRoot={InvisibleGorillaXRay.Values.Directory.RUNTIME_ROOT}, dataRoot={InvisibleGorillaXRay.Values.Directory.DATA_ROOT}");
+
+            static string ResolveDataRoot()
+            {
+                string appSupport = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                if (string.IsNullOrWhiteSpace(appSupport))
+                    appSupport = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                        "Library",
+                        "Application Support");
+
+                return Path.Combine(appSupport, "InvisibleGorilla-XRay");
+            }
         }
 
         private void RegisterCore()

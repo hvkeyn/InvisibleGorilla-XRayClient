@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading;
 using InvisibleGorillaXRay.Core;
 using InvisibleGorillaXRay.Managers;
@@ -61,8 +62,29 @@ namespace InvisibleGorillaXRay.Linux.Managers
 
         private void SetApplicationCurrentDirectory()
         {
-            Environment.CurrentDirectory = System.IO.Path.GetDirectoryName(
-                Environment.ProcessPath) ?? Environment.CurrentDirectory;
+            string runtimeRoot = Path.GetDirectoryName(Environment.ProcessPath)
+                ?? AppContext.BaseDirectory;
+            string dataRoot = ResolveDataRoot();
+
+            InvisibleGorillaXRay.Values.Directory.ConfigureRoots(dataRoot, runtimeRoot);
+            InvisibleGorillaXRay.Values.Directory.EnsureWritableDirectories();
+
+            Environment.CurrentDirectory = runtimeRoot;
+            DiagnosticLog.Write(
+                "LinuxAppManager",
+                $"runtimeRoot={InvisibleGorillaXRay.Values.Directory.RUNTIME_ROOT}, dataRoot={InvisibleGorillaXRay.Values.Directory.DATA_ROOT}");
+
+            static string ResolveDataRoot()
+            {
+                string dataHome = Environment.GetEnvironmentVariable("XDG_DATA_HOME") ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(dataHome))
+                {
+                    string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                    dataHome = Path.Combine(home, ".local", "share");
+                }
+
+                return Path.Combine(dataHome, "InvisibleGorilla-XRay");
+            }
         }
 
         private void RegisterCore()

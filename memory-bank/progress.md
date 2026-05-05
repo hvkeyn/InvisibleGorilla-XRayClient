@@ -147,6 +147,8 @@
 - `build-macos.sh` no longer hard-codes .NET SDK 7.0. It reads the exact SDK from `global.json`, resolves an existing matching `dotnet`, or installs the pinned SDK into repo-local `.dotnet-sdk/`.
 - macOS `dotnet restore` / `publish` now use repo-local `.dotnet-home/` and `.nuget/packages/`, avoiding hidden writes to a broken or root-owned home SDK/cache.
 - macOS build artifacts now have clear locations: raw publish output in `publish-macos/<rid>/`, and the runnable bundle in `dist-macos/<rid>/` with `InvisibleGorilla-XRay.app`, `run-igxray`, `README-MACOS.txt`, and a tarball archive. The script prints those paths and fails explicitly if required runtime files are missing.
+- macOS first launch no longer writes settings/configs/logs into `.app/Contents/MacOS`. Runtime files stay in the app bundle, while user data goes to `~/Library/Application Support/InvisibleGorilla-XRay`; this addresses the observed `SIGABRT` crash pattern when a bundle was produced by `sudo` and became root-owned.
+- Startup exceptions on macOS are now captured in `~/Library/Application Support/InvisibleGorilla-XRay/Logs/startup-crash.log`.
 
 ## Validation
 - `bash -n build.sh` succeeds.
@@ -159,3 +161,4 @@
 - `bash -n build.sh` succeeds after moving the pinned SDK fallback install dir to `.dotnet-sdk/`.
 - `bash -n build.sh` succeeds after moving .NET CLI home and NuGet packages to repo-local folders.
 - `bash -lc "tr -d '\\r' < build-macos.sh | bash -n"` succeeds for the macOS script after SDK/output hardening.
+- `dotnet build InvisibleGorilla-XRay.Mac/InvisibleGorilla-XRay.Mac.csproj -c Debug`, `dotnet build InvisibleGorilla.Core/InvisibleGorilla.Core.csproj -c Debug`, and `dotnet build InvisibleGorilla-XRay.Linux/InvisibleGorilla-XRay.Linux.csproj -c Debug` succeed after the macOS launch crash fix. Existing `net7.0` EOL warnings remain.

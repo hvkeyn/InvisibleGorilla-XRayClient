@@ -6,6 +6,7 @@ using Avalonia.Markup.Xaml;
 
 namespace InvisibleGorillaXRay.Mac
 {
+    using Core;
     using Managers;
     using Views;
 
@@ -21,19 +22,27 @@ namespace InvisibleGorillaXRay.Mac
 
         public override void OnFrameworkInitializationCompleted()
         {
-            if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            try
             {
-                desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+                {
+                    desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-                appManager = new MacAppManager(desktop.Args ?? Array.Empty<string>());
-                appManager.Initialize();
+                    appManager = new MacAppManager(desktop.Args ?? Array.Empty<string>());
+                    appManager.Initialize();
 
-                var mainWindow = appManager.WindowFactory.CreateMainWindow();
-                desktop.MainWindow = mainWindow;
+                    var mainWindow = appManager.WindowFactory.CreateMainWindow();
+                    desktop.MainWindow = mainWindow;
 
-                desktop.ShutdownRequested += (s, e) => CleanupBeforeExit();
-                AppDomain.CurrentDomain.ProcessExit += (s, e) => CleanupBeforeExit();
-                AppDomain.CurrentDomain.UnhandledException += (s, e) => CleanupBeforeExit();
+                    desktop.ShutdownRequested += (s, e) => CleanupBeforeExit();
+                    AppDomain.CurrentDomain.ProcessExit += (s, e) => CleanupBeforeExit();
+                    AppDomain.CurrentDomain.UnhandledException += (s, e) => CleanupBeforeExit();
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MacApp.OnFrameworkInitializationCompleted", ex);
+                throw;
             }
 
             base.OnFrameworkInitializationCompleted();
