@@ -1143,11 +1143,50 @@
                             BorderBrush="{StaticResource SurfaceBright}"
                         BorderThickness="1"
                             Background="{StaticResource SurfaceLight}">
-                    <StackPanel Spacing="8">
+                    <StackPanel Spacing="10">
                             <TextBlock x:Name="LogsAndDiagnosticsTitleTextBlock"
                                        Text="Logs and diagnostics"
                                    FontSize="18"
                                    FontWeight="SemiBold" />
+                        <TextBlock x:Name="LogsDescriptionTextBlock"
+                                   Text="Capture, share or clear the in-app diagnostic log used for troubleshooting."
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextMuted}"
+                                   FontSize="12" />
+                        <TextBlock x:Name="LogsStatusTextBlock"
+                                   Text=""
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextMuted}"
+                                   FontSize="11" />
+                        <Button x:Name="ShareLogButton"
+                                Height="40"
+                                Theme="{StaticResource GreenActionButton}"
+                                Foreground="#252526"
+                                FontWeight="SemiBold"
+                                Click="OnShareLogClick">
+                            <TextBlock x:Name="ShareLogButtonTextBlock"
+                                       Text="Share log"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" />
+                        </Button>
+                        <Button x:Name="SaveLogButton"
+                                Height="40"
+                                Theme="{StaticResource GrayActionButton}"
+                                Click="OnSaveLogClick">
+                            <TextBlock x:Name="SaveLogButtonTextBlock"
+                                       Text="Save log to device"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" />
+                        </Button>
+                        <Button x:Name="ClearLogButton"
+                                Height="38"
+                                Theme="{StaticResource RedActionButton}"
+                                Click="OnClearLogClick">
+                            <TextBlock x:Name="ClearLogButtonTextBlock"
+                                       Text="Clear log"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" />
+                        </Button>
                         <TextBlock x:Name="RuntimeTextBlock"
                                    TextWrapping="Wrap" />
                     </StackPanel>

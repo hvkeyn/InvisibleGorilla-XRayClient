@@ -157,3 +157,28 @@ Harden release/build scripts so remote Windows and Linux builders get actionable
 - `bash -n build.sh` succeeds after moving .NET CLI home and NuGet packages to repo-local folders.
 - `bash -lc "tr -d '\\r' < build-macos.sh | bash -n"` succeeds after the macOS SDK/output hardening. The local Windows checkout still reports CRLF in the working tree, but repository `.gitattributes` already enforces LF for `*.sh` when committed/pulled.
 - `dotnet build InvisibleGorilla-XRay.Mac/InvisibleGorilla-XRay.Mac.csproj -c Debug`, `dotnet build InvisibleGorilla.Core/InvisibleGorilla.Core.csproj -c Debug`, and `dotnet build InvisibleGorilla-XRay.Linux/InvisibleGorilla-XRay.Linux.csproj -c Debug` succeed after the runtime/data root split. The only remaining Linux/Mac warnings are existing `net7.0` EOL warnings.
+
+# Active Context
+
+## Current Focus
+Diagnose and prevent the Android black-screen / freeze that reproduced when App Rules whitelist (`ONLY_SELECTED_APPS`) was active, and give end users a way to capture and ship diagnostic data without developer tooling.
+
+## Recent Changes
+- Hardened `InvisibleGorilla.Core/Core/DiagnosticLog.cs` with size-capped rotation (active `diagnostic.log` plus rotated `diagnostic.log.1` at 1 MB), `ReadAll` / `ClearAll` helpers, and deeper exception walking (up to 5 nested `InnerException` levels).
+- Added Android `FileProvider` plumbing: a `<provider>` entry in `AndroidManifest.xml` with authority `io.invisiblegorilla.xray.fileprovider` plus `Resources/xml/file_paths.xml` exposing the relevant files/cache paths.
+- New `Services/AndroidLogShareService.cs` provides three first-class actions: `ShareDiagnosticLogAsync` (bundles current + rotated logs + device/system info into the cache and launches `Intent.ActionSend` via the FileProvider), `SaveDiagnosticLogAsync` (writes to `MediaStore.Downloads/InvisibleGorillaXRay/` on Android Q+ or app-private external files as fallback), and `ClearDiagnosticLog`.
+- Updated Android `Views/MainView.axaml(.cs)` with a dedicated `Logs and diagnostics` panel in Settings: description, live status (size/path), and `Share log` / `Save log to device` / `Clear log` buttons. `RefreshLogsStatus` plus `FormatLogSize` keep the status text human-readable.
+- Added matching `Lang.Android.Logs.*` keys to `InvisibleGorilla-XRay.Mac/Assets/Localization/{ru-RU,en-US}.axaml` (description, status, share/save/clear, in-progress + success/failure messages).
+- Installed global Android exception handlers in `MainActivity.cs`: `AppDomain.CurrentDomain.UnhandledException`, `TaskScheduler.UnobservedTaskException`, and a Java `IUncaughtExceptionHandler` all route into `DiagnosticLog`. `OnCreate`'s `base.OnCreate` is wrapped in try/catch, and a new `internal static MainActivity? CurrentActivity` property lets the log share service grab an `Activity` context.
+- Wrapped `AvaloniaXamlLoader.Load(this)` in `App.axaml.cs` with try/catch + `DiagnosticLog.WriteException` so a XAML init failure no longer manifests as an opaque black screen.
+- Defensive whitelist fix in `Services/AndroidVpnService.cs`: in `ONLY_SELECTED_APPS` mode, if zero packages are selected OR if none of the selected packages can actually be added (own package, missing package, etc.), `ApplyApplicationRules` now throws a user-friendly `InvalidOperationException` instead of letting Android silently fall back to routing everything. `TryAllowUserSelectedApplications` returns the count of accepted packages and logs every skip. `builder.Establish()` is bracketed by diagnostic writes.
+
+## Latest Validation Snapshot
+- `dotnet build` succeeded for `InvisibleGorilla.Core`, `InvisibleGorilla-XRay.Mac`, `InvisibleGorilla-XRay.Linux`, and `InvisibleGorilla-XRay.Android` (only pre-existing warnings remain).
+- The Android publish errors that initially showed up were resolved before re-running: `CS1503` on `FileProvider.GetUriForFile` (now passes `new global::Java.IO.File(snapshot.FullName)`) and `CS0117` on `MediaStore.IDownloadColumns.DisplayName` (now `MediaStore.IMediaColumns.DisplayName`).
+- Fresh signed APKs published to `publish-android/logging-arm64/io.invisiblegorilla.xray-Signed.apk` (~67.6 MB) and `publish-android/logging-x64/io.invisiblegorilla.xray-Signed.apk` (~69.6 MB).
+
+## Next Likely Steps
+- Install the new `logging-arm64` APK on the original Samsung device that hit the black screen, reproduce the whitelist flow, and confirm either (a) the new `InvalidOperationException` surfaces with a readable error and the app keeps running, or (b) the share log feature ships a usable `diagnostic.log` if anything else fails.
+- If a new failure mode appears, ask the user to use the new `Share log` button so the rotated + active log + device info arrive in one shot.
+

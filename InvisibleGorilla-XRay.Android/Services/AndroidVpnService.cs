@@ -180,9 +180,14 @@ namespace InvisibleGorillaXRay.Android.Services
                 TryEnableIpv6(builder);
                 ApplyApplicationRules(builder, appRulesMode, appPackages);
 
+                DiagnosticLog.Write(
+                    "AndroidVpnService",
+                    $"Calling Builder.Establish() (mtu={DefaultMtu}, address={tunAddress}, mode={appRulesMode}, packages={appPackages.Length})...");
                 ParcelFileDescriptor? tunInterface = builder.Establish();
                 if (tunInterface == null)
-                    throw new InvalidOperationException("Android VPN interface could not be established.");
+                    throw new InvalidOperationException("Android VPN interface could not be established (Builder.Establish returned null). "
+                        + "Verify the VPN consent dialog was accepted and that no other always-on VPN is owning the tunnel.");
+                DiagnosticLog.Write("AndroidVpnService", "Builder.Establish() returned a TUN file descriptor");
 
                 int tunFd = tunInterface.DetachFd();
                 tunInterface.Dispose();
@@ -315,8 +320,31 @@ namespace InvisibleGorillaXRay.Android.Services
 
             if (mode == AppRulesMode.ONLY_SELECTED_APPS)
             {
+                if (packageArray.Length == 0)
+                {
+                    // Whitelist with zero entries would silently route ALL apps through the VPN
+                    // because Android falls back to "no allow-list" when no allowed package is
+                    // registered. The user explicitly opted for "only selected apps", so refuse
+                    // to start instead of producing surprising routing.
+                    throw new InvalidOperationException(
+                        "Whitelist mode is enabled but no apps are selected. "
+                        + "Open Settings → App rules → Manage and choose at least one application, "
+                        + "or switch the mode back to \"All apps\".");
+                }
+
                 DiagnosticLog.Write("[AppRules] → TryAllowUserSelectedApplications (AddAllowedApplication)");
-                TryAllowUserSelectedApplications(builder, packageArray);
+                int allowed = TryAllowUserSelectedApplications(builder, packageArray);
+
+                if (allowed == 0)
+                {
+                    // Every requested package failed to register (e.g. all of them were uninstalled
+                    // after the template was saved). Without at least one allowed app the VPN would
+                    // route everything; fail closed with a clear message instead.
+                    throw new InvalidOperationException(
+                        "Whitelist mode is enabled but none of the selected apps are installed on this device. "
+                        + "Open Settings → App rules → Manage and re-pick the applications you want to route through the VPN.");
+                }
+
                 return;
             }
 
@@ -364,15 +392,22 @@ namespace InvisibleGorillaXRay.Android.Services
             DiagnosticLog.Write($"[AppRules] Total disallowed: {added}");
         }
 
-        private void TryAllowUserSelectedApplications(Builder builder, IEnumerable<string> packages)
+        private int TryAllowUserSelectedApplications(Builder builder, IEnumerable<string> packages)
         {
             int added = 0;
+            int skippedSelf = 0;
+            int skippedMissing = 0;
+
             foreach (string packageName in packages)
             {
                 try
                 {
                     if (string.Equals(packageName, PackageName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        skippedSelf++;
+                        DiagnosticLog.Write($"[AppRules] Skipped own package in whitelist: {packageName}");
                         continue;
+                    }
 
                     builder.AddAllowedApplication(packageName);
                     added++;
@@ -380,15 +415,18 @@ namespace InvisibleGorillaXRay.Android.Services
                 }
                 catch (PackageManager.NameNotFoundException ex)
                 {
+                    skippedMissing++;
                     DiagnosticLog.WriteException($"AndroidVpnService.AddAllowedApplication.{packageName}", ex);
                 }
                 catch (Exception ex)
                 {
+                    skippedMissing++;
                     DiagnosticLog.WriteException($"AndroidVpnService.AddAllowedApplication.{packageName}", ex);
                 }
             }
 
-            DiagnosticLog.Write($"[AppRules] Total allowed: {added}");
+            DiagnosticLog.Write($"[AppRules] Total allowed: {added}, skippedSelf={skippedSelf}, skippedMissing={skippedMissing}");
+            return added;
         }
 
         private void TryEnableIpv6(Builder builder)

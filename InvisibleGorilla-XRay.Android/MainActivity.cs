@@ -6,6 +6,7 @@ using Android.OS;
 using Android.Views;
 using Avalonia;
 using Avalonia.Android;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace InvisibleGorillaXRay.Android
@@ -57,13 +58,100 @@ namespace InvisibleGorillaXRay.Android
         private static readonly object ActivitySync = new();
         private static MainActivity? currentActivity;
         private static TaskCompletionSource<bool>? vpnPermissionRequest;
+        private static int globalHandlersRegistered;
 
         protected override void OnCreate(Bundle? savedInstanceState)
         {
-            base.OnCreate(savedInstanceState);
-            SetCurrentActivity(this);
-            RequestNotificationPermissionIfNeeded();
-            DispatchIncomingIntent(Intent);
+            RegisterGlobalExceptionHandlersOnce();
+
+            try
+            {
+                base.OnCreate(savedInstanceState);
+                SetCurrentActivity(this);
+                RequestNotificationPermissionIfNeeded();
+                DispatchIncomingIntent(Intent);
+                DiagnosticLog.Write("MainActivity", $"OnCreate completed, intent={Intent?.Action ?? "<null>"}");
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainActivity.OnCreate", ex);
+                throw;
+            }
+        }
+
+        private static void RegisterGlobalExceptionHandlersOnce()
+        {
+            if (Interlocked.Exchange(ref globalHandlersRegistered, 1) == 1)
+                return;
+
+            AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+            {
+                try
+                {
+                    Exception? ex = args.ExceptionObject as Exception;
+                    if (ex != null)
+                        DiagnosticLog.WriteException("AppDomain.UnhandledException", ex);
+                    else
+                        DiagnosticLog.Write("AppDomain.UnhandledException", $"Unknown error: {args.ExceptionObject}");
+                }
+                catch
+                {
+                    // Crash handler must never throw.
+                }
+            };
+
+            TaskScheduler.UnobservedTaskException += (_, args) =>
+            {
+                try
+                {
+                    DiagnosticLog.WriteException("TaskScheduler.UnobservedTaskException", args.Exception);
+                    args.SetObserved();
+                }
+                catch
+                {
+                    // Crash handler must never throw.
+                }
+            };
+
+            try
+            {
+                global::Java.Lang.Thread.DefaultUncaughtExceptionHandler = new JavaUncaughtExceptionHandler();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainActivity.RegisterJavaUncaughtHandler", ex);
+            }
+
+            DiagnosticLog.Write("MainActivity", "Global exception handlers installed");
+        }
+
+        private sealed class JavaUncaughtExceptionHandler : global::Java.Lang.Object, global::Java.Lang.Thread.IUncaughtExceptionHandler
+        {
+            private readonly global::Java.Lang.Thread.IUncaughtExceptionHandler? previous;
+
+            public JavaUncaughtExceptionHandler()
+            {
+                previous = global::Java.Lang.Thread.DefaultUncaughtExceptionHandler;
+            }
+
+            public void UncaughtException(global::Java.Lang.Thread? t, global::Java.Lang.Throwable? e)
+            {
+                try
+                {
+                    string threadName = t?.Name ?? "<unknown>";
+                    string typeName = e?.GetType().FullName ?? "<unknown>";
+                    string message = e?.Message ?? string.Empty;
+                    DiagnosticLog.Write("Java.UncaughtException", $"thread={threadName}, type={typeName}, message={message}");
+                    if (e != null)
+                        DiagnosticLog.Write("Java.UncaughtException", $"stack={e.ToString()}");
+                }
+                catch
+                {
+                    // Crash handler must never throw.
+                }
+
+                previous?.UncaughtException(t, e);
+            }
         }
 
         protected override void OnNewIntent(Intent? intent)
@@ -214,6 +302,8 @@ namespace InvisibleGorillaXRay.Android
                 return currentActivity;
             }
         }
+
+        internal static MainActivity? CurrentActivity => GetCurrentActivity();
 
         private static void SetCurrentActivity(MainActivity activity)
         {

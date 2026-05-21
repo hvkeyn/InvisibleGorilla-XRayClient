@@ -17,7 +17,16 @@ namespace InvisibleGorillaXRay.Android
 
         public override void Initialize()
         {
-            AvaloniaXamlLoader.Load(this);
+            try
+            {
+                AvaloniaXamlLoader.Load(this);
+                InvisibleGorillaXRay.Core.DiagnosticLog.Write("AndroidApp", "App.Initialize: AvaloniaXamlLoader.Load completed");
+            }
+            catch (Exception ex)
+            {
+                InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("AndroidApp.Initialize", ex);
+                throw;
+            }
         }
 
         public override void OnFrameworkInitializationCompleted()
