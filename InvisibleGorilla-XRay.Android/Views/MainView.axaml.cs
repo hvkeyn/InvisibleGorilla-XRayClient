@@ -231,6 +231,14 @@ namespace InvisibleGorillaXRay.Android.Views
         private TextBlock TunTitleText => GetRequiredControl<TextBlock>("TunTitleTextBlock");
         private TextBlock TunDescriptionText => GetRequiredControl<TextBlock>("TunDescriptionTextBlock");
         private TextBlock LogsAndDiagnosticsTitleText => GetRequiredControl<TextBlock>("LogsAndDiagnosticsTitleTextBlock");
+        private TextBlock LogsDescriptionText => GetRequiredControl<TextBlock>("LogsDescriptionTextBlock");
+        private TextBlock LogsStatusText => GetRequiredControl<TextBlock>("LogsStatusTextBlock");
+        private Button ShareLogActionButton => GetRequiredControl<Button>("ShareLogButton");
+        private TextBlock ShareLogButtonText => GetRequiredControl<TextBlock>("ShareLogButtonTextBlock");
+        private Button SaveLogActionButton => GetRequiredControl<Button>("SaveLogButton");
+        private TextBlock SaveLogButtonText => GetRequiredControl<TextBlock>("SaveLogButtonTextBlock");
+        private Button ClearLogActionButton => GetRequiredControl<Button>("ClearLogButton");
+        private TextBlock ClearLogButtonText => GetRequiredControl<TextBlock>("ClearLogButtonTextBlock");
         private ComboBox ProtocolSelector => GetRequiredControl<ComboBox>("ProtocolComboBox");
         private TextBox ProxyPortInput => GetRequiredControl<TextBox>("ProxyPortTextBox");
         private TextBox DnsInput => GetRequiredControl<TextBox>("DnsTextBox");
@@ -400,6 +408,11 @@ namespace InvisibleGorillaXRay.Android.Views
             TunTitleText.Text = Localize("Lang.Window.Settings.TUN");
             TunDescriptionText.Text = Localize("Lang.Android.Settings.TunDescription");
             LogsAndDiagnosticsTitleText.Text = Localize("Lang.Android.Settings.LogsAndDiagnostics");
+            LogsDescriptionText.Text = Localize("Lang.Android.Logs.Description");
+            ShareLogButtonText.Text = Localize("Lang.Android.Logs.Share");
+            SaveLogButtonText.Text = Localize("Lang.Android.Logs.Save");
+            ClearLogButtonText.Text = Localize("Lang.Android.Logs.Clear");
+            RefreshLogsStatus();
             SaveSettingsActionButton.Content = Localize("Lang.Window.Settings.Confirm");
 
             SetAdvancedImportVisible(isShowingAdvancedImport);
@@ -2145,6 +2158,119 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             ReloadDiscoveredAndroidApps();
             SetStatus(Localize("Lang.AppRules.AppsRefreshed"));
+        }
+
+        private async void OnShareLogClick(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                ShareLogActionButton.IsEnabled = false;
+                SetStatus(Localize("Lang.Android.Logs.Preparing"));
+
+                global::Android.App.Activity? activity = global::Android.App.Application.Context as global::Android.App.Activity
+                    ?? global::InvisibleGorillaXRay.Android.MainActivity.CurrentActivity;
+                if (activity == null)
+                {
+                    SetStatus(Localize("Lang.Android.Logs.ShareFailed"));
+                    return;
+                }
+
+                bool ok = await AndroidLogShareService.ShareDiagnosticLogAsync(
+                    activity,
+                    Localize("Lang.Android.Logs.ShareChooserTitle"));
+
+                SetStatus(Localize(ok ? "Lang.Android.Logs.ShareLaunched" : "Lang.Android.Logs.ShareFailed"));
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.ShareLog", ex);
+                SetStatus(Localize("Lang.Android.Logs.ShareFailed"));
+            }
+            finally
+            {
+                ShareLogActionButton.IsEnabled = true;
+                RefreshLogsStatus();
+            }
+        }
+
+        private async void OnSaveLogClick(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                SaveLogActionButton.IsEnabled = false;
+                SetStatus(Localize("Lang.Android.Logs.Saving"));
+
+                global::Android.Content.Context? context = global::Android.App.Application.Context;
+                if (context == null)
+                {
+                    SetStatus(Localize("Lang.Android.Logs.SaveFailed"));
+                    return;
+                }
+
+                AndroidLogShareService.SaveResult result = await AndroidLogShareService.SaveDiagnosticLogAsync(context);
+                if (result.Succeeded)
+                {
+                    string template = Localize("Lang.Android.Logs.SavedTo");
+                    SetStatus(string.Format(template, result.Path ?? string.Empty));
+                }
+                else
+                {
+                    string template = Localize("Lang.Android.Logs.SaveFailedWithReason");
+                    SetStatus(string.Format(template, result.ErrorMessage ?? string.Empty));
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.SaveLog", ex);
+                SetStatus(Localize("Lang.Android.Logs.SaveFailed"));
+            }
+            finally
+            {
+                SaveLogActionButton.IsEnabled = true;
+                RefreshLogsStatus();
+            }
+        }
+
+        private void OnClearLogClick(object? sender, RoutedEventArgs e)
+        {
+            try
+            {
+                bool cleared = AndroidLogShareService.ClearDiagnosticLog();
+                SetStatus(Localize(cleared ? "Lang.Android.Logs.Cleared" : "Lang.Android.Logs.ClearFailed"));
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.ClearLog", ex);
+                SetStatus(Localize("Lang.Android.Logs.ClearFailed"));
+            }
+            finally
+            {
+                RefreshLogsStatus();
+            }
+        }
+
+        private void RefreshLogsStatus()
+        {
+            try
+            {
+                long bytes = AndroidLogShareService.GetDiagnosticLogSizeBytes();
+                string path = AndroidLogShareService.GetDiagnosticLogPath();
+                string template = Localize("Lang.Android.Logs.Status");
+                LogsStatusText.Text = string.Format(template, FormatLogSize(bytes), path);
+            }
+            catch
+            {
+                LogsStatusText.Text = string.Empty;
+            }
+        }
+
+        private static string FormatLogSize(long bytes)
+        {
+            if (bytes < 1024)
+                return $"{bytes} B";
+            if (bytes < 1024 * 1024)
+                return $"{bytes / 1024.0:F1} KB";
+            return $"{bytes / (1024.0 * 1024.0):F2} MB";
         }
 
         private void OnHomeSectionClick(object? sender, RoutedEventArgs e)
