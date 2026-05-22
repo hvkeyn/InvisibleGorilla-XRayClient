@@ -141,7 +141,7 @@
     <x:String x:Key="Lang.Android.Home.Subtitle.Starting">Starting the Android VpnService tunnel and local Xray bridge.</x:String>
     <x:String x:Key="Lang.Android.Home.Subtitle.Running">Device-wide VPN routing is active. Browser and app traffic should now use the selected config.</x:String>
     <x:String x:Key="Lang.Android.Home.ProxyAvailability">Android now uses a VpnService tunnel with a local mobile bridge instead of the old proxy-only listener path.</x:String>
-    <x:String x:Key="Lang.Android.Home.UpdateAvailable">Update available on GitHub Releases.</x:String>
+    <x:String x:Key="Lang.Android.Home.UpdateAvailable">Update available: v{0}. Open Settings → Updates to install it.</x:String>
 
     <x:String x:Key="Lang.Android.Server.Description">Choose the active configuration, import links, and manage subscriptions separately from the main connection screen.</x:String>
     <x:String x:Key="Lang.Android.Server.HeaderTitle">SERVER CONFIG</x:String>
@@ -188,6 +188,22 @@
     <x:String x:Key="Lang.Android.Logs.SaveFailedWithReason">Failed to save the log: {0}</x:String>
     <x:String x:Key="Lang.Android.Logs.Cleared">Log cleared.</x:String>
     <x:String x:Key="Lang.Android.Logs.ClearFailed">Failed to clear the log.</x:String>
+    <x:String x:Key="Lang.Android.Updates.Title">Updates</x:String>
+    <x:String x:Key="Lang.Android.Updates.CurrentVersion">Installed version: {0}</x:String>
+    <x:String x:Key="Lang.Android.Updates.Check">Check for updates</x:String>
+    <x:String x:Key="Lang.Android.Updates.Install">Download and install</x:String>
+    <x:String x:Key="Lang.Android.Updates.OpenRelease">Open release page</x:String>
+    <x:String x:Key="Lang.Android.Updates.Checking">Checking GitHub for a newer release...</x:String>
+    <x:String x:Key="Lang.Android.Updates.CheckFailed">Could not reach GitHub. Try again later.</x:String>
+    <x:String x:Key="Lang.Android.Updates.UpToDate">You are on the latest version ({0}).</x:String>
+    <x:String x:Key="Lang.Android.Updates.Available">Update available: {0} ({1}). Tap Download and install.</x:String>
+    <x:String x:Key="Lang.Android.Updates.NoApkAsset">A newer release was published, but no APK asset is attached to it. Open the release page to download manually.</x:String>
+    <x:String x:Key="Lang.Android.Updates.Downloading">Downloading new APK...</x:String>
+    <x:String x:Key="Lang.Android.Updates.DownloadProgress">Downloading new APK... {0}%</x:String>
+    <x:String x:Key="Lang.Android.Updates.DownloadFailed">Download failed. Check connectivity and try again.</x:String>
+    <x:String x:Key="Lang.Android.Updates.LaunchingInstaller">Opening the system installer...</x:String>
+    <x:String x:Key="Lang.Android.Updates.InstallerLaunched">Installer opened. Confirm the install in the system dialog.</x:String>
+    <x:String x:Key="Lang.Android.Updates.InstallFailed">Could not open the installer. Enable "Install unknown apps" for this app in system settings.</x:String>
     <x:String x:Key="Lang.AppRules.Title">App rules</x:String>
     <x:String x:Key="Lang.AppRules.Description.Android">Create templates to route all apps, bypass selected apps, or allow only selected apps through the Android VPN.</x:String>
     <x:String x:Key="Lang.AppRules.Description.Desktop">Create templates to route all apps, bypass selected desktop apps, or allow only selected apps through XRay.</x:String>

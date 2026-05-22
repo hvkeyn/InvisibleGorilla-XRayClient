@@ -1140,6 +1140,67 @@
 
                 <Border Padding="14"
                         CornerRadius="12"
+                        BorderBrush="{StaticResource SurfaceBright}"
+                        BorderThickness="1"
+                        Background="{StaticResource SurfaceLight}">
+                    <StackPanel Spacing="10">
+                        <TextBlock x:Name="UpdatesSectionTitleTextBlock"
+                                   Text="Updates"
+                                   FontSize="18"
+                                   FontWeight="SemiBold" />
+                        <TextBlock x:Name="UpdatesCurrentVersionTextBlock"
+                                   Text=""
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextMuted}"
+                                   FontSize="12" />
+                        <TextBlock x:Name="UpdatesStatusTextBlock"
+                                   Text=""
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextMuted}"
+                                   FontSize="11" />
+                        <ProgressBar x:Name="UpdatesProgressBar"
+                                     Minimum="0"
+                                     Maximum="100"
+                                     Value="0"
+                                     Height="6"
+                                     IsVisible="False" />
+                        <Button x:Name="CheckForUpdateButton"
+                                Height="40"
+                                Theme="{StaticResource GreenActionButton}"
+                                Foreground="#252526"
+                                FontWeight="SemiBold"
+                                Click="OnCheckForUpdateClick">
+                            <TextBlock x:Name="CheckForUpdateButtonTextBlock"
+                                       Text="Check for update"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" />
+                        </Button>
+                        <Button x:Name="InstallUpdateButton"
+                                Height="40"
+                                Theme="{StaticResource GreenActionButton}"
+                                Foreground="#252526"
+                                FontWeight="SemiBold"
+                                IsVisible="False"
+                                Click="OnInstallUpdateClick">
+                            <TextBlock x:Name="InstallUpdateButtonTextBlock"
+                                       Text="Download and install"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" />
+                        </Button>
+                        <Button x:Name="OpenReleasePageButton"
+                                Height="38"
+                                Theme="{StaticResource GrayActionButton}"
+                                Click="OnOpenReleasesClick">
+                            <TextBlock x:Name="OpenReleasePageButtonTextBlock"
+                                       Text="Open release page"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" />
+                        </Button>
+                    </StackPanel>
+                </Border>
+
+                <Border Padding="14"
+                        CornerRadius="12"
                             BorderBrush="{StaticResource SurfaceBright}"
                         BorderThickness="1"
                             Background="{StaticResource SurfaceLight}">

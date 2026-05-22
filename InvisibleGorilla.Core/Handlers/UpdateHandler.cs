@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Net;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace InvisibleGorillaXRay.Handlers
 {
@@ -12,8 +14,13 @@ namespace InvisibleGorillaXRay.Handlers
     {
         private Func<AppVersion> getApplicationVersion;
         private Func<string, AppVersion> convertToAppVersion;
+        private readonly GitHubReleaseService releaseService = new GitHubReleaseService();
+        private UpdateInfo? lastUpdateInfo;
 
         private LocalizationService LocalizationService => ServiceLocator.Get<LocalizationService>();
+
+        public GitHubReleaseService ReleaseService => releaseService;
+        public UpdateInfo? LastUpdateInfo => lastUpdateInfo;
 
         public void Setup(
             Func<AppVersion> getApplicationVersion,
@@ -31,33 +38,47 @@ namespace InvisibleGorillaXRay.Handlers
             if (latestReleaseVersion == null)
                 return new Status(Code.ERROR, SubCode.CANT_CONNECT, LocalizationService.GetTerm(Localization.CANT_CONNECT_TO_SERVER));
 
-            if (IsUpdateAvailable())
+            if (IsUpdateAvailable(latestReleaseVersion))
                 return new Status(Code.SUCCESS, SubCode.UPDATE_AVAILABLE, LocalizationService.GetTerm(Localization.UPDATE_AVAILABLE));
             
             return new Status(Code.SUCCESS, SubCode.UPDATE_UNAVAILABLE, LocalizationService.GetTerm(Localization.YOU_HAVE_LATEST_VERSION));
+        }
 
-            bool IsUpdateAvailable()
-            {
-                AppVersion latestReleaseAppVersion = convertToAppVersion.Invoke(latestReleaseVersion);
-                AppVersion currentReleaseAppVersion = getApplicationVersion.Invoke();
-                
-                if (latestReleaseAppVersion.Major > currentReleaseAppVersion.Major)
-                    return true;
-                else if (latestReleaseAppVersion.Major < currentReleaseAppVersion.Major)
-                    return false;
-                
-                if (latestReleaseAppVersion.Feature > currentReleaseAppVersion.Feature)
-                    return true;
-                else if (latestReleaseAppVersion.Feature < currentReleaseAppVersion.Feature)
-                    return false;
-                
-                if (latestReleaseAppVersion.BugFix > currentReleaseAppVersion.BugFix)
-                    return true;
-                else if (latestReleaseAppVersion.BugFix < currentReleaseAppVersion.BugFix)
-                    return false;
-                
+        public async Task<UpdateInfo?> CheckForUpdateAsync(CancellationToken token = default)
+        {
+            UpdateInfo? info = await releaseService.GetLatestReleaseAsync(token).ConfigureAwait(false);
+            if (info == null)
+                return null;
+
+            info.IsNewerThanCurrent = IsUpdateAvailable(info.Version);
+            lastUpdateInfo = info;
+            return info;
+        }
+
+        private bool IsUpdateAvailable(string latestReleaseVersion)
+        {
+            if (string.IsNullOrWhiteSpace(latestReleaseVersion))
                 return false;
-            }
+
+            AppVersion latestReleaseAppVersion = convertToAppVersion.Invoke(latestReleaseVersion);
+            AppVersion currentReleaseAppVersion = getApplicationVersion.Invoke();
+
+            if (latestReleaseAppVersion.Major > currentReleaseAppVersion.Major)
+                return true;
+            else if (latestReleaseAppVersion.Major < currentReleaseAppVersion.Major)
+                return false;
+
+            if (latestReleaseAppVersion.Feature > currentReleaseAppVersion.Feature)
+                return true;
+            else if (latestReleaseAppVersion.Feature < currentReleaseAppVersion.Feature)
+                return false;
+
+            if (latestReleaseAppVersion.BugFix > currentReleaseAppVersion.BugFix)
+                return true;
+            else if (latestReleaseAppVersion.BugFix < currentReleaseAppVersion.BugFix)
+                return false;
+
+            return false;
         }
 
         private string GetLatestReleaseUrl()

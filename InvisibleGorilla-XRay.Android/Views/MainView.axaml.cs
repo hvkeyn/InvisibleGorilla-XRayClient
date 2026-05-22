@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Android.App;
 using Android.Content;
@@ -87,11 +88,17 @@ namespace InvisibleGorillaXRay.Android.Views
         private bool isSettingsSectionInitialized;
         private bool suppressSubscriptionSelectionChanged;
         private bool updateAvailable;
+        private string latestRemoteVersion = string.Empty;
         private string? broadcastMessage;
         private Config? pendingConfigShare;
         private ServersViewMode currentServersViewMode;
         private ConfigImportMode currentConfigImportMode;
         private IStorageFile? pendingConfigImportFile;
+        private bool isCheckingForUpdate;
+        private bool isDownloadingUpdate;
+        private UpdateInfo? pendingUpdateInfo;
+        private ReleaseAsset? pendingUpdateAsset;
+        private string? pendingUpdateLocalApkPath;
 
         public MainView()
         {
@@ -239,6 +246,16 @@ namespace InvisibleGorillaXRay.Android.Views
         private TextBlock SaveLogButtonText => GetRequiredControl<TextBlock>("SaveLogButtonTextBlock");
         private Button ClearLogActionButton => GetRequiredControl<Button>("ClearLogButton");
         private TextBlock ClearLogButtonText => GetRequiredControl<TextBlock>("ClearLogButtonTextBlock");
+        private TextBlock UpdatesSectionTitleText => GetRequiredControl<TextBlock>("UpdatesSectionTitleTextBlock");
+        private TextBlock UpdatesCurrentVersionText => GetRequiredControl<TextBlock>("UpdatesCurrentVersionTextBlock");
+        private TextBlock UpdatesStatusText => GetRequiredControl<TextBlock>("UpdatesStatusTextBlock");
+        private global::Avalonia.Controls.ProgressBar UpdatesProgressIndicator => GetRequiredControl<global::Avalonia.Controls.ProgressBar>("UpdatesProgressBar");
+        private Button CheckForUpdateActionButton => GetRequiredControl<Button>("CheckForUpdateButton");
+        private TextBlock CheckForUpdateActionButtonText => GetRequiredControl<TextBlock>("CheckForUpdateButtonTextBlock");
+        private Button InstallUpdateActionButton => GetRequiredControl<Button>("InstallUpdateButton");
+        private TextBlock InstallUpdateActionButtonText => GetRequiredControl<TextBlock>("InstallUpdateButtonTextBlock");
+        private Button OpenReleasePageActionButton => GetRequiredControl<Button>("OpenReleasePageButton");
+        private TextBlock OpenReleasePageActionButtonText => GetRequiredControl<TextBlock>("OpenReleasePageButtonTextBlock");
         private ComboBox ProtocolSelector => GetRequiredControl<ComboBox>("ProtocolComboBox");
         private TextBox ProxyPortInput => GetRequiredControl<TextBox>("ProxyPortTextBox");
         private TextBox DnsInput => GetRequiredControl<TextBox>("DnsTextBox");
@@ -413,6 +430,11 @@ namespace InvisibleGorillaXRay.Android.Views
             SaveLogButtonText.Text = Localize("Lang.Android.Logs.Save");
             ClearLogButtonText.Text = Localize("Lang.Android.Logs.Clear");
             RefreshLogsStatus();
+            UpdatesSectionTitleText.Text = Localize("Lang.Android.Updates.Title");
+            CheckForUpdateActionButtonText.Text = Localize("Lang.Android.Updates.Check");
+            InstallUpdateActionButtonText.Text = Localize("Lang.Android.Updates.Install");
+            OpenReleasePageActionButtonText.Text = Localize("Lang.Android.Updates.OpenRelease");
+            RefreshUpdatesStatus();
             SaveSettingsActionButton.Content = Localize("Lang.Window.Settings.Confirm");
 
             SetAdvancedImportVisible(isShowingAdvancedImport);
@@ -1591,32 +1613,32 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private async Task LoadRemoteInfoAsync()
         {
-            await Task.Run(() =>
+            try
             {
-                try
+                UpdateInfo? info = await AndroidUpdateService.CheckForUpdateAsync().ConfigureAwait(false);
+                Status broadcastStatus = await Task.Run(() => broadcastHandler.CheckForBroadcast()).ConfigureAwait(false);
+
+                updateAvailable = info != null && info.IsNewerThanCurrent;
+                latestRemoteVersion = info?.Version ?? string.Empty;
+
+                if (broadcastStatus.Code == Code.SUCCESS && broadcastStatus.Content is Broadcast broadcast)
+                    broadcastMessage = broadcast.Text;
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    Status updateStatus = updateHandler.CheckForUpdate();
-                    Status broadcastStatus = broadcastHandler.CheckForBroadcast();
-
-                    updateAvailable = updateStatus.SubCode == SubCode.UPDATE_AVAILABLE;
-
-                    if (broadcastStatus.Code == Code.SUCCESS && broadcastStatus.Content is Broadcast broadcast)
-                        broadcastMessage = broadcast.Text;
-
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        UpdateRuntimeSummary();
-                        UpdateNotificationIndicator.IsVisible = updateAvailable;
-                        string statusMessage = updateAvailable || !string.IsNullOrWhiteSpace(broadcastMessage)
-                            ? BuildAvailabilityMessage()
-                            : string.Empty;
-                        SetAvailabilityInfo(statusMessage);
-                    });
-                }
-                catch
-                {
-                }
-            });
+                    UpdateRuntimeSummary();
+                    UpdateNotificationIndicator.IsVisible = updateAvailable;
+                    string statusMessage = updateAvailable || !string.IsNullOrWhiteSpace(broadcastMessage)
+                        ? BuildAvailabilityMessage()
+                        : string.Empty;
+                    SetAvailabilityInfo(statusMessage);
+                    SyncUpdatesPanelFromRemoteInfo(info);
+                });
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.LoadRemoteInfoAsync", ex);
+            }
         }
 
         private bool TrySaveSettings(bool showSuccessMessage)
@@ -1802,7 +1824,13 @@ namespace InvisibleGorillaXRay.Android.Views
             string message = Localize("Lang.Android.Home.ProxyAvailability");
 
             if (updateAvailable)
-                return $"{Localize("Lang.Android.Home.UpdateAvailable")} {message}";
+            {
+                string template = Localize("Lang.Android.Home.UpdateAvailable");
+                string updateLine = string.IsNullOrWhiteSpace(latestRemoteVersion)
+                    ? template
+                    : string.Format(template, latestRemoteVersion);
+                return $"{updateLine} {message}";
+            }
 
             return message;
         }
@@ -2271,6 +2299,189 @@ namespace InvisibleGorillaXRay.Android.Views
             if (bytes < 1024 * 1024)
                 return $"{bytes / 1024.0:F1} KB";
             return $"{bytes / (1024.0 * 1024.0):F2} MB";
+        }
+
+        private void RefreshUpdatesStatus()
+        {
+            try
+            {
+                string installed = AndroidUpdateService.GetInstalledVersion();
+                UpdatesCurrentVersionText.Text = string.Format(
+                    Localize("Lang.Android.Updates.CurrentVersion"),
+                    string.IsNullOrEmpty(installed) ? "?" : installed);
+            }
+            catch
+            {
+                UpdatesCurrentVersionText.Text = string.Empty;
+            }
+        }
+
+        private void SyncUpdatesPanelFromRemoteInfo(UpdateInfo? info)
+        {
+            if (isCheckingForUpdate || isDownloadingUpdate)
+                return;
+
+            try
+            {
+                if (info == null)
+                    return;
+
+                if (info.IsNewerThanCurrent)
+                {
+                    ReleaseAsset? asset = AndroidUpdateService.PickApkAssetForCurrentDevice(info);
+                    if (asset == null)
+                    {
+                        UpdatesStatusText.Text = Localize("Lang.Android.Updates.NoApkAsset");
+                        InstallUpdateActionButton.IsVisible = false;
+                        pendingUpdateInfo = null;
+                        pendingUpdateAsset = null;
+                        return;
+                    }
+
+                    pendingUpdateInfo = info;
+                    pendingUpdateAsset = asset;
+                    UpdatesStatusText.Text = string.Format(
+                        Localize("Lang.Android.Updates.Available"),
+                        info.Version,
+                        asset.Name);
+                    InstallUpdateActionButton.IsVisible = true;
+                }
+                else
+                {
+                    pendingUpdateInfo = null;
+                    pendingUpdateAsset = null;
+                    InstallUpdateActionButton.IsVisible = false;
+                    UpdatesStatusText.Text = string.Format(
+                        Localize("Lang.Android.Updates.UpToDate"),
+                        info.Version);
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.SyncUpdatesPanelFromRemoteInfo", ex);
+            }
+        }
+
+        private async void OnCheckForUpdateClick(object? sender, RoutedEventArgs e)
+        {
+            if (isCheckingForUpdate || isDownloadingUpdate)
+                return;
+
+            try
+            {
+                isCheckingForUpdate = true;
+                CheckForUpdateActionButton.IsEnabled = false;
+                UpdatesStatusText.Text = Localize("Lang.Android.Updates.Checking");
+                InstallUpdateActionButton.IsVisible = false;
+                pendingUpdateInfo = null;
+                pendingUpdateAsset = null;
+                pendingUpdateLocalApkPath = null;
+
+                UpdateInfo? info = await AndroidUpdateService.CheckForUpdateAsync().ConfigureAwait(true);
+
+                if (info == null)
+                {
+                    UpdatesStatusText.Text = Localize("Lang.Android.Updates.CheckFailed");
+                    return;
+                }
+
+                if (!info.IsNewerThanCurrent)
+                {
+                    UpdatesStatusText.Text = string.Format(
+                        Localize("Lang.Android.Updates.UpToDate"),
+                        info.Version);
+                    return;
+                }
+
+                ReleaseAsset? asset = AndroidUpdateService.PickApkAssetForCurrentDevice(info);
+                if (asset == null)
+                {
+                    UpdatesStatusText.Text = Localize("Lang.Android.Updates.NoApkAsset");
+                    return;
+                }
+
+                pendingUpdateInfo = info;
+                pendingUpdateAsset = asset;
+                UpdatesStatusText.Text = string.Format(
+                    Localize("Lang.Android.Updates.Available"),
+                    info.Version,
+                    asset.Name);
+                InstallUpdateActionButton.IsVisible = true;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.OnCheckForUpdateClick", ex);
+                UpdatesStatusText.Text = Localize("Lang.Android.Updates.CheckFailed");
+            }
+            finally
+            {
+                isCheckingForUpdate = false;
+                CheckForUpdateActionButton.IsEnabled = true;
+            }
+        }
+
+        private async void OnInstallUpdateClick(object? sender, RoutedEventArgs e)
+        {
+            if (isDownloadingUpdate || pendingUpdateAsset == null)
+                return;
+
+            global::Android.App.Activity? activity = global::InvisibleGorillaXRay.Android.MainActivity.CurrentActivity;
+            if (activity == null)
+            {
+                UpdatesStatusText.Text = Localize("Lang.Android.Updates.InstallFailed");
+                return;
+            }
+
+            try
+            {
+                isDownloadingUpdate = true;
+                InstallUpdateActionButton.IsEnabled = false;
+                CheckForUpdateActionButton.IsEnabled = false;
+                UpdatesProgressIndicator.Value = 0;
+                UpdatesProgressIndicator.IsVisible = true;
+                UpdatesStatusText.Text = Localize("Lang.Android.Updates.Downloading");
+
+                Progress<double> progress = new Progress<double>(ratio =>
+                {
+                    double percent = Math.Clamp(ratio * 100.0, 0.0, 100.0);
+                    UpdatesProgressIndicator.Value = percent;
+                    UpdatesStatusText.Text = string.Format(
+                        Localize("Lang.Android.Updates.DownloadProgress"),
+                        percent.ToString("F0"));
+                });
+
+                string? localPath = await AndroidUpdateService.DownloadApkAsync(
+                    activity,
+                    pendingUpdateAsset!,
+                    progress,
+                    CancellationToken.None).ConfigureAwait(true);
+
+                if (string.IsNullOrEmpty(localPath))
+                {
+                    UpdatesStatusText.Text = Localize("Lang.Android.Updates.DownloadFailed");
+                    return;
+                }
+
+                pendingUpdateLocalApkPath = localPath;
+                UpdatesStatusText.Text = Localize("Lang.Android.Updates.LaunchingInstaller");
+
+                bool launched = AndroidUpdateService.LaunchPackageInstaller(activity, localPath);
+                UpdatesStatusText.Text = launched
+                    ? Localize("Lang.Android.Updates.InstallerLaunched")
+                    : Localize("Lang.Android.Updates.InstallFailed");
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.OnInstallUpdateClick", ex);
+                UpdatesStatusText.Text = Localize("Lang.Android.Updates.InstallFailed");
+            }
+            finally
+            {
+                isDownloadingUpdate = false;
+                InstallUpdateActionButton.IsEnabled = true;
+                CheckForUpdateActionButton.IsEnabled = true;
+                UpdatesProgressIndicator.IsVisible = false;
+            }
         }
 
         private void OnHomeSectionClick(object? sender, RoutedEventArgs e)
