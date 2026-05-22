@@ -118,12 +118,11 @@ namespace InvisibleGorillaXRay.Factories
         public UpdateWindow CreateUpdateWindow()
         {
             UpdateHandler updateHandler = handlersManager.GetHandler<UpdateHandler>();
-            LinkHandler linkHandler = handlersManager.GetHandler<LinkHandler>();
 
             UpdateWindow updateWindow = new UpdateWindow();
             updateWindow.Setup(
                 checkForUpdate: updateHandler.CheckForUpdate,
-                onUpdateClick: linkHandler.OpenLatestReleaseLink
+                onUpdateClick: () => Services.WindowsAutoUpdateService.StartAutoUpdateFlow(updateWindow, updateHandler)
             );
 
             SetupLocalizedWindowTitle(

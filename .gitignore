@@ -21,6 +21,7 @@
 /publish-android
 /publish-linux
 /publish-macos
+/publish-windows
 /dist
 /dist-linux
 /dist-macos
