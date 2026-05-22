@@ -88,6 +88,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private bool isSettingsSectionInitialized;
         private bool suppressSubscriptionSelectionChanged;
         private bool updateAvailable;
+        private string latestRemoteVersion = string.Empty;
         private string? broadcastMessage;
         private Config? pendingConfigShare;
         private ServersViewMode currentServersViewMode;
@@ -1612,32 +1613,32 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private async Task LoadRemoteInfoAsync()
         {
-            await Task.Run(() =>
+            try
             {
-                try
+                UpdateInfo? info = await AndroidUpdateService.CheckForUpdateAsync().ConfigureAwait(false);
+                Status broadcastStatus = await Task.Run(() => broadcastHandler.CheckForBroadcast()).ConfigureAwait(false);
+
+                updateAvailable = info != null && info.IsNewerThanCurrent;
+                latestRemoteVersion = info?.Version ?? string.Empty;
+
+                if (broadcastStatus.Code == Code.SUCCESS && broadcastStatus.Content is Broadcast broadcast)
+                    broadcastMessage = broadcast.Text;
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
                 {
-                    Status updateStatus = updateHandler.CheckForUpdate();
-                    Status broadcastStatus = broadcastHandler.CheckForBroadcast();
-
-                    updateAvailable = updateStatus.SubCode == SubCode.UPDATE_AVAILABLE;
-
-                    if (broadcastStatus.Code == Code.SUCCESS && broadcastStatus.Content is Broadcast broadcast)
-                        broadcastMessage = broadcast.Text;
-
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        UpdateRuntimeSummary();
-                        UpdateNotificationIndicator.IsVisible = updateAvailable;
-                        string statusMessage = updateAvailable || !string.IsNullOrWhiteSpace(broadcastMessage)
-                            ? BuildAvailabilityMessage()
-                            : string.Empty;
-                        SetAvailabilityInfo(statusMessage);
-                    });
-                }
-                catch
-                {
-                }
-            });
+                    UpdateRuntimeSummary();
+                    UpdateNotificationIndicator.IsVisible = updateAvailable;
+                    string statusMessage = updateAvailable || !string.IsNullOrWhiteSpace(broadcastMessage)
+                        ? BuildAvailabilityMessage()
+                        : string.Empty;
+                    SetAvailabilityInfo(statusMessage);
+                    SyncUpdatesPanelFromRemoteInfo(info);
+                });
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.LoadRemoteInfoAsync", ex);
+            }
         }
 
         private bool TrySaveSettings(bool showSuccessMessage)
@@ -1823,7 +1824,13 @@ namespace InvisibleGorillaXRay.Android.Views
             string message = Localize("Lang.Android.Home.ProxyAvailability");
 
             if (updateAvailable)
-                return $"{Localize("Lang.Android.Home.UpdateAvailable")} {message}";
+            {
+                string template = Localize("Lang.Android.Home.UpdateAvailable");
+                string updateLine = string.IsNullOrWhiteSpace(latestRemoteVersion)
+                    ? template
+                    : string.Format(template, latestRemoteVersion);
+                return $"{updateLine} {message}";
+            }
 
             return message;
         }
@@ -2306,6 +2313,52 @@ namespace InvisibleGorillaXRay.Android.Views
             catch
             {
                 UpdatesCurrentVersionText.Text = string.Empty;
+            }
+        }
+
+        private void SyncUpdatesPanelFromRemoteInfo(UpdateInfo? info)
+        {
+            if (isCheckingForUpdate || isDownloadingUpdate)
+                return;
+
+            try
+            {
+                if (info == null)
+                    return;
+
+                if (info.IsNewerThanCurrent)
+                {
+                    ReleaseAsset? asset = AndroidUpdateService.PickApkAssetForCurrentDevice(info);
+                    if (asset == null)
+                    {
+                        UpdatesStatusText.Text = Localize("Lang.Android.Updates.NoApkAsset");
+                        InstallUpdateActionButton.IsVisible = false;
+                        pendingUpdateInfo = null;
+                        pendingUpdateAsset = null;
+                        return;
+                    }
+
+                    pendingUpdateInfo = info;
+                    pendingUpdateAsset = asset;
+                    UpdatesStatusText.Text = string.Format(
+                        Localize("Lang.Android.Updates.Available"),
+                        info.Version,
+                        asset.Name);
+                    InstallUpdateActionButton.IsVisible = true;
+                }
+                else
+                {
+                    pendingUpdateInfo = null;
+                    pendingUpdateAsset = null;
+                    InstallUpdateActionButton.IsVisible = false;
+                    UpdatesStatusText.Text = string.Format(
+                        Localize("Lang.Android.Updates.UpToDate"),
+                        info.Version);
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.SyncUpdatesPanelFromRemoteInfo", ex);
             }
         }
 

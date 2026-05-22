@@ -65,7 +65,17 @@ namespace InvisibleGorillaXRay.Android.Managers
             {
                 VersionHandler versionHandler = HandlersManager.GetHandler<VersionHandler>();
                 HandlersManager.GetHandler<UpdateHandler>().Setup(
-                    getApplicationVersion: versionHandler.GetApplicationVersion,
+                    getApplicationVersion: () =>
+                    {
+                        // The assembly version on the Android head defaults to 1.0.0.0 because we
+                        // only ship a display version through ApplicationDisplayVersion. Read the
+                        // real installed PackageInfo.VersionName so the GitHub comparison reflects
+                        // what the user actually has on the device.
+                        string installed = global::InvisibleGorillaXRay.Android.Services.AndroidUpdateService.GetInstalledVersion();
+                        return string.IsNullOrWhiteSpace(installed)
+                            ? versionHandler.GetApplicationVersion()
+                            : versionHandler.ConvertToAppVersion(installed);
+                    },
                     convertToAppVersion: versionHandler.ConvertToAppVersion
                 );
             }

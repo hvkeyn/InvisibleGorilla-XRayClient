@@ -141,7 +141,7 @@
     <x:String x:Key="Lang.Android.Home.Subtitle.Starting">Запускается Android VpnService tunnel и локальный Xray bridge.</x:String>
     <x:String x:Key="Lang.Android.Home.Subtitle.Running">Device-wide VPN routing активен. Трафик браузера и приложений теперь должен идти через выбранную конфигурацию.</x:String>
     <x:String x:Key="Lang.Android.Home.ProxyAvailability">Android теперь использует VpnService tunnel и локальный mobile bridge вместо старого proxy-only listener пути.</x:String>
-    <x:String x:Key="Lang.Android.Home.UpdateAvailable">Доступно обновление на GitHub Releases.</x:String>
+    <x:String x:Key="Lang.Android.Home.UpdateAvailable">Доступно обновление: v{0}. Откройте Настройки → Обновления.</x:String>
 
     <x:String x:Key="Lang.Android.Server.Description">Выберите активную конфигурацию, импортируйте ссылки и управляйте подписками отдельно от главного экрана подключения.</x:String>
     <x:String x:Key="Lang.Android.Server.HeaderTitle">КОНФИГ СЕРВЕРА</x:String>
