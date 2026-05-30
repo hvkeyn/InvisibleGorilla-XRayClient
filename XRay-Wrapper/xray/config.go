@@ -69,7 +69,60 @@ func convertJsonToObject(config *C.char) *core.Config {
 	configObj := &core.Config{}
 
 	json.Unmarshal([]byte(configJson), configObj)
+	stripManagementApps(configObj)
 	return configObj
+}
+
+// managementAppMarkers identifies xray-core "management" application configs
+// that a plain client tunnel never needs: the gRPC commander/API, the stats
+// engine, the local policy module and the observatory.
+//
+// An exposed Xray gRPC API reachable on 127.0.0.1 is an *instant* "VPN
+// detected" verdict for anti-circumvention probes (e.g. RKNHardering's
+// XrayApiScanner issues a real HandlerService.listOutbounds gRPC call against
+// every localhost port). We already replace every inbound at runtime, so the
+// API has no transport to ride on, but dropping the apps themselves guarantees
+// the commander can never be instantiated regardless of where the config came
+// from (subscription, raw import, etc.).
+var managementAppMarkers = []string{
+	".commander.",
+	".stats.",
+	".policy.",
+	".observatory.",
+}
+
+// stripManagementApps removes management application configs from a loaded
+// core.Config. Transport-critical apps (dispatcher, proxyman inbound/outbound,
+// dns, router, log) are matched by different type URLs and are left intact.
+func stripManagementApps(configObj *core.Config) {
+	if configObj == nil || len(configObj.App) == 0 {
+		return
+	}
+
+	filtered := configObj.App[:0]
+	for _, app := range configObj.App {
+		if app == nil {
+			continue
+		}
+
+		if isManagementApp(app.Type) {
+			continue
+		}
+
+		filtered = append(filtered, app)
+	}
+
+	configObj.App = filtered
+}
+
+func isManagementApp(typeURL string) bool {
+	for _, marker := range managementAppMarkers {
+		if strings.Contains(typeURL, marker) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func convertLogLevelToSeverity(logLevel *C.char) clog.Severity {

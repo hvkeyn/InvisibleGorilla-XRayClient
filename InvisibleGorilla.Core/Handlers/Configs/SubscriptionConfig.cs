@@ -79,7 +79,9 @@ namespace InvisibleGorillaXRay.Handlers.Configs
             void CreateConfigFile(string remark, string data)
             {
                 string destinationPath = $"{destinationDirectory}/{remark}.json";
-                SaveToDirectory(destinationPath, data);
+                // Strip api/stats/policy/inbounds from subscription payloads as well,
+                // so a remote config can never reintroduce a localhost Xray gRPC API.
+                SaveToDirectory(destinationPath, JsonUtility.SanitizeRuntimeManagedSections(data));
                 SetFileTime(destinationPath);
                 AddConfigToList(CreateConfigModel(destinationPath));
 

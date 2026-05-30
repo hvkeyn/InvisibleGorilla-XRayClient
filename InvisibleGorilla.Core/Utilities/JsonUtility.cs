@@ -70,8 +70,14 @@ namespace InvisibleGorillaXRay.Utilities
                 JObject root = JObject.Parse(json);
                 bool changed = false;
 
+                // Drop runtime-managed and "management" sections. The local inbound is
+                // always rebuilt by the native wrapper, and the api/stats/policy machinery
+                // (the Xray gRPC HandlerService) is never used by this client. Leaving it
+                // on disk would expose a localhost gRPC API that anti-VPN probes treat as
+                // an instant detection signal, so we strip it from every persisted config.
                 changed |= RemoveTopLevelProperty(root, "api");
                 changed |= RemoveTopLevelProperty(root, "stats");
+                changed |= RemoveTopLevelProperty(root, "policy");
                 changed |= RemoveTopLevelProperty(root, "inbounds");
 
                 return changed ? root.ToString(Formatting.Indented) : json;
