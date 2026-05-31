@@ -64,6 +64,11 @@
     <system:String x:Key="Lang.Window.Server.Tab.Subscription">اشتراک</system:String>
     <system:String x:Key="Lang.Window.Server.Import.File">وارد کردن فایل پیکربندی</system:String>
     <system:String x:Key="Lang.Window.Server.Import.Link">وارد کردن از طریق لینک</system:String>
+    <system:String x:Key="Lang.SmartImport.Hint">لینک‌های سرور (vless:// vmess:// trojan:// ss://)، اشتراک‌های http(s) یا پل‌های Tor (obfs4/webtunnel/snowflake/meek) را بچسبانید — هر کدام در یک خط.</system:String>
+    <system:String x:Key="Lang.SmartImport.Nothing">چیزی شناسایی نشد. لینک سرور، آدرس اشتراک یا خطوط پل Tor را بچسبانید.</system:String>
+    <system:String x:Key="Lang.SmartImport.Summary">اضافه شد — سرورها: {0}، اشتراک‌ها: {1}، پل‌ها: {2}</system:String>
+    <system:String x:Key="Lang.SmartImport.Failures"> (ناموفق: {0})</system:String>
+    <system:String x:Key="Lang.SmartImport.BridgesEnabled">پل‌ها ذخیره شد، Tor فعال شد ({0}).</system:String>
     <system:String x:Key="Lang.Window.Server.Import.Remarks">نام اشتراک</system:String>
     <system:String x:Key="Lang.Window.Server.Import.SubscriptionLink">لینک اشتراک</system:String>
 

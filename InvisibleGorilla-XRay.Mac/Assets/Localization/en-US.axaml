@@ -25,7 +25,12 @@
     <x:String x:Key="Lang.Window.Server.Subscriptions">Subscriptions</x:String>
     <x:String x:Key="Lang.Window.Server.AddConfig.FromLink">Import from link</x:String>
     <x:String x:Key="Lang.Window.Server.AddConfig.FromFile">Import from file</x:String>
-    <x:String x:Key="Lang.Window.Server.AddConfig.Placeholder">Paste or type config link</x:String>
+    <x:String x:Key="Lang.Window.Server.AddConfig.Placeholder">Paste links, subscriptions or Tor bridges (one per line)</x:String>
+    <x:String x:Key="Lang.SmartImport.Hint">Recognizes vless:// vmess:// trojan:// ss://, http(s) subscriptions and obfs4/webtunnel/snowflake/meek bridges.</x:String>
+    <x:String x:Key="Lang.SmartImport.Nothing">Nothing recognized. Paste server links, a subscription URL, or Tor bridge lines.</x:String>
+    <x:String x:Key="Lang.SmartImport.Summary">Added — servers: {0}, subscriptions: {1}, bridges: {2}</x:String>
+    <x:String x:Key="Lang.SmartImport.Failures"> (failed: {0})</x:String>
+    <x:String x:Key="Lang.SmartImport.BridgesEnabled">Bridges saved, Tor enabled ({0}).</x:String>
     <x:String x:Key="Lang.Window.Server.AddSub.FromLink">Import from link</x:String>
     <x:String x:Key="Lang.Window.Server.AddSub.Placeholder">Paste or type subscription link</x:String>
     <x:String x:Key="Lang.Window.Server.Tab.Configuration">Configuration</x:String>

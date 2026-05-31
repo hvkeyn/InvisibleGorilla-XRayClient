@@ -64,6 +64,11 @@
     <system:String x:Key="Lang.Window.Server.Tab.Subscription">Подписка</system:String>
     <system:String x:Key="Lang.Window.Server.Import.File">Импортировать файл конфигурации</system:String>
     <system:String x:Key="Lang.Window.Server.Import.Link">Импортировать по ссылке</system:String>
+    <system:String x:Key="Lang.SmartImport.Hint">Вставьте ссылки серверов (vless:// vmess:// trojan:// ss://), http(s)-подписки или мосты Tor (obfs4/webtunnel/snowflake/meek) — по одному в строке.</system:String>
+    <system:String x:Key="Lang.SmartImport.Nothing">Ничего не распознано. Вставьте ссылки на серверы, ссылку подписки или строки мостов Tor.</system:String>
+    <system:String x:Key="Lang.SmartImport.Summary">Добавлено — серверы: {0}, подписки: {1}, мосты: {2}</system:String>
+    <system:String x:Key="Lang.SmartImport.Failures"> (ошибок: {0})</system:String>
+    <system:String x:Key="Lang.SmartImport.BridgesEnabled">Мосты сохранены, Tor включён ({0}).</system:String>
     <system:String x:Key="Lang.Window.Server.Import.Remarks">Название подписки</system:String>
     <system:String x:Key="Lang.Window.Server.Import.SubscriptionLink">Ссылка на подписку</system:String>
 

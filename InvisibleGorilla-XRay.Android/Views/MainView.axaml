@@ -838,8 +838,10 @@
                                 <Grid ColumnDefinitions="*,Auto">
                             <TextBox x:Name="ConfigLinkTextBox"
                                              Grid.Column="0"
-                                             MinHeight="48"
-                                     Watermark="vless://, vmess://, trojan:// or ss://" />
+                                             MinHeight="96"
+                                             AcceptsReturn="True"
+                                             TextWrapping="Wrap"
+                                     Watermark="vless:// vmess:// trojan:// ss:// · http(s):// · obfs4/webtunnel/snowflake" />
                                     <Button x:Name="PasteConfigLinkButton"
                                             Grid.Column="1"
                                             Width="92"

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using Avalonia;
 using Avalonia.Controls;
@@ -9,6 +10,7 @@ using InvisibleGorillaXRay.Models;
 using InvisibleGorillaXRay.Managers;
 using InvisibleGorillaXRay.Services;
 using InvisibleGorillaXRay.Handlers;
+using InvisibleGorillaXRay.Handlers.SmartInput;
 using InvisibleGorillaXRay.Values;
 using InvisibleGorillaXRay.Linux.Handlers;
 // The reused views live under the Mac.Views namespace because the .axaml files
@@ -129,7 +131,8 @@ namespace InvisibleGorillaXRay.Linux.Factories
                 onCreateSubscription: configHandler.CreateSubscription,
                 onDeleteSubscription: configHandler.DeleteSubscription,
                 onDeleteConfig: configHandler.LoadFiles,
-                onUpdateConfig: UpdateConfig
+                onUpdateConfig: UpdateConfig,
+                onAddBridges: AddBridges
             );
 
             SetupLocalizedWindowTitle(serverWindow, Localization.WINDOW_TITLE_SERVER);
@@ -140,6 +143,16 @@ namespace InvisibleGorillaXRay.Linux.Factories
                 settingsHandler.UpdateCurrentConfigPath(path);
                 mainWindow?.UpdateUI();
                 mainWindow?.TryRerun();
+            }
+
+            bool AddBridges(List<string> bridgeLines, BridgeType bridgeType)
+            {
+                UserSettings settings = settingsHandler.UserSettings;
+                settings.Tor = SmartImportService.MergeBridges(settings.GetTorSettings(), bridgeLines, bridgeType);
+                settingsHandler.UpdateUserSettings(settings);
+                mainWindow?.UpdateUI();
+                mainWindow?.TryRerun();
+                return true;
             }
         }
 

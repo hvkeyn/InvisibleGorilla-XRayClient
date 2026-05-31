@@ -214,10 +214,19 @@
                     x:Name="radioButtonLink"
                     Click="OnLinkRadioButtonClick"/>
 
-                <TextBox Margin="20" Height="30" VerticalContentAlignment="Center" 
-                    FontWeight="Normal" FontSize="14"
+                <TextBox Margin="20,20,20,4" Height="120" VerticalContentAlignment="Top"
+                    AcceptsReturn="True" AcceptsTab="False" TextWrapping="Wrap"
+                    FontWeight="Normal" FontSize="13"
                     Watermark="{DynamicResource Lang.Window.Server.AddConfig.Placeholder}"
                     x:Name="textBoxConfigLink"/>
+
+                <TextBlock Margin="20,0" Foreground="#888" FontSize="12" TextWrapping="Wrap"
+                    Text="{DynamicResource Lang.SmartImport.Hint}"
+                    x:Name="textBlockSmartImportHint"/>
+
+                <TextBlock Margin="20,6,20,0" Foreground="#43b581" FontSize="13" TextWrapping="Wrap"
+                    IsVisible="False"
+                    x:Name="textBlockSmartImportStatus"/>
             </StackPanel>
 
             <StackPanel Grid.Row="1" Orientation="Horizontal" 

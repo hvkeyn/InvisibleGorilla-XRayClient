@@ -29,6 +29,7 @@ namespace InvisibleGorillaXRay.Android.Views
     using InvisibleGorillaXRay.Android.Services;
     using InvisibleGorillaXRay.Core;
     using InvisibleGorillaXRay.Handlers;
+    using InvisibleGorillaXRay.Handlers.SmartInput;
     using InvisibleGorillaXRay.Handlers.Tor;
     using InvisibleGorillaXRay.Models;
     using InvisibleGorillaXRay.Utilities;
@@ -2860,39 +2861,74 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private bool TryImportConfigLink(string? link, bool clearInputOnSuccess)
         {
-            string normalizedLink = link?.Trim() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(normalizedLink))
+            string text = link ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(text))
             {
                 SetStatus("Lang.Message.NoConfigLinkEntered");
                 return false;
             }
 
-            Status status = templateHandler.ConverLinkToConfig(normalizedLink);
-            if (status.Code == Code.ERROR)
+            PastedInputResult classified = PastedInputClassifier.Classify(text);
+            if (!classified.HasAny)
             {
-                SetStatus(status.Content?.ToString() ?? "Lang.Message.UnsopportedConfigLink");
+                SetStatus("Lang.SmartImport.Nothing");
                 return false;
             }
 
-            string[] payload = status.Content as string[] ?? Array.Empty<string>();
-            if (payload.Length < 2)
-            {
-                SetStatus("Lang.Android.Status.ConvertConfigFailed");
-                return false;
-            }
+            string? firstServerRemark = null;
+            SmartImportOutcome outcome = SmartImportService.Apply(
+                classified,
+                templateHandler.ConverLinkToConfig,
+                (remark, data) =>
+                {
+                    configHandler.CreateConfig(remark, data);
+                    firstServerRemark ??= remark;
+                },
+                templateHandler.ConvertLinkToSubscription,
+                (remark, url, data) => configHandler.CreateSubscription(remark, url, data),
+                ApplyBridgesFromSmartImport);
 
-            configHandler.CreateConfig(payload[0], payload[1]);
-            AndroidConfigShareLinkStore.SaveSourceLink(BuildGeneralConfigPath(payload[0]), normalizedLink);
+            if (classified.ServerLinks.Count == 1 && outcome.ServersAdded == 1 && firstServerRemark != null)
+                AndroidConfigShareLinkStore.SaveSourceLink(BuildGeneralConfigPath(firstServerRemark), classified.ServerLinks[0].Trim());
+
             if (clearInputOnSuccess)
                 ConfigLinkInput.Text = string.Empty;
 
             RefreshConfigs();
-            TrySelectConfigByName(payload[0]);
+            RefreshSubscriptions();
+            if (firstServerRemark != null)
+                TrySelectConfigByName(firstServerRemark);
             ShowSection(NavigationSection.Servers);
             ShowServerTab(ServerTab.Configurations);
             SetServersViewMode(ServersViewMode.Browse);
-            SetStatus(LocalizeFormat("Lang.Android.Status.ImportedConfig", payload[0]));
+            SetStatus(BuildSmartImportSummary(outcome));
+            return outcome.AnyAdded;
+        }
+
+        private bool ApplyBridgesFromSmartImport(List<string> bridgeLines, BridgeType bridgeType)
+        {
+            UserSettings current = settingsHandler.UserSettings;
+            current.Tor = SmartImportService.MergeBridges(current.GetTorSettings(), bridgeLines, bridgeType);
+            settingsHandler.UpdateUserSettings(current);
+            LoadTorSettingsIntoControls(settingsHandler.UserSettings);
             return true;
+        }
+
+        private string BuildSmartImportSummary(SmartImportOutcome outcome)
+        {
+            string summary = LocalizeFormat(
+                "Lang.SmartImport.Summary",
+                outcome.ServersAdded,
+                outcome.SubscriptionsAdded,
+                outcome.BridgesAdded);
+
+            if (outcome.Failures > 0)
+                summary += LocalizeFormat("Lang.SmartImport.Failures", outcome.Failures);
+
+            if (outcome.BridgesUpdated)
+                summary += " " + LocalizeFormat("Lang.SmartImport.BridgesEnabled", outcome.BridgeType);
+
+            return summary;
         }
 
         private bool TryImportConfigFileContent(string fileName, string? content)

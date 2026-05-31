@@ -25,7 +25,12 @@
     <x:String x:Key="Lang.Window.Server.Subscriptions">Подписки</x:String>
     <x:String x:Key="Lang.Window.Server.AddConfig.FromLink">Импорт по ссылке</x:String>
     <x:String x:Key="Lang.Window.Server.AddConfig.FromFile">Импорт из файла</x:String>
-    <x:String x:Key="Lang.Window.Server.AddConfig.Placeholder">Вставьте или введите ссылку на конфигурацию</x:String>
+    <x:String x:Key="Lang.Window.Server.AddConfig.Placeholder">Вставьте ссылки, подписки или мосты Tor (по одному в строке)</x:String>
+    <x:String x:Key="Lang.SmartImport.Hint">Распознаёт vless:// vmess:// trojan:// ss://, http(s)-подписки и мосты obfs4/webtunnel/snowflake/meek.</x:String>
+    <x:String x:Key="Lang.SmartImport.Nothing">Ничего не распознано. Вставьте ссылки на серверы, ссылку подписки или строки мостов Tor.</x:String>
+    <x:String x:Key="Lang.SmartImport.Summary">Добавлено — серверы: {0}, подписки: {1}, мосты: {2}</x:String>
+    <x:String x:Key="Lang.SmartImport.Failures"> (ошибок: {0})</x:String>
+    <x:String x:Key="Lang.SmartImport.BridgesEnabled">Мосты сохранены, Tor включён ({0}).</x:String>
     <x:String x:Key="Lang.Window.Server.AddSub.FromLink">Импорт по ссылке</x:String>
     <x:String x:Key="Lang.Window.Server.AddSub.Placeholder">Вставьте или введите ссылку на подписку</x:String>
     <x:String x:Key="Lang.Window.Server.Tab.Configuration">Конфигурация</x:String>

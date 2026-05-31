@@ -9,6 +9,7 @@ namespace InvisibleGorillaXRay
     using Models;
     using Services;
     using Services.Analytics.ServerWindow;
+    using Handlers.SmartInput;
 
     public partial class ServerWindow : Window
     {
@@ -150,7 +151,7 @@ namespace InvisibleGorillaXRay
                 }
 
                 SetActiveLoadingPanel(true);
-                TryAddConfig(ConfigType.URL);
+                TryAddSmartImport();
 
                 bool IsLinkEntered() => !string.IsNullOrEmpty(textBoxConfigLink.Text);
             }
@@ -217,10 +218,73 @@ namespace InvisibleGorillaXRay
             }
         }
 
+        private void TryAddSmartImport()
+        {
+            PastedInputResult classified = PastedInputClassifier.Classify(textBoxConfigLink.Text);
+            if (!classified.HasAny)
+            {
+                SetActiveLoadingPanel(false);
+                ShowSmartImportStatus(Localize("Lang.SmartImport.Nothing"), false);
+                return;
+            }
+
+            SmartImportOutcome outcome = SmartImportService.Apply(
+                classified,
+                convertLinkToConfig,
+                onCreateConfig,
+                convertLinkToSubscription,
+                onCreateSubscription,
+                onAddBridges);
+
+            if (outcome.ServersAdded > 0 || outcome.SubscriptionsAdded > 0)
+            {
+                groupPath = GetLastConfigPath(GroupType.GENERAL);
+                onUpdateConfig.Invoke(GetLastConfigPath(GroupType.GENERAL));
+            }
+
+            LoadGroupsList();
+            LoadConfigsList(GroupType.GENERAL);
+            LoadConfigsList(GroupType.SUBSCRIPTION);
+            SetActiveLoadingPanel(false);
+            ClearConfigLink();
+            ShowSmartImportStatus(BuildSmartImportSummary(outcome), outcome.AnyAdded);
+        }
+
+        private string BuildSmartImportSummary(SmartImportOutcome outcome)
+        {
+            string summary = string.Format(
+                Localize("Lang.SmartImport.Summary"),
+                outcome.ServersAdded,
+                outcome.SubscriptionsAdded,
+                outcome.BridgesAdded);
+
+            if (outcome.Failures > 0)
+                summary += string.Format(Localize("Lang.SmartImport.Failures"), outcome.Failures);
+
+            if (outcome.BridgesUpdated)
+                summary += " " + string.Format(Localize("Lang.SmartImport.BridgesEnabled"), outcome.BridgeType);
+
+            return summary;
+        }
+
+        private void ShowSmartImportStatus(string message, bool success)
+        {
+            if (textBlockSmartImportStatus == null)
+                return;
+
+            textBlockSmartImportStatus.Text = message;
+            textBlockSmartImportStatus.Foreground = success
+                ? (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString("#43b581")
+                : (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString("#faa61a");
+            textBlockSmartImportStatus.Visibility = Visibility.Visible;
+        }
+
         private void ShowAddConfigsServerPanel()
         {
             panelServers.Visibility = Visibility.Hidden;
             panelAddConfigs.Visibility = Visibility.Visible;
+            if (textBlockSmartImportStatus != null)
+                textBlockSmartImportStatus.Visibility = Visibility.Collapsed;
         }
 
         private void SetActiveFileImportingGroup(bool isActive)

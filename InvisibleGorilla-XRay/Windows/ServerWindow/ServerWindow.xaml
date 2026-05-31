@@ -249,10 +249,21 @@
                     x:Name="radioButtonLink"
                     Click="OnLinkRadioButtonClick"/>
 
-                <TextBox Margin="20" Height="30" VerticalContentAlignment="Center" 
+                <TextBox Margin="20,20,20,4" Height="110" VerticalContentAlignment="Top"
+                    AcceptsReturn="True" TextWrapping="Wrap"
+                    VerticalScrollBarVisibility="Auto"
                     Style="{StaticResource TextBox.Default}" FontFamily="{StaticResource SegoeUI}" 
-                    FontWeight="Normal" FontSize="14"
+                    FontWeight="Normal" FontSize="13"
                     x:Name="textBoxConfigLink"/>
+
+                <TextBlock Margin="20,0" Foreground="#888" FontSize="12" TextWrapping="Wrap"
+                    FontFamily="{StaticResource SegoeUI}"
+                    Text="{DynamicResource Lang.SmartImport.Hint}"
+                    x:Name="textBlockSmartImportHint"/>
+
+                <TextBlock Margin="20,6,20,0" Foreground="#43b581" FontSize="13" TextWrapping="Wrap"
+                    FontFamily="{StaticResource SegoeUI}" Visibility="Collapsed"
+                    x:Name="textBlockSmartImportStatus"/>
             </StackPanel>
             
             <StackPanel Grid.Row="1" Orientation="Horizontal" 

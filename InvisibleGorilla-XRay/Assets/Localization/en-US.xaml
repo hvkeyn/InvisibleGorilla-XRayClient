@@ -64,6 +64,11 @@
     <system:String x:Key="Lang.Window.Server.Tab.Subscription">Subscription</system:String>
     <system:String x:Key="Lang.Window.Server.Import.File">Import config file</system:String>
     <system:String x:Key="Lang.Window.Server.Import.Link">Import from link</system:String>
+    <system:String x:Key="Lang.SmartImport.Hint">Paste server links (vless:// vmess:// trojan:// ss://), http(s) subscriptions or Tor bridges (obfs4/webtunnel/snowflake/meek) — one per line.</system:String>
+    <system:String x:Key="Lang.SmartImport.Nothing">Nothing recognized. Paste server links, a subscription URL, or Tor bridge lines.</system:String>
+    <system:String x:Key="Lang.SmartImport.Summary">Added — servers: {0}, subscriptions: {1}, bridges: {2}</system:String>
+    <system:String x:Key="Lang.SmartImport.Failures"> (failed: {0})</system:String>
+    <system:String x:Key="Lang.SmartImport.BridgesEnabled">Bridges saved, Tor enabled ({0}).</system:String>
     <system:String x:Key="Lang.Window.Server.Import.Remarks">Remarks</system:String>
     <system:String x:Key="Lang.Window.Server.Import.SubscriptionLink">Subscription link</system:String>
 

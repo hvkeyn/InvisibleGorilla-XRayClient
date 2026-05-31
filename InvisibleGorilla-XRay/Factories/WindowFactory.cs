@@ -192,7 +192,8 @@ namespace InvisibleGorillaXRay.Factories
                 onCreateSubscription: configHandler.CreateSubscription,
                 onDeleteSubscription: configHandler.DeleteSubscription,
                 onDeleteConfig: configHandler.LoadFiles,
-                onUpdateConfig: UpdateConfig
+                onUpdateConfig: UpdateConfig,
+                onAddBridges: AddBridges
             );
 
             SetupLocalizedWindowTitle(
@@ -207,6 +208,16 @@ namespace InvisibleGorillaXRay.Factories
                 settingsHandler.UpdateCurrentConfigPath(path);
                 mainWindow.UpdateUI();
                 mainWindow.TryRerun();
+            }
+
+            bool AddBridges(System.Collections.Generic.List<string> bridgeLines, BridgeType bridgeType)
+            {
+                UserSettings settings = settingsHandler.UserSettings;
+                settings.Tor = Handlers.SmartInput.SmartImportService.MergeBridges(settings.GetTorSettings(), bridgeLines, bridgeType);
+                settingsHandler.UpdateUserSettings(settings);
+                mainWindow.UpdateUI();
+                mainWindow.TryDisableModeAndRerun();
+                return true;
             }
         }
 
