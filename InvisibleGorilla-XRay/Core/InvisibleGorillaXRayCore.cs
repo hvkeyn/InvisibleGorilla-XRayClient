@@ -8,6 +8,7 @@ namespace InvisibleGorillaXRay.Core
     using Models;
     using Handlers.Proxies;
     using Handlers.Tunnels;
+    using Handlers.Tor;
     using Values;
     using Utilities;
     using Services;
@@ -30,6 +31,10 @@ namespace InvisibleGorillaXRay.Core
         private Func<IProxy> getProxy;
         private Func<ITunnel> getTunnel;
         private Action<string> onFailLoadingConfig;
+        private Func<TorSettings> getTorSettings;
+
+        private readonly TorManager torManager = new TorManager();
+        private string currentRuntimeConfig;
 
         private LocalizationService LocalizationService => ServiceLocator.Get<LocalizationService>();
         private AnalyticsService AnalyticsService => ServiceLocator.Get<AnalyticsService>();
@@ -67,7 +72,18 @@ namespace InvisibleGorillaXRay.Core
             this.getTunnel = getTunnel;
             this.onFailLoadingConfig = onFailLoadingConfig;
         }
-        
+
+        /// <summary>
+        /// Optional Tor integration. When wired and enabled in settings, the connection is
+        /// routed through the bundled tor daemon (Tor-only or Xray-over-Tor chaining).
+        /// </summary>
+        public void SetupTor(Func<TorSettings> getTorSettings)
+        {
+            this.getTorSettings = getTorSettings;
+        }
+
+        public TorManager GetTorManager() => torManager;
+
         public Status LoadConfig()
         {
             Config config = getConfig.Invoke();
@@ -128,7 +144,28 @@ namespace InvisibleGorillaXRay.Core
             int proxyPort = getProxyPort.Invoke();
             int tunnelServicePort = getTunPort.Invoke();
             LogLevel logLevel = getLogLevel.Invoke();
-            string logPath = System.IO.Path.GetFullPath($"{getLogPath.Invoke()}/{getConfig.Invoke().Name}");
+
+            // Tor sits in front of xray-core as a local SOCKS daemon. Start it (if enabled)
+            // and rewrite the runtime config so xray's egress (or chain entry) goes through Tor.
+            TorSettings torSettings = getTorSettings?.Invoke();
+            bool torEnabled = torSettings != null && torSettings.GetEnabled();
+            if (torEnabled)
+            {
+                DiagnosticLog.Write("Run", $"Tor enabled (mode={torSettings.GetMode()}). Starting tor daemon...");
+                Status torStatus = torManager.Start(torSettings);
+                if (torStatus.Code != Code.SUCCESS)
+                {
+                    DiagnosticLog.Write("Run", $"Tor failed to start: {torStatus.Content}");
+                    throw new InvalidOperationException(torStatus.Content?.ToString() ?? "Tor failed to start.");
+                }
+
+                config = BuildTorRuntimeConfig(torSettings);
+            }
+
+            currentRuntimeConfig = config;
+
+            string configName = getConfig.Invoke()?.Name ?? (torEnabled ? "Tor" : "config");
+            string logPath = System.IO.Path.GetFullPath($"{getLogPath.Invoke()}/{configName}");
             bool isSocks = getProtocol.Invoke() == Protocol.SOCKS || mode == Mode.TUN;
             bool isUdpEnabled = getUdpEnabled.Invoke();
             bool systemProxy = getSystemProxyUsed.Invoke();
@@ -178,6 +215,7 @@ namespace InvisibleGorillaXRay.Core
             if (serverException != null)
             {
                 DiagnosticLog.Write("Run", $"Server thread threw exception, aborting: {serverException.Message}");
+                if (torEnabled) torManager.Stop();
                 return;
             }
 
@@ -185,6 +223,7 @@ namespace InvisibleGorillaXRay.Core
             {
                 DiagnosticLog.Write("Run", "WARNING: Server thread is no longer alive! xray-core likely failed to start.");
                 DiagnosticLog.Write("Run", "Skipping proxy enable since server is not running.");
+                if (torEnabled) torManager.Stop();
                 return;
             }
 
@@ -193,6 +232,7 @@ namespace InvisibleGorillaXRay.Core
                 DiagnosticLog.Write("Run", "Local proxy listener did not become active in time, stopping server.");
                 XRayCoreWrapper.StopServer();
                 serverThread.Join(2000);
+                if (torEnabled) torManager.Stop();
                 throw new InvalidOperationException(mode == Mode.TUN
                     ? LocalizationService.GetTerm(Localization.CANT_TUNNEL_SYSTEM)
                     : LocalizationService.GetTerm(Localization.CANT_PROXY_SYSTEM));
@@ -214,6 +254,7 @@ namespace InvisibleGorillaXRay.Core
                 {
                     XRayCoreWrapper.StopServer();
                     serverThread.Join(2000);
+                    if (torEnabled) torManager.Stop();
                     throw new InvalidOperationException(
                         tunnelStatus.Content?.ToString()
                         ?? LocalizationService.GetTerm(Localization.CANT_TUNNEL_SYSTEM));
@@ -237,6 +278,13 @@ namespace InvisibleGorillaXRay.Core
                 DiagnosticLog.Write("Run", "Tunnel disabled.");
             }
 
+            if (torEnabled)
+            {
+                DiagnosticLog.Write("Run", "Stopping tor daemon...");
+                torManager.Stop();
+            }
+            currentRuntimeConfig = null;
+
             void SendServerStartEvent()
             {
                 if (mode == Mode.PROXY)
@@ -244,6 +292,46 @@ namespace InvisibleGorillaXRay.Core
                 else
                     AnalyticsService.SendEvent(new TunStartedEvent());
             }
+        }
+
+        /// <summary>
+        /// Builds the runtime xray config for a Tor session as user-facing Xray JSON, then runs
+        /// it through the native loader so StartServer receives the same marshalled core.Config
+        /// form it expects (the JSON the wrapper produces from core.LoadConfig).
+        /// </summary>
+        private string BuildTorRuntimeConfig(TorSettings torSettings)
+        {
+            int torSocksPort = torSettings.GetSocksPort();
+            string userJson;
+
+            if (torSettings.GetMode() == TorMode.ONLY_TOR)
+            {
+                userJson = TorConfigBuilder.BuildTorOnlyConfig(torSocksPort);
+            }
+            else
+            {
+                string original = null;
+                Config active = getConfig.Invoke();
+                if (active != null && System.IO.File.Exists(active.Path))
+                {
+                    try { original = System.IO.File.ReadAllText(active.Path); } catch { }
+                }
+
+                userJson = string.IsNullOrWhiteSpace(original)
+                    ? TorConfigBuilder.BuildTorOnlyConfig(torSocksPort)
+                    : TorConfigBuilder.WrapConfigOverTor(original, torSocksPort);
+            }
+
+            System.IO.Directory.CreateDirectory(Values.Directory.TOR_DATA);
+            string tempPath = System.IO.Path.Combine(Values.Directory.TOR_DATA, "runtime.json");
+            System.IO.File.WriteAllText(tempPath, userJson);
+
+            string format = XRayCoreWrapper.GetConfigFormat(tempPath);
+            string loaded = XRayCoreWrapper.LoadConfig(format, tempPath);
+            if (!JsonUtility.IsJsonValid(loaded))
+                throw new InvalidOperationException("Failed to build the Tor runtime configuration.");
+
+            return loaded;
         }
 
         private static bool WaitForPortActive(int port, int maxWaitMs)
@@ -276,6 +364,7 @@ namespace InvisibleGorillaXRay.Core
         public void Stop()
         {
             XRayCoreWrapper.StopServer();
+            torManager.Stop();
             AnalyticsService.SendEvent(new StoppedEvent());
         }
 
@@ -283,6 +372,7 @@ namespace InvisibleGorillaXRay.Core
         {
             CancelProxy();
             CancelTunnel();
+            torManager.Stop();
         }
 
         public int Test(string config)
@@ -355,6 +445,11 @@ namespace InvisibleGorillaXRay.Core
 
             Status LoadConfigFile()
             {
+                // When Tor rewrote the runtime config (Tor-only has no file on disk), use it
+                // directly so server-address extraction / bypass routing still works.
+                if (!string.IsNullOrEmpty(currentRuntimeConfig))
+                    return new Status(Code.SUCCESS, SubCode.SUCCESS, currentRuntimeConfig.ToLower());
+
                 Config config = getConfig.Invoke();
 
                 if (config == null)

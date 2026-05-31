@@ -1072,6 +1072,104 @@
                             BorderBrush="{StaticResource SurfaceBright}"
                         BorderThickness="1"
                             Background="{StaticResource SurfaceLight}">
+                    <StackPanel Spacing="10">
+                        <TextBlock x:Name="TorTitleTextBlock"
+                                   Text="Tor / Bridges"
+                                   FontSize="18"
+                                   FontWeight="SemiBold" />
+                        <CheckBox x:Name="TorEnabledCheckBox"
+                                  Content="Route traffic through Tor" />
+
+                        <TextBlock x:Name="TorModeTitleTextBlock"
+                                   Text="Mode" />
+                        <ComboBox x:Name="TorModeComboBox"
+                                  HorizontalAlignment="Stretch" />
+
+                        <TextBlock x:Name="BridgeTypeTitleTextBlock"
+                                   Text="Bridge type" />
+                        <ComboBox x:Name="BridgeTypeComboBox"
+                                  HorizontalAlignment="Stretch" />
+
+                        <TextBlock x:Name="TorSocksPortTitleTextBlock"
+                                   Text="Tor SOCKS port" />
+                        <TextBox x:Name="TorSocksPortTextBox" />
+
+                        <TextBlock x:Name="BridgesTitleTextBlock"
+                                   Text="Bridge lines" />
+                        <TextBox x:Name="BridgesTextBox"
+                                 AcceptsReturn="True"
+                                 TextWrapping="Wrap"
+                                 Height="110"
+                                 FontSize="11" />
+
+                        <WrapPanel Orientation="Horizontal">
+                            <Button x:Name="UseDefaultBridgesButton"
+                                    Height="34"
+                                    Margin="0,0,6,6"
+                                    Padding="10,0"
+                                    Theme="{StaticResource GrayActionButton}"
+                                    Click="OnUseDefaultBridgesClick">
+                                <TextBlock x:Name="UseDefaultBridgesButtonTextBlock"
+                                           Text="Use built-in" />
+                            </Button>
+                            <Button x:Name="FetchMoatButton"
+                                    Height="34"
+                                    Margin="0,0,6,6"
+                                    Padding="10,0"
+                                    Theme="{StaticResource GrayActionButton}"
+                                    Click="OnFetchMoatClick">
+                                <TextBlock x:Name="FetchMoatButtonTextBlock"
+                                           Text="Request bridges" />
+                            </Button>
+                            <Button x:Name="CheckBridgeButton"
+                                    Height="34"
+                                    Margin="0,0,6,6"
+                                    Padding="10,0"
+                                    Theme="{StaticResource GrayActionButton}"
+                                    Click="OnCheckBridgeClick">
+                                <TextBlock x:Name="CheckBridgeButtonTextBlock"
+                                           Text="Check" />
+                            </Button>
+                        </WrapPanel>
+
+                        <StackPanel x:Name="CaptchaPanel"
+                                    Spacing="6"
+                                    IsVisible="False">
+                            <TextBlock x:Name="CaptchaHintTextBlock"
+                                       Text="Solve the CAPTCHA to receive fresh bridges:"
+                                       TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextMuted}"
+                                       FontSize="12" />
+                            <Image x:Name="CaptchaImage"
+                                   Height="80"
+                                   HorizontalAlignment="Left" />
+                            <TextBox x:Name="CaptchaTextBox" />
+                            <Button x:Name="SubmitCaptchaButton"
+                                    Height="36"
+                                    HorizontalAlignment="Left"
+                                    Padding="12,0"
+                                    Theme="{StaticResource GreenActionButton}"
+                                    Foreground="#252526"
+                                    FontWeight="SemiBold"
+                                    Click="OnSubmitCaptchaClick">
+                                <TextBlock x:Name="SubmitCaptchaButtonTextBlock"
+                                           Text="Submit" />
+                            </Button>
+                        </StackPanel>
+
+                        <TextBlock x:Name="TorStatusTextBlock"
+                                   Text=""
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextMuted}"
+                                   FontSize="12" />
+                    </StackPanel>
+                </Border>
+
+                <Border Padding="14"
+                        CornerRadius="12"
+                            BorderBrush="{StaticResource SurfaceBright}"
+                        BorderThickness="1"
+                            Background="{StaticResource SurfaceLight}">
                         <StackPanel Spacing="10">
                             <TextBlock x:Name="AppRulesTitleTextBlock"
                                        Text="App Rules"

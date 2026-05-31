@@ -29,6 +29,7 @@ namespace InvisibleGorillaXRay.Android.Views
     using InvisibleGorillaXRay.Android.Services;
     using InvisibleGorillaXRay.Core;
     using InvisibleGorillaXRay.Handlers;
+    using InvisibleGorillaXRay.Handlers.Tor;
     using InvisibleGorillaXRay.Models;
     using InvisibleGorillaXRay.Utilities;
 
@@ -299,6 +300,38 @@ namespace InvisibleGorillaXRay.Android.Views
         private TextBox RawConfigInput => GetRequiredControl<TextBox>("RawConfigTextBox");
         private Button SaveSettingsActionButton => GetRequiredControl<Button>("SaveSettingsButton");
 
+        private CheckBox TorEnabledToggle => GetRequiredControl<CheckBox>("TorEnabledCheckBox");
+        private ComboBox TorModeSelector => GetRequiredControl<ComboBox>("TorModeComboBox");
+        private ComboBox BridgeTypeSelector => GetRequiredControl<ComboBox>("BridgeTypeComboBox");
+        private TextBox TorSocksPortInput => GetRequiredControl<TextBox>("TorSocksPortTextBox");
+        private TextBox BridgesInput => GetRequiredControl<TextBox>("BridgesTextBox");
+        private Button UseDefaultBridgesActionButton => GetRequiredControl<Button>("UseDefaultBridgesButton");
+        private Button FetchMoatActionButton => GetRequiredControl<Button>("FetchMoatButton");
+        private Button CheckBridgeActionButton => GetRequiredControl<Button>("CheckBridgeButton");
+        private StackPanel CaptchaHost => GetRequiredControl<StackPanel>("CaptchaPanel");
+        private global::Avalonia.Controls.Image CaptchaImageControl => GetRequiredControl<global::Avalonia.Controls.Image>("CaptchaImage");
+        private TextBox CaptchaInput => GetRequiredControl<TextBox>("CaptchaTextBox");
+        private Button SubmitCaptchaActionButton => GetRequiredControl<Button>("SubmitCaptchaButton");
+        private TextBlock TorStatusText => GetRequiredControl<TextBlock>("TorStatusTextBlock");
+
+        private static readonly Dictionary<TorMode, string> TorModeOptions = new()
+        {
+            { TorMode.ONLY_TOR, "Tor only" },
+            { TorMode.XRAY_OVER_TOR, "Xray over Tor" }
+        };
+
+        private static readonly Dictionary<BridgeType, string> BridgeTypeOptions = new()
+        {
+            { BridgeType.NONE, "None (direct)" },
+            { BridgeType.OBFS4, "obfs4" },
+            { BridgeType.SNOWFLAKE, "Snowflake" },
+            { BridgeType.MEEK_AZURE, "meek-azure" },
+            { BridgeType.WEBTUNNEL, "WebTunnel" }
+        };
+
+        private readonly TorManager torManager = new TorManager();
+        private MoatChallenge? activeMoatChallenge;
+
         private void InitializeComponent()
         {
             AvaloniaXamlLoader.Load(this);
@@ -424,6 +457,17 @@ namespace InvisibleGorillaXRay.Android.Views
             AppPickerDoneButtonText.Text = Localize("Lang.AppRules.Done");
             TunTitleText.Text = Localize("Lang.Window.Settings.TUN");
             TunDescriptionText.Text = Localize("Lang.Android.Settings.TunDescription");
+            GetRequiredControl<TextBlock>("TorTitleTextBlock").Text = Localize("Lang.Window.Settings.Tor");
+            TorEnabledToggle.Content = Localize("Lang.Tor.Enable");
+            GetRequiredControl<TextBlock>("TorModeTitleTextBlock").Text = Localize("Lang.Tor.Mode");
+            GetRequiredControl<TextBlock>("BridgeTypeTitleTextBlock").Text = Localize("Lang.Tor.BridgeType");
+            GetRequiredControl<TextBlock>("TorSocksPortTitleTextBlock").Text = Localize("Lang.Tor.SocksPort");
+            GetRequiredControl<TextBlock>("BridgesTitleTextBlock").Text = Localize("Lang.Tor.Bridges");
+            GetRequiredControl<TextBlock>("UseDefaultBridgesButtonTextBlock").Text = Localize("Lang.Tor.UseDefault");
+            GetRequiredControl<TextBlock>("FetchMoatButtonTextBlock").Text = Localize("Lang.Tor.FetchMoat");
+            GetRequiredControl<TextBlock>("CheckBridgeButtonTextBlock").Text = Localize("Lang.Tor.Check");
+            GetRequiredControl<TextBlock>("CaptchaHintTextBlock").Text = Localize("Lang.Tor.Captcha.Hint");
+            GetRequiredControl<TextBlock>("SubmitCaptchaButtonTextBlock").Text = Localize("Lang.Tor.Captcha.Submit");
             LogsAndDiagnosticsTitleText.Text = Localize("Lang.Android.Settings.LogsAndDiagnostics");
             LogsDescriptionText.Text = Localize("Lang.Android.Logs.Description");
             ShareLogButtonText.Text = Localize("Lang.Android.Logs.Share");
@@ -535,6 +579,8 @@ namespace InvisibleGorillaXRay.Android.Views
             if (!isSettingsSectionInitialized)
             {
                 ProtocolSelector.ItemsSource = Enum.GetNames(typeof(Protocol));
+                TorModeSelector.ItemsSource = TorModeOptions.Values.ToList();
+                BridgeTypeSelector.ItemsSource = BridgeTypeOptions.Values.ToList();
                 isSettingsSectionInitialized = true;
             }
 
@@ -552,7 +598,164 @@ namespace InvisibleGorillaXRay.Android.Views
             DnsInput.Text = settings.GetDns();
             UdpEnabledToggle.IsChecked = settings.GetUdpEnabled();
             AnalyticsToggle.IsChecked = settings.GetSendingAnalyticsEnabled();
+            LoadTorSettingsIntoControls(settings);
             RefreshAppRulesSummary();
+        }
+
+        private void LoadTorSettingsIntoControls(UserSettings settings)
+        {
+            TorSettings tor = settings.GetTorSettings();
+            TorEnabledToggle.IsChecked = tor.GetEnabled();
+            TorModeSelector.SelectedIndex = TorModeOptions.Keys.ToList().IndexOf(tor.GetMode());
+            BridgeTypeSelector.SelectedIndex = BridgeTypeOptions.Keys.ToList().IndexOf(tor.GetBridgeType());
+            TorSocksPortInput.Text = tor.GetSocksPort().ToString();
+            BridgesInput.Text = string.Join(Environment.NewLine, tor.GetBridgeLines());
+            TorStatusText.Text = torManager.IsAvailable
+                ? Localize("Lang.Tor.Status.Ready")
+                : Localize("Lang.Tor.Status.Unavailable");
+        }
+
+        private TorSettings BuildTorSettingsFromUi(UserSettings current)
+        {
+            TorSettings existing = current.GetTorSettings();
+            return new TorSettings
+            {
+                Enabled = TorEnabledToggle.IsChecked == true,
+                Mode = GetSelectedKey(TorModeOptions, TorModeSelector.SelectedIndex, existing.GetMode()),
+                BridgeType = GetSelectedKey(BridgeTypeOptions, BridgeTypeSelector.SelectedIndex, existing.GetBridgeType()),
+                SocksPort = int.TryParse(TorSocksPortInput.Text, out int sp) && sp > 0 ? sp : existing.GetSocksPort(),
+                ControlPort = existing.GetControlPort(),
+                BridgeLines = SplitBridgeLines(BridgesInput.Text)
+            };
+        }
+
+        private static TKey GetSelectedKey<TKey>(Dictionary<TKey, string> options, int index, TKey fallback) where TKey : notnull
+        {
+            if (index < 0 || index >= options.Count)
+                return fallback;
+            return options.Keys.ToList()[index];
+        }
+
+        private static List<string> SplitBridgeLines(string? text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return new List<string>();
+
+            return text
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Trim())
+                .Where(line => line.Length > 0)
+                .ToList();
+        }
+
+        private void OnUseDefaultBridgesClick(object? sender, RoutedEventArgs e)
+        {
+            BridgeType type = GetSelectedKey(BridgeTypeOptions, BridgeTypeSelector.SelectedIndex, BridgeType.OBFS4);
+            if (type == BridgeType.NONE)
+            {
+                type = BridgeType.OBFS4;
+                BridgeTypeSelector.SelectedIndex = BridgeTypeOptions.Keys.ToList().IndexOf(BridgeType.OBFS4);
+            }
+
+            List<string> defaults = DefaultBridges.ForType(type);
+            BridgesInput.Text = string.Join(Environment.NewLine, defaults);
+            TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.LoadedDefaults", defaults.Count);
+        }
+
+        private async void OnCheckBridgeClick(object? sender, RoutedEventArgs e)
+        {
+            if (!torManager.IsAvailable)
+            {
+                TorStatusText.Text = Localize("Lang.Tor.Status.Unavailable");
+                return;
+            }
+
+            BridgeType type = GetSelectedKey(BridgeTypeOptions, BridgeTypeSelector.SelectedIndex, BridgeType.OBFS4);
+            string firstLine = SplitBridgeLines(BridgesInput.Text).FirstOrDefault() ?? string.Empty;
+
+            CheckBridgeActionButton.IsEnabled = false;
+            TorStatusText.Text = Localize("Lang.Tor.Status.Checking");
+
+            BridgeCheckResult result = await Task.Run(() => torManager.CheckBridge(type, firstLine));
+
+            TorStatusText.Text = result.Success
+                ? LocalizeFormat("Lang.Tor.Status.CheckOk", result.LatencyMs)
+                : LocalizeFormat("Lang.Tor.Status.CheckFail", result.Message);
+            CheckBridgeActionButton.IsEnabled = true;
+        }
+
+        private async void OnFetchMoatClick(object? sender, RoutedEventArgs e)
+        {
+            FetchMoatActionButton.IsEnabled = false;
+            TorStatusText.Text = Localize("Lang.Tor.Status.FetchingCaptcha");
+
+            try
+            {
+                MoatClient client = new MoatClient();
+                MoatResult result = await client.RequestChallengeAsync("obfs4");
+
+                if (result.Success && result.Challenge != null)
+                {
+                    activeMoatChallenge = result.Challenge;
+                    try
+                    {
+                        using MemoryStream stream = new MemoryStream(result.Challenge.ImagePng);
+                        CaptchaImageControl.Source = new Bitmap(stream);
+                    }
+                    catch { }
+                    CaptchaHost.IsVisible = true;
+                    CaptchaInput.Text = string.Empty;
+                    TorStatusText.Text = Localize("Lang.Tor.Status.CaptchaReady");
+                }
+                else
+                {
+                    TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.MoatFail", result.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.MoatFail", ex.Message);
+            }
+            finally
+            {
+                FetchMoatActionButton.IsEnabled = true;
+            }
+        }
+
+        private async void OnSubmitCaptchaClick(object? sender, RoutedEventArgs e)
+        {
+            if (activeMoatChallenge == null)
+                return;
+
+            SubmitCaptchaActionButton.IsEnabled = false;
+            TorStatusText.Text = Localize("Lang.Tor.Status.SubmittingCaptcha");
+
+            try
+            {
+                MoatClient client = new MoatClient();
+                MoatResult result = await client.SubmitSolutionAsync(activeMoatChallenge, CaptchaInput.Text ?? string.Empty);
+
+                if (result.Success && result.Bridges.Count > 0)
+                {
+                    BridgeTypeSelector.SelectedIndex = BridgeTypeOptions.Keys.ToList().IndexOf(BridgeType.OBFS4);
+                    BridgesInput.Text = string.Join(Environment.NewLine, result.Bridges);
+                    CaptchaHost.IsVisible = false;
+                    activeMoatChallenge = null;
+                    TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.MoatBridges", result.Bridges.Count);
+                }
+                else
+                {
+                    TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.MoatFail", result.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.MoatFail", ex.Message);
+            }
+            finally
+            {
+                SubmitCaptchaActionButton.IsEnabled = true;
+            }
         }
 
         private void ReloadDiscoveredAndroidApps()
@@ -1315,7 +1518,8 @@ namespace InvisibleGorillaXRay.Android.Views
                 AppRulesMode = workingDefaultAppRuleTemplate.Mode,
                 AppRules = workingDefaultAppRuleTemplate.AppRules.Select(rule => rule.Clone()).ToList(),
                 AppRuleTemplates = templates,
-                AppRuleTemplateBindings = bindings
+                AppRuleTemplateBindings = bindings,
+                Tor = current.GetTorSettings()
             });
 
             RefreshAppRulesSummary();
@@ -1671,7 +1875,8 @@ namespace InvisibleGorillaXRay.Android.Views
                 AppRulesMode = current.GetAppRulesMode(),
                 AppRules = current.GetAppRules(),
                 AppRuleTemplates = current.GetAppRuleTemplates(),
-                AppRuleTemplateBindings = current.GetAppRuleTemplateBindings()
+                AppRuleTemplateBindings = current.GetAppRuleTemplateBindings(),
+                Tor = BuildTorSettingsFromUi(current)
             });
 
             UpdateCurrentConfigSummary();

@@ -8,7 +8,7 @@
         mc:Ignorable="d"
         Title="Invisible Gorilla XRay - Settings"
         Height="450" 
-        Width="350" 
+        Width="420" 
         WindowStartupLocation="CenterOwner"  
         ResizeMode="NoResize"
         ShowInTaskbar="False">
@@ -38,6 +38,8 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="2"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="2"/>
+                    <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
                 <Grid Grid.Column="0">
@@ -47,7 +49,7 @@
                     <Label Grid.Row="0" Content="{DynamicResource Lang.Window.Settings.Tab.Basic}"
                         HorizontalAlignment="Center" VerticalAlignment="Center"
                         FontFamily="{StaticResource SegoeUI}" Foreground="White" FontWeight="Normal" 
-                        FontSize="14" IsHitTestVisible="False"/>
+                        FontSize="13" IsHitTestVisible="False"/>
                 </Grid>
 
                 <Grid Grid.Column="2">
@@ -57,7 +59,7 @@
                     <Label Grid.Row="0" Content="{DynamicResource Lang.Window.Settings.Tab.Port}"
                         HorizontalAlignment="Center" VerticalAlignment="Center"
                         FontFamily="{StaticResource SegoeUI}" Foreground="White" FontWeight="Normal" 
-                        FontSize="14" IsHitTestVisible="False"/>
+                        FontSize="13" IsHitTestVisible="False"/>
                 </Grid>
 
                 <Grid Grid.Column="4">
@@ -67,17 +69,27 @@
                     <Label Grid.Row="0" Content="{DynamicResource Lang.Window.Settings.Tab.TUN}"
                         HorizontalAlignment="Center" VerticalAlignment="Center"
                         FontFamily="{StaticResource SegoeUI}" Foreground="White" FontWeight="Normal" 
-                        FontSize="14" IsHitTestVisible="False"/>
+                        FontSize="13" IsHitTestVisible="False"/>
                 </Grid>
 
                 <Grid Grid.Column="6">
+                    <Button Style="{StaticResource Button.Rectangle.Gray}"
+                        x:Name="buttonTorTab" Click="OnTorTabClick"/>
+
+                    <Label Grid.Row="0" Content="{DynamicResource Lang.Window.Settings.Tab.Tor}"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        FontFamily="{StaticResource SegoeUI}" Foreground="White" FontWeight="Normal" 
+                        FontSize="13" IsHitTestVisible="False"/>
+                </Grid>
+
+                <Grid Grid.Column="8">
                     <Button Style="{StaticResource Button.Rectangle.Gray}"
                         x:Name="buttonLogTab" Click="OnLogTabClick"/>
 
                     <Label Grid.Row="0" Content="{DynamicResource Lang.Window.Settings.Tab.Log}"
                         HorizontalAlignment="Center" VerticalAlignment="Center"
                         FontFamily="{StaticResource SegoeUI}" Foreground="White" FontWeight="Normal" 
-                        FontSize="14" IsHitTestVisible="False"/>
+                        FontSize="13" IsHitTestVisible="False"/>
                 </Grid>
             </Grid>
 
@@ -347,6 +359,95 @@
                     </Grid>
                         
                 </StackPanel>
+
+                <ScrollViewer x:Name="panelTor" Grid.Row="0" HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollBarVisibility="Auto" Visibility="Hidden">
+                    <StackPanel Orientation="Vertical" Margin="20 15 20 10">
+                        <CheckBox x:Name="checkBoxTorEnabled" Foreground="White"
+                            Content="{DynamicResource Lang.Tor.Enable}"
+                            FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14"/>
+
+                        <Grid Margin="0 10 0 0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Label Grid.Column="0" Foreground="White" Content="{DynamicResource Lang.Tor.Mode}"
+                                FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14"/>
+                            <ComboBox x:Name="comboBoxTorMode" Grid.Column="1" Height="26"
+                                SelectedValuePath="Key" DisplayMemberPath="Value"
+                                FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14"/>
+                        </Grid>
+
+                        <Grid Margin="0 5 0 0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Label Grid.Column="0" Foreground="White" Content="{DynamicResource Lang.Tor.BridgeType}"
+                                FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14"/>
+                            <ComboBox x:Name="comboBoxBridgeType" Grid.Column="1" Height="26"
+                                SelectedValuePath="Key" DisplayMemberPath="Value"
+                                FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14"/>
+                        </Grid>
+
+                        <Grid Margin="0 5 0 0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Label Grid.Column="0" Foreground="White" Content="{DynamicResource Lang.Tor.SocksPort}"
+                                FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14"/>
+                            <TextBox Grid.Column="1" VerticalContentAlignment="Center"
+                                Style="{StaticResource TextBox.Default}" FontFamily="{StaticResource SegoeUI}"
+                                FontWeight="Normal" FontSize="14" x:Name="textBoxTorSocksPort"/>
+                        </Grid>
+
+                        <Label Margin="0 6 0 0" Foreground="White" Content="{DynamicResource Lang.Tor.Bridges}"
+                            FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14"/>
+                        <TextBox x:Name="textBoxBridges" Height="80"
+                            AcceptsReturn="True" TextWrapping="Wrap"
+                            VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"
+                            FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="11"/>
+
+                        <WrapPanel Orientation="Horizontal" Margin="0 8 0 0">
+                            <Button x:Name="buttonUseDefaultBridges" Height="28" Margin="0 0 6 6" Padding="8 0"
+                                Content="{DynamicResource Lang.Tor.UseDefault}"
+                                Style="{StaticResource Button.Rectangle.Gray}"
+                                FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="12"
+                                Foreground="White" Click="OnUseDefaultBridgesClick"/>
+                            <Button x:Name="buttonFetchMoat" Height="28" Margin="0 0 6 6" Padding="8 0"
+                                Content="{DynamicResource Lang.Tor.FetchMoat}"
+                                Style="{StaticResource Button.Rectangle.Gray}"
+                                FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="12"
+                                Foreground="White" Click="OnFetchMoatClick"/>
+                            <Button x:Name="buttonCheckBridge" Height="28" Margin="0 0 6 6" Padding="8 0"
+                                Content="{DynamicResource Lang.Tor.Check}"
+                                Style="{StaticResource Button.Rectangle.Gray}"
+                                FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="12"
+                                Foreground="White" Click="OnCheckBridgeClick"/>
+                        </WrapPanel>
+
+                        <StackPanel x:Name="panelCaptcha" Visibility="Collapsed" Margin="0 6 0 0">
+                            <TextBlock Foreground="#C9C9C9" TextWrapping="Wrap" FontSize="12"
+                                FontFamily="{StaticResource SegoeUI}"
+                                Text="{DynamicResource Lang.Tor.Captcha.Hint}"/>
+                            <Image x:Name="imageCaptcha" Height="80" Margin="0 6 0 0" HorizontalAlignment="Left"/>
+                            <TextBox x:Name="textBoxCaptcha" Height="28" Margin="0 6 0 0"
+                                Style="{StaticResource TextBox.Default}"
+                                FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="13"/>
+                            <Button x:Name="buttonSubmitCaptcha" Height="28" Margin="0 6 0 0" Width="120"
+                                HorizontalAlignment="Left"
+                                Content="{DynamicResource Lang.Tor.Captcha.Submit}"
+                                Style="{StaticResource Button.Rectangle.Green}"
+                                FontFamily="{StaticResource SegoeUI}" FontWeight="Bold" FontSize="12"
+                                Foreground="{StaticResource Color.Gray}" Click="OnSubmitCaptchaClick"/>
+                        </StackPanel>
+
+                        <TextBlock x:Name="textBlockTorStatus" Margin="0 6 0 0" Foreground="#C9C9C9"
+                            TextWrapping="Wrap" FontFamily="{StaticResource SegoeUI}" FontSize="12"/>
+                    </StackPanel>
+                </ScrollViewer>
 
                 <StackPanel Grid.Row="1" Orientation="Horizontal" 
                     HorizontalAlignment="Right" Margin="15 0">

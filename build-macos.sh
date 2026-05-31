@@ -30,7 +30,7 @@ set -Eeuo pipefail
 
 # ─── Settings ─────────────────────────────────────────────────────────────────
 
-readonly VERSION="3.2.5.0"
+readonly VERSION="3.4.0.0"
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly WRAPPER_DIR="$SCRIPT_DIR/XRay-Wrapper"
 readonly APP_DIR="$SCRIPT_DIR/InvisibleGorilla-XRay"
@@ -48,6 +48,10 @@ readonly NUGET_PACKAGES_DIR="$SCRIPT_DIR/.nuget/packages"
 readonly GEOIP_URL="https://github.com/v2fly/geoip/releases/latest/download/geoip.dat"
 readonly GEOSITE_URL="https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat"
 
+# Tor Expert Bundle (tor daemon + pluggable transports). Version tracks Tor Browser.
+readonly TOR_BROWSER_VERSION="14.5.7"
+readonly TOR_BUNDLE_BASE_URL="https://archive.torproject.org/tor-package-archive/torbrowser"
+
 # Defaults
 STEP="all"
 CONFIGURATION="Release"
@@ -63,9 +67,11 @@ ARCH="$(uname -m)"
 if [[ "$ARCH" == "arm64" ]]; then
     RUNTIME="osx-arm64"
     GO_ARCH="arm64"
+    TOR_ARCH="macos-aarch64"
 else
     RUNTIME="osx-x64"
     GO_ARCH="amd64"
+    TOR_ARCH="macos-x86_64"
 fi
 
 # ─── Colors & output helpers ──────────────────────────────────────────────────
@@ -571,6 +577,53 @@ download_geo_files() {
     ok "geosite.dat ($geosite_size)"
 }
 
+# ─── Step 2b: Fetch Tor Expert Bundle ─────────────────────────────────────────
+
+fetch_tor_bundle() {
+    step_header "Step 2b: Fetch Tor Expert Bundle (tor + pluggable transports)"
+
+    local tor_dir="$APP_DIR/Tor"
+    mkdir -p "$tor_dir"
+
+    if [[ -f "$tor_dir/tor" ]]; then
+        info "tor already present, skipping"
+        return 0
+    fi
+
+    local bundle="tor-expert-bundle-${TOR_ARCH}-${TOR_BROWSER_VERSION}.tar.gz"
+    local url="$TOR_BUNDLE_BASE_URL/$TOR_BROWSER_VERSION/$bundle"
+    local tmp="/tmp/$bundle"
+    local extract="/tmp/tor-bundle-extract-$$"
+
+    if ! download_file "$url" "$tmp" "Downloading $bundle..." 2000000; then
+        err "Failed to download Tor Expert Bundle; Tor/bridges mode will be unavailable."
+        err "Download manually from https://www.torproject.org/download/tor/ into $tor_dir"
+        return 0
+    fi
+
+    rm -rf "$extract"; mkdir -p "$extract"
+    tar -xzf "$tmp" -C "$extract"
+    rm -f "$tmp"
+
+    cp "$extract/tor/tor" "$tor_dir/tor" 2>/dev/null && chmod +x "$tor_dir/tor"
+    for pt in lyrebird snowflake-client conjure-client; do
+        if [[ -f "$extract/tor/pluggable_transports/$pt" ]]; then
+            cp "$extract/tor/pluggable_transports/$pt" "$tor_dir/$pt"
+            chmod +x "$tor_dir/$pt"
+        fi
+    done
+    for geo in geoip geoip6; do
+        [[ -f "$extract/data/$geo" ]] && cp "$extract/data/$geo" "$tor_dir/$geo"
+    done
+    rm -rf "$extract"
+
+    if [[ -f "$tor_dir/tor" ]]; then
+        ok "Tor Expert Bundle → $tor_dir"
+    else
+        err "tor binary not found after extraction (check TOR_BROWSER_VERSION=$TOR_BROWSER_VERSION)"
+    fi
+}
+
 # ─── Step 3: Build .NET Avalonia application ─────────────────────────────────
 
 build_dotnet_app() {
@@ -756,6 +809,21 @@ package_bundle() {
         fi
     done
 
+    # Copy Tor daemon + pluggable transports (RUNTIME_ROOT is Contents/MacOS).
+    local tor_src_dir="$APP_DIR/Tor"
+    if [[ -f "$tor_src_dir/tor" ]]; then
+        mkdir -p "$macos_dir/Tor"
+        cp -R "$tor_src_dir/." "$macos_dir/Tor/"
+        chmod +x "$macos_dir/Tor/tor" 2>/dev/null || true
+        for pt in lyrebird snowflake-client conjure-client; do
+            chmod +x "$macos_dir/Tor/$pt" 2>/dev/null || true
+        done
+        ok "Bundled: Tor + pluggable transports"
+        found_items=$((found_items + 1))
+    else
+        info "Tor bundle not found; Tor/bridges mode will be unavailable (run step 'tor')"
+    fi
+
     # Generate app icon
     generate_app_icon "$resources/AppIcon.icns"
     if [[ -f "$resources/AppIcon.icns" ]]; then
@@ -897,10 +965,10 @@ fi
 
 # Validate step
 case "$STEP" in
-    all|go|geo|dotnet|bundle) ;;
+    all|go|geo|tor|dotnet|bundle) ;;
     *)
         err "Unknown step: $STEP"
-        err "Valid steps: all, go, geo, dotnet, bundle"
+        err "Valid steps: all, go, geo, tor, dotnet, bundle"
         exit 1
         ;;
 esac
@@ -911,11 +979,13 @@ case "$STEP" in
     all)
         build_go_wrapper
         download_geo_files
+        fetch_tor_bundle
         build_dotnet_app
         package_bundle
         ;;
     go)     build_go_wrapper ;;
     geo)    download_geo_files ;;
+    tor)    fetch_tor_bundle ;;
     dotnet) build_dotnet_app ;;
     bundle) package_bundle ;;
 esac

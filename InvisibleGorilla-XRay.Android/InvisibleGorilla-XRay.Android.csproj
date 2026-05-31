@@ -9,8 +9,8 @@
     <SupportedOSPlatformVersion>24</SupportedOSPlatformVersion>
     <ApplicationId>io.invisiblegorilla.xray</ApplicationId>
     <ApplicationTitle>Invisible Gorilla XRay</ApplicationTitle>
-    <ApplicationVersion>6</ApplicationVersion>
-    <ApplicationDisplayVersion>3.3.3</ApplicationDisplayVersion>
+    <ApplicationVersion>7</ApplicationVersion>
+    <ApplicationDisplayVersion>3.4.0</ApplicationDisplayVersion>
     <AndroidPackageFormats>apk</AndroidPackageFormats>
     <AndroidUseSharedRuntime>false</AndroidUseSharedRuntime>
     <AndroidManifest>AndroidManifest.xml</AndroidManifest>
@@ -53,6 +53,26 @@
     </AndroidNativeLibrary>
     <AndroidNativeLibrary Include="Assets\Runtime\x86_64\libXRayCore.so"
                           Condition="Exists('Assets\Runtime\x86_64\libXRayCore.so')">
+      <Abi>x86_64</Abi>
+    </AndroidNativeLibrary>
+
+    <!-- Tor daemon + lyrebird (obfs4/meek/snowflake/webtunnel) from the Tor Expert Bundle.
+         Shipped as lib*.so so Android extracts them into nativeLibraryDir with exec permission
+         (the only supported location to execute binaries on modern Android). -->
+    <AndroidNativeLibrary Include="Assets\Runtime\arm64-v8a\libTor.so"
+                          Condition="Exists('Assets\Runtime\arm64-v8a\libTor.so')">
+      <Abi>arm64-v8a</Abi>
+    </AndroidNativeLibrary>
+    <AndroidNativeLibrary Include="Assets\Runtime\arm64-v8a\liblyrebird.so"
+                          Condition="Exists('Assets\Runtime\arm64-v8a\liblyrebird.so')">
+      <Abi>arm64-v8a</Abi>
+    </AndroidNativeLibrary>
+    <AndroidNativeLibrary Include="Assets\Runtime\x86_64\libTor.so"
+                          Condition="Exists('Assets\Runtime\x86_64\libTor.so')">
+      <Abi>x86_64</Abi>
+    </AndroidNativeLibrary>
+    <AndroidNativeLibrary Include="Assets\Runtime\x86_64\liblyrebird.so"
+                          Condition="Exists('Assets\Runtime\x86_64\liblyrebird.so')">
       <Abi>x86_64</Abi>
     </AndroidNativeLibrary>
   </ItemGroup>

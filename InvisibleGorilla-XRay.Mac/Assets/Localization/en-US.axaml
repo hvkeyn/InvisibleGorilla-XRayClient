@@ -39,6 +39,7 @@
     <x:String x:Key="Lang.Window.Settings.Basic">Basic</x:String>
     <x:String x:Key="Lang.Window.Settings.Port">Port</x:String>
     <x:String x:Key="Lang.Window.Settings.TUN">TUN</x:String>
+    <x:String x:Key="Lang.Window.Settings.Tor">Tor</x:String>
     <x:String x:Key="Lang.Window.Settings.Log">Log</x:String>
     <x:String x:Key="Lang.Window.Settings.Language">Language</x:String>
     <x:String x:Key="Lang.Window.Settings.Mode">Mode</x:String>
@@ -58,6 +59,31 @@
     <x:String x:Key="Lang.Window.Settings.LogPath">Log file path</x:String>
     <x:String x:Key="Lang.Window.Settings.Confirm">CONFIRM</x:String>
     <x:String x:Key="Lang.Window.Settings.Cancel">CANCEL</x:String>
+
+    <!-- Tor / Bridges -->
+    <x:String x:Key="Lang.Tor.Enable">Route traffic through Tor</x:String>
+    <x:String x:Key="Lang.Tor.Mode">Mode</x:String>
+    <x:String x:Key="Lang.Tor.BridgeType">Bridge type</x:String>
+    <x:String x:Key="Lang.Tor.SocksPort">Tor SOCKS port</x:String>
+    <x:String x:Key="Lang.Tor.Bridges">Bridge lines</x:String>
+    <x:String x:Key="Lang.Tor.Bridges.Hint">One bridge per line (obfs4 / webtunnel / meek). Leave empty to use built-in bridges.</x:String>
+    <x:String x:Key="Lang.Tor.UseDefault">Use built-in</x:String>
+    <x:String x:Key="Lang.Tor.FetchMoat">Request bridges</x:String>
+    <x:String x:Key="Lang.Tor.Check">Check</x:String>
+    <x:String x:Key="Lang.Tor.Captcha.Hint">Solve the CAPTCHA to receive fresh bridges:</x:String>
+    <x:String x:Key="Lang.Tor.Captcha.Input">Enter the characters from the image</x:String>
+    <x:String x:Key="Lang.Tor.Captcha.Submit">Submit</x:String>
+    <x:String x:Key="Lang.Tor.Status.Ready">Tor is bundled and ready.</x:String>
+    <x:String x:Key="Lang.Tor.Status.Unavailable">Tor binary is not bundled in this build.</x:String>
+    <x:String x:Key="Lang.Tor.Status.LoadedDefaults">Loaded {0} built-in bridge(s).</x:String>
+    <x:String x:Key="Lang.Tor.Status.Checking">Checking bridge…</x:String>
+    <x:String x:Key="Lang.Tor.Status.CheckOk">Bridge OK — connected in {0} ms.</x:String>
+    <x:String x:Key="Lang.Tor.Status.CheckFail">Bridge check failed: {0}</x:String>
+    <x:String x:Key="Lang.Tor.Status.FetchingCaptcha">Requesting CAPTCHA…</x:String>
+    <x:String x:Key="Lang.Tor.Status.CaptchaReady">Solve the CAPTCHA below.</x:String>
+    <x:String x:Key="Lang.Tor.Status.SubmittingCaptcha">Submitting solution…</x:String>
+    <x:String x:Key="Lang.Tor.Status.MoatBridges">Received {0} bridge(s).</x:String>
+    <x:String x:Key="Lang.Tor.Status.MoatFail">Could not fetch bridges: {0}</x:String>
 
     <x:String x:Key="Lang.Window.About.Title">About</x:String>
     <x:String x:Key="Lang.Window.About.WindowTitle">About</x:String>

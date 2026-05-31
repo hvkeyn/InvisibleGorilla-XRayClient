@@ -2,11 +2,13 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Input;
 
 namespace InvisibleGorillaXRay.Mac.Views
@@ -15,6 +17,7 @@ namespace InvisibleGorillaXRay.Mac.Views
     using InvisibleGorillaXRay.Mac.Services;
     using InvisibleGorillaXRay.Services;
     using InvisibleGorillaXRay.Services.Analytics.SettingsWindow;
+    using InvisibleGorillaXRay.Handlers.Tor;
 
     public partial class SettingsWindow : Window
     {
@@ -44,6 +47,24 @@ namespace InvisibleGorillaXRay.Mac.Views
             { LogLevel.WARNING, "Warning" },
             { LogLevel.ERROR, "Error" }
         };
+
+        private static readonly Dictionary<TorMode, string> TorModes = new()
+        {
+            { TorMode.ONLY_TOR, "Tor only" },
+            { TorMode.XRAY_OVER_TOR, "Xray over Tor" }
+        };
+
+        private static readonly Dictionary<BridgeType, string> BridgeTypes = new()
+        {
+            { BridgeType.NONE, "None (direct)" },
+            { BridgeType.OBFS4, "obfs4" },
+            { BridgeType.SNOWFLAKE, "Snowflake" },
+            { BridgeType.MEEK_AZURE, "meek-azure" },
+            { BridgeType.WEBTUNNEL, "WebTunnel" }
+        };
+
+        private readonly TorManager torManager = new TorManager();
+        private MoatChallenge activeMoatChallenge;
 
         private Func<string> getLanguage;
         private Func<Mode> getMode;
@@ -96,6 +117,14 @@ namespace InvisibleGorillaXRay.Mac.Views
             comboBoxLogLevel.ItemsSource = LogLevels.ToList();
             comboBoxLogLevel.DisplayMemberBinding = new Avalonia.Data.Binding("Value");
             comboBoxLogLevel.SelectedValueBinding = new Avalonia.Data.Binding("Key");
+
+            comboBoxTorMode.ItemsSource = TorModes.ToList();
+            comboBoxTorMode.DisplayMemberBinding = new Avalonia.Data.Binding("Value");
+            comboBoxTorMode.SelectedValueBinding = new Avalonia.Data.Binding("Key");
+
+            comboBoxBridgeType.ItemsSource = BridgeTypes.ToList();
+            comboBoxBridgeType.DisplayMemberBinding = new Avalonia.Data.Binding("Value");
+            comboBoxBridgeType.SelectedValueBinding = new Avalonia.Data.Binding("Key");
         }
 
         public void Setup(
@@ -171,6 +200,46 @@ namespace InvisibleGorillaXRay.Mac.Views
             SelectComboBoxItem(comboBoxLogLevel, getLogLevel.Invoke());
             textBoxLogPath.Text = Path.GetFullPath(getLogPath.Invoke());
             RefreshAppRulesSummary();
+
+            LoadTorSettings();
+        }
+
+        private void LoadTorSettings()
+        {
+            TorSettings tor = getUserSettings.Invoke().GetTorSettings();
+            checkBoxTorEnabled.IsChecked = tor.GetEnabled();
+            SelectComboBoxItem(comboBoxTorMode, tor.GetMode());
+            SelectComboBoxItem(comboBoxBridgeType, tor.GetBridgeType());
+            textBoxTorSocksPort.Text = tor.GetSocksPort().ToString();
+            textBoxBridges.Text = string.Join(Environment.NewLine, tor.GetBridgeLines());
+            textBlockTorStatus.Text = torManager.IsAvailable
+                ? Localize("Lang.Tor.Status.Ready")
+                : Localize("Lang.Tor.Status.Unavailable");
+        }
+
+        private TorSettings BuildTorSettingsFromUi()
+        {
+            return new TorSettings
+            {
+                Enabled = checkBoxTorEnabled.IsChecked == true,
+                Mode = GetComboBoxSelectedKey<TorMode>(comboBoxTorMode),
+                BridgeType = GetComboBoxSelectedKey<BridgeType>(comboBoxBridgeType),
+                SocksPort = int.TryParse(textBoxTorSocksPort.Text, out int sp) ? sp : 9250,
+                ControlPort = getUserSettings.Invoke().GetTorSettings().GetControlPort(),
+                BridgeLines = SplitBridgeLines(textBoxBridges.Text)
+            };
+        }
+
+        private static List<string> SplitBridgeLines(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return new List<string>();
+
+            return text
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Trim())
+                .Where(line => line.Length > 0)
+                .ToList();
         }
 
         private void SelectComboBoxItem<T>(ComboBox comboBox, T key)
@@ -347,12 +416,117 @@ namespace InvisibleGorillaXRay.Mac.Views
             panelTun.IsVisible = true;
         }
 
+        private void OnTorTabClick(object sender, RoutedEventArgs e)
+        {
+            EnableAllTabs();
+            HideAllPanels();
+            buttonTorTab.IsEnabled = false;
+            panelTor.IsVisible = true;
+        }
+
         private void OnLogTabClick(object sender, RoutedEventArgs e)
         {
             EnableAllTabs();
             HideAllPanels();
             buttonLogTab.IsEnabled = false;
             panelLog.IsVisible = true;
+        }
+
+        private void OnUseDefaultBridgesClick(object sender, RoutedEventArgs e)
+        {
+            BridgeType type = GetComboBoxSelectedKey<BridgeType>(comboBoxBridgeType);
+            if (type == BridgeType.NONE)
+            {
+                SelectComboBoxItem(comboBoxBridgeType, BridgeType.OBFS4);
+                type = BridgeType.OBFS4;
+            }
+
+            List<string> defaults = DefaultBridges.ForType(type);
+            textBoxBridges.Text = string.Join(Environment.NewLine, defaults);
+            textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.LoadedDefaults"), defaults.Count);
+        }
+
+        private async void OnCheckBridgeClick(object sender, RoutedEventArgs e)
+        {
+            if (!torManager.IsAvailable)
+            {
+                textBlockTorStatus.Text = Localize("Lang.Tor.Status.Unavailable");
+                return;
+            }
+
+            BridgeType type = GetComboBoxSelectedKey<BridgeType>(comboBoxBridgeType);
+            List<string> lines = SplitBridgeLines(textBoxBridges.Text);
+            string firstLine = lines.FirstOrDefault() ?? string.Empty;
+
+            buttonCheckBridge.IsEnabled = false;
+            textBlockTorStatus.Text = Localize("Lang.Tor.Status.Checking");
+
+            BridgeCheckResult result = await Task.Run(() => torManager.CheckBridge(type, firstLine));
+
+            textBlockTorStatus.Text = result.Success
+                ? string.Format(Localize("Lang.Tor.Status.CheckOk"), result.LatencyMs)
+                : string.Format(Localize("Lang.Tor.Status.CheckFail"), result.Message);
+            buttonCheckBridge.IsEnabled = true;
+        }
+
+        private async void OnFetchMoatClick(object sender, RoutedEventArgs e)
+        {
+            buttonFetchMoat.IsEnabled = false;
+            textBlockTorStatus.Text = Localize("Lang.Tor.Status.FetchingCaptcha");
+
+            string transport = GetComboBoxSelectedKey<BridgeType>(comboBoxBridgeType) == BridgeType.OBFS4
+                ? "obfs4"
+                : "obfs4";
+
+            MoatClient client = new MoatClient();
+            MoatResult result = await client.RequestChallengeAsync(transport);
+
+            if (result.Success && result.Challenge != null)
+            {
+                activeMoatChallenge = result.Challenge;
+                try
+                {
+                    using MemoryStream stream = new MemoryStream(result.Challenge.ImagePng);
+                    imageCaptcha.Source = new Bitmap(stream);
+                }
+                catch { }
+                panelCaptcha.IsVisible = true;
+                textBoxCaptcha.Text = string.Empty;
+                textBlockTorStatus.Text = Localize("Lang.Tor.Status.CaptchaReady");
+            }
+            else
+            {
+                textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.MoatFail"), result.Error);
+            }
+
+            buttonFetchMoat.IsEnabled = true;
+        }
+
+        private async void OnSubmitCaptchaClick(object sender, RoutedEventArgs e)
+        {
+            if (activeMoatChallenge == null)
+                return;
+
+            buttonSubmitCaptcha.IsEnabled = false;
+            textBlockTorStatus.Text = Localize("Lang.Tor.Status.SubmittingCaptcha");
+
+            MoatClient client = new MoatClient();
+            MoatResult result = await client.SubmitSolutionAsync(activeMoatChallenge, textBoxCaptcha.Text ?? string.Empty);
+
+            if (result.Success && result.Bridges.Count > 0)
+            {
+                SelectComboBoxItem(comboBoxBridgeType, BridgeType.OBFS4);
+                textBoxBridges.Text = string.Join(Environment.NewLine, result.Bridges);
+                panelCaptcha.IsVisible = false;
+                activeMoatChallenge = null;
+                textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.MoatBridges"), result.Bridges.Count);
+            }
+            else
+            {
+                textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.MoatFail"), result.Error);
+            }
+
+            buttonSubmitCaptcha.IsEnabled = true;
         }
 
         private void OnModeComboBoxSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -388,6 +562,8 @@ namespace InvisibleGorillaXRay.Mac.Views
                 appRuleTemplates: currentSettings.GetAppRuleTemplates(),
                 appRuleTemplateBindings: currentSettings.GetAppRuleTemplateBindings()
             );
+
+            userSettings.Tor = BuildTorSettingsFromUi();
 
             SendRunAtStartupActivationEvent(userSettings);
             ForceSendAnalyticsActivationEvent(userSettings);
@@ -492,6 +668,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             panelBasic.IsVisible = false;
             panelPort.IsVisible = false;
             panelTun.IsVisible = false;
+            panelTor.IsVisible = false;
             panelLog.IsVisible = false;
         }
 
@@ -500,6 +677,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             buttonBasicTab.IsEnabled = true;
             buttonPortTab.IsEnabled = true;
             buttonTunTab.IsEnabled = true;
+            buttonTorTab.IsEnabled = true;
             buttonLogTab.IsEnabled = true;
         }
     }

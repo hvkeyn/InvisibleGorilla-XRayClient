@@ -39,6 +39,7 @@
     <x:String x:Key="Lang.Window.Settings.Basic">Основные</x:String>
     <x:String x:Key="Lang.Window.Settings.Port">Порт</x:String>
     <x:String x:Key="Lang.Window.Settings.TUN">TUN</x:String>
+    <x:String x:Key="Lang.Window.Settings.Tor">Tor</x:String>
     <x:String x:Key="Lang.Window.Settings.Log">Журнал</x:String>
     <x:String x:Key="Lang.Window.Settings.Language">Язык</x:String>
     <x:String x:Key="Lang.Window.Settings.Mode">Режим</x:String>
@@ -58,6 +59,31 @@
     <x:String x:Key="Lang.Window.Settings.LogPath">Путь к файлу журнала</x:String>
     <x:String x:Key="Lang.Window.Settings.Confirm">ПОДТВЕРДИТЬ</x:String>
     <x:String x:Key="Lang.Window.Settings.Cancel">ОТМЕНА</x:String>
+
+    <!-- Tor / Мосты -->
+    <x:String x:Key="Lang.Tor.Enable">Пускать трафик через Tor</x:String>
+    <x:String x:Key="Lang.Tor.Mode">Режим</x:String>
+    <x:String x:Key="Lang.Tor.BridgeType">Тип моста</x:String>
+    <x:String x:Key="Lang.Tor.SocksPort">SOCKS-порт Tor</x:String>
+    <x:String x:Key="Lang.Tor.Bridges">Строки мостов</x:String>
+    <x:String x:Key="Lang.Tor.Bridges.Hint">По одному мосту в строке (obfs4 / webtunnel / meek). Пусто — встроенные мосты.</x:String>
+    <x:String x:Key="Lang.Tor.UseDefault">Встроенные</x:String>
+    <x:String x:Key="Lang.Tor.FetchMoat">Запросить мосты</x:String>
+    <x:String x:Key="Lang.Tor.Check">Проверить</x:String>
+    <x:String x:Key="Lang.Tor.Captcha.Hint">Решите CAPTCHA, чтобы получить свежие мосты:</x:String>
+    <x:String x:Key="Lang.Tor.Captcha.Input">Введите символы с картинки</x:String>
+    <x:String x:Key="Lang.Tor.Captcha.Submit">Отправить</x:String>
+    <x:String x:Key="Lang.Tor.Status.Ready">Tor встроен и готов.</x:String>
+    <x:String x:Key="Lang.Tor.Status.Unavailable">Бинарник Tor не включён в эту сборку.</x:String>
+    <x:String x:Key="Lang.Tor.Status.LoadedDefaults">Загружено встроенных мостов: {0}.</x:String>
+    <x:String x:Key="Lang.Tor.Status.Checking">Проверка моста…</x:String>
+    <x:String x:Key="Lang.Tor.Status.CheckOk">Мост работает — подключение за {0} мс.</x:String>
+    <x:String x:Key="Lang.Tor.Status.CheckFail">Проверка моста не удалась: {0}</x:String>
+    <x:String x:Key="Lang.Tor.Status.FetchingCaptcha">Запрос CAPTCHA…</x:String>
+    <x:String x:Key="Lang.Tor.Status.CaptchaReady">Решите CAPTCHA ниже.</x:String>
+    <x:String x:Key="Lang.Tor.Status.SubmittingCaptcha">Отправка решения…</x:String>
+    <x:String x:Key="Lang.Tor.Status.MoatBridges">Получено мостов: {0}.</x:String>
+    <x:String x:Key="Lang.Tor.Status.MoatFail">Не удалось получить мосты: {0}</x:String>
 
     <x:String x:Key="Lang.Window.About.Title">О программе</x:String>
     <x:String x:Key="Lang.Window.About.WindowTitle">О программе</x:String>

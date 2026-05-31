@@ -45,6 +45,7 @@ namespace InvisibleGorillaXRay.Handlers
             this.userSettings.AppRules = CloneAppRules(userSettings.AppRules);
             this.userSettings.AppRuleTemplates = CloneAppRuleTemplates(userSettings.AppRuleTemplates);
             this.userSettings.AppRuleTemplateBindings = CloneAppRuleTemplateBindings(userSettings.AppRuleTemplateBindings);
+            this.userSettings.Tor = userSettings.Tor ?? this.userSettings.Tor ?? new TorSettings();
 
             UpdateStartupSetting();
             SaveUserSettings();

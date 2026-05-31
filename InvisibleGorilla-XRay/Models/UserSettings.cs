@@ -80,6 +80,9 @@ namespace InvisibleGorillaXRay.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
         public List<AppRuleTemplateBinding> AppRuleTemplateBindings;
 
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public TorSettings Tor;
+
         public UserSettings()
         {
             this.ClientId = "";
@@ -104,6 +107,7 @@ namespace InvisibleGorillaXRay.Models
             this.AppRules = new List<AppRule>();
             this.AppRuleTemplates = new List<AppRuleTemplate>();
             this.AppRuleTemplateBindings = new List<AppRuleTemplateBinding>();
+            this.Tor = new TorSettings();
         }
 
         public UserSettings(
@@ -149,7 +153,10 @@ namespace InvisibleGorillaXRay.Models
             this.AppRules = NormalizeAppRules(appRules);
             this.AppRuleTemplates = NormalizeAppRuleTemplates(appRuleTemplates);
             this.AppRuleTemplateBindings = NormalizeTemplateBindings(appRuleTemplateBindings);
+            this.Tor = new TorSettings();
         }
+
+        public TorSettings GetTorSettings() => Tor ??= new TorSettings();
 
         public string GetClientId() => ClientId;
 
