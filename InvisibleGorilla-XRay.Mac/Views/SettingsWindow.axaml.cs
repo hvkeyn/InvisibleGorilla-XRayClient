@@ -529,6 +529,83 @@ namespace InvisibleGorillaXRay.Mac.Views
             buttonSubmitCaptcha.IsEnabled = true;
         }
 
+        private async void OnAskTorClick(object sender, RoutedEventArgs e)
+        {
+            buttonAskTor.IsEnabled = false;
+            textBlockTorStatus.Text = Localize("Lang.Tor.Status.AskingTor");
+
+            MoatResult result = await new MoatClient().GetCircumventionSettingsAsync();
+
+            if (result.Success && result.Bridges.Count > 0)
+            {
+                BridgeType type = MapTransportToBridgeType(result.Transport);
+                SelectComboBoxItem(comboBoxBridgeType, type);
+                textBoxBridges.Text = string.Join(Environment.NewLine, result.Bridges);
+                checkBoxTorEnabled.IsChecked = true;
+                textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.AskTorOk"), result.Bridges.Count, type);
+            }
+            else
+            {
+                textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.MoatFail"), result.Error);
+            }
+
+            buttonAskTor.IsEnabled = true;
+        }
+
+        private void OnSnowflakeClick(object sender, RoutedEventArgs e)
+            => ApplyBuiltinMethod(BridgeType.SNOWFLAKE, DefaultBridges.Snowflake);
+
+        private void OnSnowflakeAmpClick(object sender, RoutedEventArgs e)
+            => ApplyBuiltinMethod(BridgeType.SNOWFLAKE, DefaultBridges.SnowflakeAmp);
+
+        private void OnMeekAzureClick(object sender, RoutedEventArgs e)
+            => ApplyBuiltinMethod(BridgeType.MEEK_AZURE, DefaultBridges.MeekAzure);
+
+        private void ApplyBuiltinMethod(BridgeType type, string bridgeLine)
+        {
+            SelectComboBoxItem(comboBoxBridgeType, type);
+            textBoxBridges.Text = bridgeLine;
+            checkBoxTorEnabled.IsChecked = true;
+            textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.MethodSelected"), type);
+        }
+
+        private void OnBridgesEmailClick(object sender, RoutedEventArgs e)
+        {
+            OpenExternalUrl(BridgeRequestLinks.BuildEmailUrl("obfs4"));
+            textBlockTorStatus.Text = Localize("Lang.Tor.Status.RequestSent");
+        }
+
+        private void OnBridgesTelegramClick(object sender, RoutedEventArgs e)
+        {
+            OpenExternalUrl(BridgeRequestLinks.TelegramBot);
+            textBlockTorStatus.Text = Localize("Lang.Tor.Status.RequestSent");
+        }
+
+        private static BridgeType MapTransportToBridgeType(string transport)
+        {
+            switch ((transport ?? string.Empty).Trim().ToLowerInvariant())
+            {
+                case "snowflake": return BridgeType.SNOWFLAKE;
+                case "meek": case "meek-azure": case "meek_lite": return BridgeType.MEEK_AZURE;
+                case "webtunnel": return BridgeType.WEBTUNNEL;
+                default: return BridgeType.OBFS4;
+            }
+        }
+
+        private static void OpenExternalUrl(string url)
+        {
+            try
+            {
+                if (OperatingSystem.IsMacOS())
+                    System.Diagnostics.Process.Start("open", url);
+                else if (OperatingSystem.IsLinux())
+                    System.Diagnostics.Process.Start("xdg-open", url);
+                else
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            catch { }
+        }
+
         private void OnModeComboBoxSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             Mode mode = GetComboBoxSelectedKey<Mode>(comboBoxMode);

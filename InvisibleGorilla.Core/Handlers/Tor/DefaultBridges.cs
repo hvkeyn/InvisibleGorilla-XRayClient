@@ -20,6 +20,17 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             "ice=stun:stun.l.google.com:19302,stun:stun.antisip.com:3478 " +
             "utls-imitate=hellorandomizedalpn";
 
+        // Snowflake via AMP-cache rendezvous (domain-fronted through Google AMP).
+        // Useful where the default snowflake broker rendezvous is blocked.
+        public const string SnowflakeAmp =
+            "snowflake 192.0.2.3:80 2B280B23E1107BB62ABFC40DDCC8824814F80A72 " +
+            "fingerprint=2B280B23E1107BB62ABFC40DDCC8824814F80A72 " +
+            "url=https://1098762253.rsc.cdn77.org/ " +
+            "ampcache=https://cdn.ampproject.org/ " +
+            "front=www.google.com " +
+            "ice=stun:stun.l.google.com:19302,stun:stun.antisip.com:3478 " +
+            "utls-imitate=hellorandomizedalpn";
+
         // meek-azure domain-fronted bridge (built into Tor Browser).
         public const string MeekAzure =
             "meek_lite 192.0.2.20:80 97700DFE9F483596DDA6264C4D7DF7641E1E39CE " +

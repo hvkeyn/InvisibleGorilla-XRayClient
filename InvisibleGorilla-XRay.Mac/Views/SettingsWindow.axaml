@@ -321,6 +321,47 @@
                             Content="{DynamicResource Lang.Tor.Enable}"
                             FontWeight="Normal" FontSize="14"/>
 
+                        <TextBlock Foreground="White" Margin="0,4,0,0"
+                            Text="{DynamicResource Lang.Tor.QuickConnect}"
+                            FontWeight="SemiBold" FontSize="14"/>
+                        <WrapPanel Orientation="Horizontal">
+                            <Button x:Name="buttonAskTor" Height="28" Margin="0,0,6,6"
+                                Content="{DynamicResource Lang.Tor.AskTor}"
+                                Theme="{StaticResource Button.Rectangle.Green}"
+                                FontWeight="Bold" FontSize="12"
+                                Foreground="{StaticResource Color.Gray}"
+                                Click="OnAskTorClick"/>
+                            <Button x:Name="buttonSnowflake" Height="28" Margin="0,0,6,6"
+                                Content="{DynamicResource Lang.Tor.Method.Snowflake}"
+                                Theme="{StaticResource Button.Rectangle.Gray}"
+                                FontWeight="Normal" FontSize="12" Foreground="White"
+                                Click="OnSnowflakeClick"/>
+                            <Button x:Name="buttonSnowflakeAmp" Height="28" Margin="0,0,6,6"
+                                Content="{DynamicResource Lang.Tor.Method.SnowflakeAmp}"
+                                Theme="{StaticResource Button.Rectangle.Gray}"
+                                FontWeight="Normal" FontSize="12" Foreground="White"
+                                Click="OnSnowflakeAmpClick"/>
+                            <Button x:Name="buttonMeekAzure" Height="28" Margin="0,0,6,6"
+                                Content="{DynamicResource Lang.Tor.Method.Meek}"
+                                Theme="{StaticResource Button.Rectangle.Gray}"
+                                FontWeight="Normal" FontSize="12" Foreground="White"
+                                Click="OnMeekAzureClick"/>
+                        </WrapPanel>
+                        <TextBlock Foreground="#C9C9C9" TextWrapping="Wrap" FontSize="12"
+                            Text="{DynamicResource Lang.Tor.GetBridges}"/>
+                        <WrapPanel Orientation="Horizontal">
+                            <Button x:Name="buttonBridgesEmail" Height="28" Margin="0,0,6,6"
+                                Content="{DynamicResource Lang.Tor.GetBridges.Email}"
+                                Theme="{StaticResource Button.Rectangle.Gray}"
+                                FontWeight="Normal" FontSize="12" Foreground="White"
+                                Click="OnBridgesEmailClick"/>
+                            <Button x:Name="buttonBridgesTelegram" Height="28" Margin="0,0,6,6"
+                                Content="{DynamicResource Lang.Tor.GetBridges.Telegram}"
+                                Theme="{StaticResource Button.Rectangle.Gray}"
+                                FontWeight="Normal" FontSize="12" Foreground="White"
+                                Click="OnBridgesTelegramClick"/>
+                        </WrapPanel>
+
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>

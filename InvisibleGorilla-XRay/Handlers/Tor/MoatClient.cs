@@ -25,6 +25,8 @@ namespace InvisibleGorillaXRay.Handlers.Tor
         public string Error;
         public List<string> Bridges = new List<string>();
         public MoatChallenge Challenge;
+        // Transport family recommended by the circumvention API ("obfs4", "snowflake", ...).
+        public string Transport;
     }
 
     /// <summary>
@@ -204,6 +206,130 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 result.Error = ex.Message;
                 return result;
             }
+        }
+
+        /// <summary>
+        /// "Ask Tor" / Smart Connect: asks the circumvention API for the bridges recommended
+        /// for the user's location and returns them directly — no CAPTCHA required. When the
+        /// server has no country-specific recommendation it falls back to built-in bridges.
+        /// </summary>
+        /// <param name="country">ISO country code (e.g. "ru"); null lets the server geolocate.</param>
+        public async Task<MoatResult> GetCircumventionSettingsAsync(string country = null, string preferredTransport = null)
+        {
+            var result = new MoatResult();
+            try
+            {
+                var inner = new JObject();
+                if (!string.IsNullOrWhiteSpace(country))
+                    inner["country"] = country.Trim().ToLowerInvariant();
+                if (!string.IsNullOrWhiteSpace(preferredTransport))
+                    inner["transports"] = new JArray { preferredTransport };
+
+                JObject root = await PostJsonAsync($"{MoatBaseUrl}/circumvention/settings", inner).ConfigureAwait(false);
+                if (root == null)
+                {
+                    result.Error = "No response from the circumvention service.";
+                    return result;
+                }
+
+                JToken errors = root["errors"]?[0];
+                if (errors != null)
+                {
+                    result.Error = (string)errors["detail"] ?? "Circumvention API error.";
+                    return result;
+                }
+
+                if (root["settings"] is JArray settings && settings.Count > 0)
+                {
+                    foreach (JToken setting in settings)
+                    {
+                        JToken bridges = setting["bridges"];
+                        if (bridges == null)
+                            continue;
+
+                        string type = (string)bridges["type"];
+                        if (bridges["bridge_strings"] is JArray strings)
+                        {
+                            foreach (JToken s in strings)
+                            {
+                                string line = (string)s;
+                                if (!string.IsNullOrWhiteSpace(line))
+                                    result.Bridges.Add(line.Trim());
+                            }
+                        }
+
+                        if (result.Bridges.Count > 0)
+                        {
+                            result.Transport = type;
+                            result.Success = true;
+                            return result;
+                        }
+                    }
+                }
+
+                // No location-specific recommendation: fall back to built-in bridges.
+                return await GetBuiltinBridgesAsync(preferredTransport ?? "obfs4").ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                result.Error = ex.Message;
+                return result;
+            }
+        }
+
+        /// <summary>
+        /// Fetches the current built-in bridge lines for a given transport from the
+        /// circumvention API (no CAPTCHA). Falls back to bundled defaults on failure.
+        /// </summary>
+        public async Task<MoatResult> GetBuiltinBridgesAsync(string transport = "obfs4")
+        {
+            var result = new MoatResult { Transport = transport };
+            try
+            {
+                JObject root = await PostJsonAsync($"{MoatBaseUrl}/circumvention/builtin", new JObject()).ConfigureAwait(false);
+                if (root != null && root[transport] is JArray strings && strings.Count > 0)
+                {
+                    foreach (JToken s in strings)
+                    {
+                        string line = (string)s;
+                        if (!string.IsNullOrWhiteSpace(line))
+                            result.Bridges.Add(line.Trim());
+                    }
+                }
+
+                result.Success = result.Bridges.Count > 0;
+                if (!result.Success)
+                    result.Error = "Built-in bridges were unavailable.";
+                return result;
+            }
+            catch (Exception ex)
+            {
+                result.Error = ex.Message;
+                return result;
+            }
+        }
+
+        private async Task<JObject> PostJsonAsync(string url, JObject inner)
+        {
+            var body = new JObject { ["data"] = new JArray { inner } };
+
+            using var client = CreateClient();
+            using var content = new StringContent(body.ToString(), Encoding.UTF8);
+            content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(JsonApiContentType);
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
+            request.Headers.TryAddWithoutValidation("Accept", JsonApiContentType);
+
+            var response = await client.SendAsync(request).ConfigureAwait(false);
+            string json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(json))
+                return null;
+
+            JObject root = JObject.Parse(json);
+            // Some deployments wrap the payload in a JSON:API "data" array.
+            if (root["data"]?[0] is JObject wrapped && root["settings"] == null && root["errors"] == null)
+                return wrapped;
+            return root;
         }
     }
 }

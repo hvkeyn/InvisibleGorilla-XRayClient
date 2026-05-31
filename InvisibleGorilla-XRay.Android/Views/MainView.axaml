@@ -1082,6 +1082,56 @@
                         <CheckBox x:Name="TorEnabledCheckBox"
                                   Content="Route traffic through Tor" />
 
+                        <TextBlock x:Name="QuickConnectTitleTextBlock"
+                                   Text="Quick connect"
+                                   FontWeight="SemiBold" />
+                        <WrapPanel Orientation="Horizontal">
+                            <Button x:Name="AskTorButton"
+                                    Height="34" Margin="0,0,6,6" Padding="12,0"
+                                    Theme="{StaticResource GreenActionButton}"
+                                    Foreground="#252526" FontWeight="SemiBold"
+                                    Click="OnAskTorClick">
+                                <TextBlock x:Name="AskTorButtonTextBlock" Text="Ask Tor (auto)" />
+                            </Button>
+                            <Button x:Name="SnowflakeButton"
+                                    Height="34" Margin="0,0,6,6" Padding="10,0"
+                                    Theme="{StaticResource GrayActionButton}"
+                                    Click="OnSnowflakeClick">
+                                <TextBlock x:Name="SnowflakeButtonTextBlock" Text="Snowflake" />
+                            </Button>
+                            <Button x:Name="SnowflakeAmpButton"
+                                    Height="34" Margin="0,0,6,6" Padding="10,0"
+                                    Theme="{StaticResource GrayActionButton}"
+                                    Click="OnSnowflakeAmpClick">
+                                <TextBlock x:Name="SnowflakeAmpButtonTextBlock" Text="Snowflake AMP" />
+                            </Button>
+                            <Button x:Name="MeekAzureButton"
+                                    Height="34" Margin="0,0,6,6" Padding="10,0"
+                                    Theme="{StaticResource GrayActionButton}"
+                                    Click="OnMeekAzureClick">
+                                <TextBlock x:Name="MeekAzureButtonTextBlock" Text="Meek-Azure" />
+                            </Button>
+                        </WrapPanel>
+                        <TextBlock x:Name="GetBridgesTitleTextBlock"
+                                   Text="Get more bridges (then paste them below):"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextMuted}"
+                                   FontSize="12" />
+                        <WrapPanel Orientation="Horizontal">
+                            <Button x:Name="BridgesEmailButton"
+                                    Height="34" Margin="0,0,6,6" Padding="10,0"
+                                    Theme="{StaticResource GrayActionButton}"
+                                    Click="OnBridgesEmailClick">
+                                <TextBlock x:Name="BridgesEmailButtonTextBlock" Text="via Email" />
+                            </Button>
+                            <Button x:Name="BridgesTelegramButton"
+                                    Height="34" Margin="0,0,6,6" Padding="10,0"
+                                    Theme="{StaticResource GrayActionButton}"
+                                    Click="OnBridgesTelegramClick">
+                                <TextBlock x:Name="BridgesTelegramButtonTextBlock" Text="via Telegram" />
+                            </Button>
+                        </WrapPanel>
+
                         <TextBlock x:Name="TorModeTitleTextBlock"
                                    Text="Mode" />
                         <ComboBox x:Name="TorModeComboBox"

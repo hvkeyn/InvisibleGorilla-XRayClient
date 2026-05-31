@@ -367,6 +367,45 @@
                             Content="{DynamicResource Lang.Tor.Enable}"
                             FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14"/>
 
+                        <Label Margin="0 8 0 0" Foreground="White" Content="{DynamicResource Lang.Tor.QuickConnect}"
+                            FontFamily="{StaticResource SegoeUI}" FontWeight="SemiBold" FontSize="14"/>
+                        <WrapPanel Orientation="Horizontal">
+                            <Button x:Name="buttonAskTor" Height="28" Margin="0 0 6 6" Padding="10 0"
+                                Content="{DynamicResource Lang.Tor.AskTor}"
+                                Style="{StaticResource Button.Rectangle.Green}"
+                                FontFamily="{StaticResource SegoeUI}" FontWeight="Bold" FontSize="12"
+                                Foreground="{StaticResource Color.Gray}" Click="OnAskTorClick"/>
+                            <Button x:Name="buttonSnowflake" Height="28" Margin="0 0 6 6" Padding="8 0"
+                                Content="{DynamicResource Lang.Tor.Method.Snowflake}"
+                                Style="{StaticResource Button.Rectangle.Gray}"
+                                FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="12"
+                                Foreground="White" Click="OnSnowflakeClick"/>
+                            <Button x:Name="buttonSnowflakeAmp" Height="28" Margin="0 0 6 6" Padding="8 0"
+                                Content="{DynamicResource Lang.Tor.Method.SnowflakeAmp}"
+                                Style="{StaticResource Button.Rectangle.Gray}"
+                                FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="12"
+                                Foreground="White" Click="OnSnowflakeAmpClick"/>
+                            <Button x:Name="buttonMeekAzure" Height="28" Margin="0 0 6 6" Padding="8 0"
+                                Content="{DynamicResource Lang.Tor.Method.Meek}"
+                                Style="{StaticResource Button.Rectangle.Gray}"
+                                FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="12"
+                                Foreground="White" Click="OnMeekAzureClick"/>
+                        </WrapPanel>
+                        <Label Foreground="#C9C9C9" Content="{DynamicResource Lang.Tor.GetBridges}"
+                            FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="12"/>
+                        <WrapPanel Orientation="Horizontal">
+                            <Button x:Name="buttonBridgesEmail" Height="28" Margin="0 0 6 6" Padding="8 0"
+                                Content="{DynamicResource Lang.Tor.GetBridges.Email}"
+                                Style="{StaticResource Button.Rectangle.Gray}"
+                                FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="12"
+                                Foreground="White" Click="OnBridgesEmailClick"/>
+                            <Button x:Name="buttonBridgesTelegram" Height="28" Margin="0 0 6 6" Padding="8 0"
+                                Content="{DynamicResource Lang.Tor.GetBridges.Telegram}"
+                                Style="{StaticResource Button.Rectangle.Gray}"
+                                FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="12"
+                                Foreground="White" Click="OnBridgesTelegramClick"/>
+                        </WrapPanel>
+
                         <Grid Margin="0 10 0 0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>

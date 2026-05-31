@@ -467,6 +467,14 @@ namespace InvisibleGorillaXRay.Android.Views
             GetRequiredControl<TextBlock>("UseDefaultBridgesButtonTextBlock").Text = Localize("Lang.Tor.UseDefault");
             GetRequiredControl<TextBlock>("FetchMoatButtonTextBlock").Text = Localize("Lang.Tor.FetchMoat");
             GetRequiredControl<TextBlock>("CheckBridgeButtonTextBlock").Text = Localize("Lang.Tor.Check");
+            GetRequiredControl<TextBlock>("QuickConnectTitleTextBlock").Text = Localize("Lang.Tor.QuickConnect");
+            GetRequiredControl<TextBlock>("AskTorButtonTextBlock").Text = Localize("Lang.Tor.AskTor");
+            GetRequiredControl<TextBlock>("SnowflakeButtonTextBlock").Text = Localize("Lang.Tor.Method.Snowflake");
+            GetRequiredControl<TextBlock>("SnowflakeAmpButtonTextBlock").Text = Localize("Lang.Tor.Method.SnowflakeAmp");
+            GetRequiredControl<TextBlock>("MeekAzureButtonTextBlock").Text = Localize("Lang.Tor.Method.Meek");
+            GetRequiredControl<TextBlock>("GetBridgesTitleTextBlock").Text = Localize("Lang.Tor.GetBridges");
+            GetRequiredControl<TextBlock>("BridgesEmailButtonTextBlock").Text = Localize("Lang.Tor.GetBridges.Email");
+            GetRequiredControl<TextBlock>("BridgesTelegramButtonTextBlock").Text = Localize("Lang.Tor.GetBridges.Telegram");
             GetRequiredControl<TextBlock>("CaptchaHintTextBlock").Text = Localize("Lang.Tor.Captcha.Hint");
             GetRequiredControl<TextBlock>("SubmitCaptchaButtonTextBlock").Text = Localize("Lang.Tor.Captcha.Submit");
             LogsAndDiagnosticsTitleText.Text = Localize("Lang.Android.Settings.LogsAndDiagnostics");
@@ -661,6 +669,78 @@ namespace InvisibleGorillaXRay.Android.Views
             List<string> defaults = DefaultBridges.ForType(type);
             BridgesInput.Text = string.Join(Environment.NewLine, defaults);
             TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.LoadedDefaults", defaults.Count);
+        }
+
+        private async void OnAskTorClick(object? sender, RoutedEventArgs e)
+        {
+            Button? button = sender as Button;
+            if (button != null) button.IsEnabled = false;
+            TorStatusText.Text = Localize("Lang.Tor.Status.AskingTor");
+
+            try
+            {
+                MoatResult result = await new MoatClient().GetCircumventionSettingsAsync();
+                if (result.Success && result.Bridges.Count > 0)
+                {
+                    BridgeType type = MapTransportToBridgeType(result.Transport);
+                    BridgeTypeSelector.SelectedIndex = BridgeTypeOptions.Keys.ToList().IndexOf(type);
+                    BridgesInput.Text = string.Join(Environment.NewLine, result.Bridges);
+                    TorEnabledToggle.IsChecked = true;
+                    TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.AskTorOk", result.Bridges.Count, type);
+                }
+                else
+                {
+                    TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.MoatFail", result.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.MoatFail", ex.Message);
+            }
+            finally
+            {
+                if (button != null) button.IsEnabled = true;
+            }
+        }
+
+        private void OnSnowflakeClick(object? sender, RoutedEventArgs e)
+            => ApplyBuiltinMethod(BridgeType.SNOWFLAKE, DefaultBridges.Snowflake);
+
+        private void OnSnowflakeAmpClick(object? sender, RoutedEventArgs e)
+            => ApplyBuiltinMethod(BridgeType.SNOWFLAKE, DefaultBridges.SnowflakeAmp);
+
+        private void OnMeekAzureClick(object? sender, RoutedEventArgs e)
+            => ApplyBuiltinMethod(BridgeType.MEEK_AZURE, DefaultBridges.MeekAzure);
+
+        private void ApplyBuiltinMethod(BridgeType type, string bridgeLine)
+        {
+            BridgeTypeSelector.SelectedIndex = BridgeTypeOptions.Keys.ToList().IndexOf(type);
+            BridgesInput.Text = bridgeLine;
+            TorEnabledToggle.IsChecked = true;
+            TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.MethodSelected", type);
+        }
+
+        private void OnBridgesEmailClick(object? sender, RoutedEventArgs e)
+        {
+            OpenExternalUrl(BridgeRequestLinks.BuildEmailUrl("obfs4"));
+            TorStatusText.Text = Localize("Lang.Tor.Status.RequestSent");
+        }
+
+        private void OnBridgesTelegramClick(object? sender, RoutedEventArgs e)
+        {
+            OpenExternalUrl(BridgeRequestLinks.TelegramBot);
+            TorStatusText.Text = Localize("Lang.Tor.Status.RequestSent");
+        }
+
+        private static BridgeType MapTransportToBridgeType(string? transport)
+        {
+            switch ((transport ?? string.Empty).Trim().ToLowerInvariant())
+            {
+                case "snowflake": return BridgeType.SNOWFLAKE;
+                case "meek": case "meek-azure": case "meek_lite": return BridgeType.MEEK_AZURE;
+                case "webtunnel": return BridgeType.WEBTUNNEL;
+                default: return BridgeType.OBFS4;
+            }
         }
 
         private async void OnCheckBridgeClick(object? sender, RoutedEventArgs e)
