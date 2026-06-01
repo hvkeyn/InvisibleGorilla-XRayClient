@@ -136,7 +136,25 @@ namespace InvisibleGorillaXRay
                         ShowRunStatus();
                     }));
 
-                    onRunServer.Invoke(configStatus.Content.ToString());
+                    try
+                    {
+                        onRunServer.Invoke(configStatus.Content.ToString());
+                    }
+                    catch (Exception ex)
+                    {
+                        Dispatcher.BeginInvoke(new Action(delegate {
+                            MessageBox.Show(
+                                this,
+                                ex.Message,
+                                Caption.ERROR,
+                                MessageBoxButton.OK,
+                                MessageBoxImage.Error
+                            );
+                            ShowStopStatus();
+                        }));
+
+                        return;
+                    }
 
                     Dispatcher.BeginInvoke(new Action(delegate {
                         ShowStopStatus();

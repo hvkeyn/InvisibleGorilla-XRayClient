@@ -426,11 +426,18 @@ namespace InvisibleGorillaXRay.Core
             if (configStatus.Code == Code.ERROR)
                 return configStatus;
 
-            string server = JsonUtility.Find(
-                key: "address",
-                parent: "outbounds",
-                jsonString: configStatus.Content.ToString()
-            );
+            string server = ResolveTunnelServerAddress(configStatus.Content?.ToString());
+            DiagnosticLog.Write("EnableTunnel", $"Resolved bypass server address='{server}'");
+            if (string.IsNullOrWhiteSpace(server))
+            {
+                DiagnosticLog.Write("EnableTunnel", "Failed to resolve outbound server address for TUN bypass route.");
+                return new Status(
+                    code: Code.ERROR,
+                    subCode: SubCode.CANT_TUNNEL,
+                    content: LocalizationService.GetTerm(Localization.CANT_TUNNEL_SYSTEM)
+                );
+            }
+
             int proxyPort = getProxyPort.Invoke();
             string address = getTunIp.Invoke();
             string dns = getDns.Invoke();
@@ -460,6 +467,39 @@ namespace InvisibleGorillaXRay.Core
                 
                 return new Status(Code.SUCCESS, SubCode.SUCCESS, System.IO.File.ReadAllText(config.Path).ToLower());
             }
+        }
+
+        private string ResolveTunnelServerAddress(string runtimeConfig)
+        {
+            string server = JsonUtility.Find(
+                key: "address",
+                parent: "outbounds",
+                jsonString: runtimeConfig
+            );
+            if (!string.IsNullOrWhiteSpace(server))
+                return server;
+
+            Config config = getConfig.Invoke();
+            if (config == null || !System.IO.File.Exists(config.Path))
+                return server;
+
+            try
+            {
+                string userConfig = System.IO.File.ReadAllText(config.Path);
+                server = JsonUtility.Find(
+                    key: "address",
+                    parent: "outbounds",
+                    jsonString: userConfig
+                );
+                if (!string.IsNullOrWhiteSpace(server))
+                    DiagnosticLog.Write("EnableTunnel", "Resolved bypass server from original config file fallback.");
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("EnableTunnel.ResolveTunnelServerAddress", ex);
+            }
+
+            return server;
         }
 
         private void DisableTunnel()

@@ -123,6 +123,16 @@ namespace InvisibleGorillaXRay.Handlers.Processes
             try
             {
                 DiagnosticLog.Write("TunnelProcess", $"Execute requested: {command}");
+                if (sender == null || !sender.Connected)
+                {
+                    DiagnosticLog.Write("TunnelProcess", "Execute skipped because TUN service socket is not connected");
+                    return new Status(
+                        code: Code.INFO,
+                        subCode: SubCode.CANCELED,
+                        content: null
+                    );
+                }
+
                 byte[] bytes = Encoding.ASCII.GetBytes(command + "<EOF>");
                 int bytesCount = sender.Send(bytes);
                 DiagnosticLog.Write("TunnelProcess", $"Execute sent {bytesCount} bytes");

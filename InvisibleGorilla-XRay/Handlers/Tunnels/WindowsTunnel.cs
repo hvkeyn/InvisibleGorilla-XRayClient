@@ -58,6 +58,16 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
 
             try
             {
+                if (string.IsNullOrWhiteSpace(server))
+                {
+                    DiagnosticLog.Write("WindowsTunnel", "Cannot enable TUN because server address is empty.");
+                    return new Status(
+                        code: Code.ERROR,
+                        subCode: SubCode.CANT_TUNNEL,
+                        content: LocalizationService.GetTerm(Localization.CANT_TUNNEL_SYSTEM)
+                    );
+                }
+
                 FetchServerIP();
                 DiagnosticLog.Write("WindowsTunnel", $"Resolved server IP={server}");
                 string proxyArgument = BuildTunnelProxyArgument(ip, port, localProxyCredentials);

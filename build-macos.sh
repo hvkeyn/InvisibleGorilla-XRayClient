@@ -30,7 +30,7 @@ set -Eeuo pipefail
 
 # ─── Settings ─────────────────────────────────────────────────────────────────
 
-readonly VERSION="3.5.2.0"
+readonly VERSION="3.5.3.0"
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly WRAPPER_DIR="$SCRIPT_DIR/XRay-Wrapper"
 readonly APP_DIR="$SCRIPT_DIR/InvisibleGorilla-XRay"
