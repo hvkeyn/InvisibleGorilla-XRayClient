@@ -186,6 +186,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private TextBlock ConnectionInfoIpText => GetRequiredControl<TextBlock>("ConnectionInfoIpTextBlock");
         private TextBlock ConnectionInfoLocationText => GetRequiredControl<TextBlock>("ConnectionInfoLocationTextBlock");
         private TextBlock ConnectionInfoOrgText => GetRequiredControl<TextBlock>("ConnectionInfoOrgTextBlock");
+        private TextBlock ConnectionInfoModeText => GetRequiredControl<TextBlock>("ConnectionInfoModeTextBlock");
         private TextBlock ConnectionInfoVerdictText => GetRequiredControl<TextBlock>("ConnectionInfoVerdictTextBlock");
         private Border ServersStatusPanelContainer => GetRequiredControl<Border>("ServersStatusPanel");
         private TextBlock ServersStatusText => GetRequiredControl<TextBlock>("ServersStatusTextBlock");
@@ -2237,13 +2238,35 @@ namespace InvisibleGorillaXRay.Android.Views
             connectionInfoLookupCancellation = new CancellationTokenSource();
             CancellationToken token = connectionInfoLookupCancellation.Token;
 
+            bool connected = isConnectionInfoConnected;
+
+            // The Android app excludes itself from its own VpnService, so a direct request
+            // always leaks the real ISP IP. When connected, probe through the running xray
+            // local SOCKS listener so the reported IP matches the actual tunnel exit.
+            System.Net.IWebProxy probeProxy = null;
+            string modeText = string.Empty;
+            try
+            {
+                UserSettings settings = settingsHandler.UserSettings;
+                if (connected)
+                    probeProxy = core.CreateActiveProbeProxy();
+                string outbound = ConnectionProbe.DetectOutboundProtocol(settings.GetCurrentConfigPath());
+                modeText = ConnectionProbe.DescribeMode(settings.GetMode(), settings.GetProtocol(), settings.GetTorSettings(), outbound);
+            }
+            catch
+            {
+            }
+
             Dispatcher.UIThread.Post(() =>
             {
                 ConnectionInfoDotControl.Background = AvailabilityPendingBrush;
                 ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Checking");
+                ConnectionInfoModeText.Text = connected && !string.IsNullOrEmpty(modeText)
+                    ? $"{Localize("Lang.ConnectionInfo.Mode")} {modeText}"
+                    : string.Empty;
             });
 
-            ConnectionInfo info = await connectionInfoService.LookupAsync(token: token).ConfigureAwait(false);
+            ConnectionInfo info = await connectionInfoService.LookupAsync(probeProxy, token).ConfigureAwait(false);
             if (token.IsCancellationRequested)
                 return;
 

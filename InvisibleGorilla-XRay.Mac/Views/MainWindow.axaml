@@ -206,6 +206,12 @@
                                Foreground="#9A9A9A"
                                FontSize="11"
                                TextTrimming="CharacterEllipsis"/>
+                    <TextBlock x:Name="textInfoMode"
+                               Foreground="#7FB2FF"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Margin="0 4 0 0"
+                               TextWrapping="Wrap"/>
                     <TextBlock x:Name="textInfoVerdict"
                                Text="{DynamicResource Lang.ConnectionInfo.Idle}"
                                Foreground="Gray"

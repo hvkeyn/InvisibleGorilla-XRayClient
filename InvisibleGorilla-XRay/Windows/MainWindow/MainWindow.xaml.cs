@@ -28,6 +28,7 @@ namespace InvisibleGorillaXRay
         private Func<bool> shouldStartHidden;
         private Func<bool> isNeedToAutoConnect;
         private Func<Config> getConfig;
+        private Func<UserSettings> getUserSettings;
         private Func<Status> loadConfig;
         private Func<Status> enableMode;
         private Func<Status> checkForUpdate;
@@ -256,6 +257,7 @@ namespace InvisibleGorillaXRay
             Func<bool> shouldStartHidden,
             Func<bool> isNeedToAutoConnect,
             Func<Config> getConfig,
+            Func<UserSettings> getUserSettings,
             Func<Status> loadConfig, 
             Func<Status> enableMode,
             Func<Status> checkForUpdate,
@@ -278,6 +280,7 @@ namespace InvisibleGorillaXRay
             this.shouldStartHidden = shouldStartHidden;
             this.isNeedToAutoConnect = isNeedToAutoConnect;
             this.getConfig = getConfig;
+            this.getUserSettings = getUserSettings;
             this.loadConfig = loadConfig;
             this.checkForUpdate = checkForUpdate;
             this.checkForBroadcast = checkForBroadcast;
@@ -537,10 +540,27 @@ namespace InvisibleGorillaXRay
             textInfoOrg.Text = string.Empty;
             infoStatusDot.Fill = Brushes.Gray;
 
+            // Route the probe exactly like user traffic: through the local xray listener in
+            // proxy mode, or directly in TUN/disconnected. A plain request ignores a SOCKS
+            // system proxy and would always report the real ISP IP.
+            IWebProxy probeProxy = null;
+            string modeText = string.Empty;
+            UserSettings settings = getUserSettings?.Invoke();
+            if (settings != null)
+            {
+                probeProxy = ConnectionProbe.BuildExitProxy(connected, settings.GetMode(), settings.GetProtocol(), settings.GetProxyPort());
+                string outbound = ConnectionProbe.DetectOutboundProtocol(getConfig?.Invoke()?.Path);
+                modeText = ConnectionProbe.DescribeMode(settings.GetMode(), settings.GetProtocol(), settings.GetTorSettings(), outbound);
+            }
+
+            textInfoMode.Text = connected && !string.IsNullOrEmpty(modeText)
+                ? $"{Loc("Lang.ConnectionInfo.Mode")} {modeText}"
+                : string.Empty;
+
             ConnectionInfo info;
             try
             {
-                info = await connectionInfoService.LookupAsync(WebRequest.GetSystemWebProxy(), token);
+                info = await connectionInfoService.LookupAsync(probeProxy, token);
             }
             catch (Exception)
             {

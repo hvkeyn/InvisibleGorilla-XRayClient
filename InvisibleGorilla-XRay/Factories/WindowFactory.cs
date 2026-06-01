@@ -38,6 +38,7 @@ namespace InvisibleGorillaXRay.Factories
                 shouldStartHidden: ShouldStartHidden,
                 isNeedToAutoConnect: IsNeedToAutoConnect,
                 getConfig: configHandler.GetCurrentConfig,
+                getUserSettings: () => settingsHandler.UserSettings,
                 loadConfig: core.LoadConfig,
                 enableMode: core.EnableMode,
                 checkForUpdate: updateHandler.CheckForUpdate,

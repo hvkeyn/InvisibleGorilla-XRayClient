@@ -548,6 +548,12 @@
                                        Foreground="#9A9A9A"
                                        FontSize="11"
                                        TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="ConnectionInfoModeTextBlock"
+                                       Foreground="#7FB2FF"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Margin="0,4,0,0"
+                                       TextWrapping="Wrap" />
                             <TextBlock x:Name="ConnectionInfoVerdictTextBlock"
                                        Text="Not connected"
                                        Foreground="#8C8C8C"

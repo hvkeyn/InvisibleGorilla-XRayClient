@@ -1,4 +1,5 @@
 using System;
+using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
@@ -31,6 +32,7 @@ namespace InvisibleGorillaXRay.Mac.Views
         private Func<bool> shouldStartHidden;
         private Func<bool> isNeedToAutoConnect;
         private Func<Config> getConfig;
+        private Func<UserSettings> getUserSettings;
         private Func<Status> loadConfig;
         private Func<Status> enableMode;
         private Func<Status> checkForUpdate;
@@ -63,6 +65,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             Func<bool> shouldStartHidden,
             Func<bool> isNeedToAutoConnect,
             Func<Config> getConfig,
+            Func<UserSettings> getUserSettings,
             Func<Status> loadConfig,
             Func<Status> enableMode,
             Func<Status> checkForUpdate,
@@ -84,6 +87,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             this.shouldStartHidden = shouldStartHidden;
             this.isNeedToAutoConnect = isNeedToAutoConnect;
             this.getConfig = getConfig;
+            this.getUserSettings = getUserSettings;
             this.loadConfig = loadConfig;
             this.checkForUpdate = checkForUpdate;
             this.openServerWindow = openServerWindow;
@@ -451,13 +455,31 @@ namespace InvisibleGorillaXRay.Mac.Views
             connectionInfoCancellation = new CancellationTokenSource();
             CancellationToken token = connectionInfoCancellation.Token;
 
+            bool connected = isConnected;
+
+            // Mirror real traffic: probe through the local xray listener in proxy mode, or
+            // directly in TUN/disconnected. A direct request would ignore a SOCKS proxy and
+            // always report the real ISP IP even while the tunnel works.
+            IWebProxy probeProxy = null;
+            string modeText = string.Empty;
+            UserSettings settings = getUserSettings?.Invoke();
+            if (settings != null)
+            {
+                probeProxy = ConnectionProbe.BuildExitProxy(connected, settings.GetMode(), settings.GetProtocol(), settings.GetProxyPort());
+                string outbound = ConnectionProbe.DetectOutboundProtocol(getConfig?.Invoke()?.Path);
+                modeText = ConnectionProbe.DescribeMode(settings.GetMode(), settings.GetProtocol(), settings.GetTorSettings(), outbound);
+            }
+
             Dispatcher.UIThread.Post(() =>
             {
                 infoStatusDot.Fill = Brushes.Gray;
                 textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Checking");
+                textInfoMode.Text = connected && !string.IsNullOrEmpty(modeText)
+                    ? $"{Loc("Lang.ConnectionInfo.Mode")} {modeText}"
+                    : string.Empty;
             });
 
-            ConnectionInfo info = await connectionInfoService.LookupAsync(token: token).ConfigureAwait(false);
+            ConnectionInfo info = await connectionInfoService.LookupAsync(probeProxy, token).ConfigureAwait(false);
             if (token.IsCancellationRequested)
                 return;
 

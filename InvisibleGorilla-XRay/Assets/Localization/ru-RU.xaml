@@ -20,6 +20,7 @@
     <system:String x:Key="Lang.ConnectionInfo.Protected">Трафик идёт через VPN</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Exposed">Виден реальный IP — трафик идёт мимо VPN</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Idle">Не подключено</system:String>
+    <system:String x:Key="Lang.ConnectionInfo.Mode">Режим:</system:String>
 
     <system:String x:Key="Lang.Button.Import">Импорт</system:String>
     <system:String x:Key="Lang.Button.Confirm">Подтвердить</system:String>

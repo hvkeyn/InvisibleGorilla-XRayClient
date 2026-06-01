@@ -21,6 +21,7 @@
     <x:String x:Key="Lang.ConnectionInfo.Protected">IP changed. Traffic appears to be protected.</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Exposed">IP did not change. Traffic may still be exposed.</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Idle">Not connected. This IP is used as the baseline.</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.Mode">Mode:</x:String>
 
     <x:String x:Key="Lang.Message.NoServerConfiguration">No server configuration</x:String>
     <x:String x:Key="Lang.Message.ConfigHint">Tap the plus to add a new one</x:String>

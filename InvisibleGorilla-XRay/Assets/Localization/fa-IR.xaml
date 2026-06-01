@@ -20,6 +20,7 @@
     <system:String x:Key="Lang.ConnectionInfo.Protected">ترافیک از طریق VPN عبور می‌کند</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Exposed">IP واقعی نمایان است — ترافیک از VPN عبور نمی‌کند</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Idle">متصل نیست</system:String>
+    <system:String x:Key="Lang.ConnectionInfo.Mode">حالت:</system:String>
 
     <system:String x:Key="Lang.Button.Import">وارد کردن</system:String>
     <system:String x:Key="Lang.Button.Confirm">تأیید</system:String>

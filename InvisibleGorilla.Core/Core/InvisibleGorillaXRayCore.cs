@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 
@@ -35,6 +36,7 @@ namespace InvisibleGorillaXRay.Core
 
         private readonly TorManager torManager = new TorManager();
         private string currentRuntimeConfig;
+        private LocalProxyCredentials activeLocalProxyCredentials = LocalProxyCredentials.None;
 
         private LocalizationService LocalizationService => ServiceLocator.Get<LocalizationService>();
         private AnalyticsService AnalyticsService => ServiceLocator.Get<AnalyticsService>();
@@ -179,6 +181,7 @@ namespace InvisibleGorillaXRay.Core
             bool isUdpEnabled = getUdpEnabled.Invoke();
             bool systemProxy = getSystemProxyUsed.Invoke();
             LocalProxyCredentials localProxyCredentials = CreateLocalProxyCredentials(mode, isSocks);
+            activeLocalProxyCredentials = localProxyCredentials;
 
             // Xray always listens on the local proxy port; the TUN port is reserved for the control service.
             DiagnosticLog.Write("Run", $"mode={mode}, proxyPort={proxyPort}, tunnelServicePort={tunnelServicePort}, logLevel={logLevel}, isSocks={isSocks}, isUdpEnabled={isUdpEnabled}, systemProxy={systemProxy}");
@@ -492,6 +495,37 @@ namespace InvisibleGorillaXRay.Core
                 return LocalProxyCredentials.None;
 
             return LocalProxyCredentials.CreateSessionScoped();
+        }
+
+        /// <summary>
+        /// Proxy that routes an IP-check probe through the running xray listener, so the
+        /// live connection widget reports the real exit IP. This matters most on Android,
+        /// where the app excludes itself from its own VPN (AddDisallowedApplication), so a
+        /// direct request from the app always leaks the real ISP IP; the only reliable way
+        /// to observe the tunnel exit from inside the app is the local SOCKS listener.
+        /// Returns null when nothing is running / no valid port is configured.
+        /// </summary>
+        public IWebProxy CreateActiveProbeProxy()
+        {
+            int proxyPort = getProxyPort.Invoke();
+            if (proxyPort <= 0)
+                return null;
+
+            Mode mode = getMode.Invoke();
+            bool isSocks = getProtocol.Invoke() == Protocol.SOCKS || mode == Mode.TUN;
+
+            if (activeLocalProxyCredentials != null && activeLocalProxyCredentials.HasValue)
+            {
+                // .NET's SOCKS5 client takes the username/password from WebProxy.Credentials,
+                // not from the URI userinfo, so set it explicitly.
+                return new WebProxy($"socks5://{Global.LOCAL_HOST}:{proxyPort}")
+                {
+                    Credentials = new NetworkCredential(activeLocalProxyCredentials.Username, activeLocalProxyCredentials.Password)
+                };
+            }
+
+            string scheme = isSocks ? "socks5" : "http";
+            return new WebProxy($"{scheme}://{Global.LOCAL_HOST}:{proxyPort}");
         }
 
         private bool ShouldChangeSystemProxy() => getSystemProxyUsed.Invoke();

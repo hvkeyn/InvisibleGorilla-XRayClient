@@ -84,6 +84,7 @@ namespace InvisibleGorillaXRay.Linux.Factories
                 shouldStartHidden: settingsHandler.UserSettings.GetStartHiddenEnabled,
                 isNeedToAutoConnect: settingsHandler.UserSettings.GetAutoConnectEnabled,
                 getConfig: configHandler.GetCurrentConfig,
+                getUserSettings: () => settingsHandler.UserSettings,
                 loadConfig: core.LoadConfig,
                 enableMode: core.EnableMode,
                 checkForUpdate: updateHandler.CheckForUpdate,
