@@ -7,7 +7,7 @@
         xmlns:Controls="clr-namespace:InvisibleGorillaXRay.Components"
         mc:Ignorable="d"
         Title="Invisible Gorilla XRay"
-        Height="550" 
+        Height="640" 
         Width="400" 
         WindowStartupLocation="CenterScreen" 
         ResizeMode="CanMinimize">
@@ -169,6 +169,53 @@
             </Grid>
             
             <Grid Grid.Row="2">
+                <Border VerticalAlignment="Top" Margin="15 8 15 0"
+                    CornerRadius="8" Background="{StaticResource Color.LightGray}">
+                    <Border.Effect>
+                        <DropShadowEffect Direction="270" Opacity="0.3" ShadowDepth="1"/>
+                    </Border.Effect>
+
+                    <StackPanel Orientation="Vertical" Margin="12 8 12 10">
+                        <Grid>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                <Ellipse Width="10" Height="10" Margin="0 0 6 0" VerticalAlignment="Center"
+                                    Fill="Gray" x:Name="infoStatusDot"/>
+                                <Label Padding="0" Content="{DynamicResource Lang.ConnectionInfo.Title}"
+                                    FontFamily="{StaticResource SegoeUI}" FontWeight="SemiBold" FontSize="13"
+                                    Foreground="White" VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <Button HorizontalAlignment="Right" VerticalAlignment="Center"
+                                Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                Padding="4 0" Click="OnRefreshInfoButtonClick" x:Name="buttonRefreshInfo"
+                                ToolTip="{DynamicResource Lang.ConnectionInfo.Refresh}">
+                                <TextBlock Text="↻" FontSize="16" FontWeight="Bold"
+                                    Foreground="{StaticResource Color.Blue}"/>
+                            </Button>
+                        </Grid>
+
+                        <TextBlock Margin="0 6 0 0" FontFamily="{StaticResource SegoeUI}"
+                            FontWeight="Bold" FontSize="17" Foreground="White"
+                            TextTrimming="CharacterEllipsis" x:Name="textInfoIp"
+                            Text="—"/>
+
+                        <TextBlock Margin="0 2 0 0" FontFamily="{StaticResource SegoeUI}"
+                            FontWeight="Light" FontSize="12" Foreground="#CFCFCF"
+                            TextTrimming="CharacterEllipsis" x:Name="textInfoLocation"
+                            Text=""/>
+
+                        <TextBlock Margin="0 1 0 0" FontFamily="{StaticResource SegoeUI}"
+                            FontWeight="Light" FontSize="11" Foreground="#9A9A9A"
+                            TextTrimming="CharacterEllipsis" x:Name="textInfoOrg"
+                            Text=""/>
+
+                        <TextBlock Margin="0 6 0 0" FontFamily="{StaticResource SegoeUI}"
+                            FontWeight="Normal" FontSize="11" TextWrapping="Wrap"
+                            Foreground="Gray" x:Name="textInfoVerdict"
+                            Text="{DynamicResource Lang.ConnectionInfo.Idle}"/>
+                    </StackPanel>
+                </Border>
+
                 <Grid Height="45" VerticalAlignment="Bottom" 
                     Background="{StaticResource Color.LightGray}">
 

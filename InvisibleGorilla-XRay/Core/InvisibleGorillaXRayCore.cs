@@ -363,8 +363,11 @@ namespace InvisibleGorillaXRay.Core
 
         public void Stop()
         {
+            DiagnosticLog.Write("Stop", "Stop requested: calling XRayCoreWrapper.StopServer()...");
             XRayCoreWrapper.StopServer();
+            DiagnosticLog.Write("Stop", "StopServer returned, stopping Tor (if any)...");
             torManager.Stop();
+            DiagnosticLog.Write("Stop", "Stop sequence completed.");
             AnalyticsService.SendEvent(new StoppedEvent());
         }
 

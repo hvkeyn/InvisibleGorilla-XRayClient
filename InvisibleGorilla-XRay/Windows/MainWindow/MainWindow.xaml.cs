@@ -1,5 +1,9 @@
 using System;
+using System.Net;
+using System.Threading;
 using System.Windows;
+using System.Windows.Media;
+using System.Windows.Threading;
 using System.ComponentModel;
 
 namespace InvisibleGorillaXRay
@@ -13,6 +17,12 @@ namespace InvisibleGorillaXRay
     public partial class MainWindow : Window
     {
         private bool isRerunRequest;
+
+        private readonly ConnectionInfoService connectionInfoService = new ConnectionInfoService();
+        private DispatcherTimer connectionInfoTimer;
+        private CancellationTokenSource connectionInfoCts;
+        private bool isConnected;
+        private string baselineIp;
 
         private Func<bool> isNeedToShowPolicyWindow;
         private Func<bool> shouldStartHidden;
@@ -52,6 +62,17 @@ namespace InvisibleGorillaXRay
 
             updateWorker.RunWorkerAsync();
             broadcastWorker.RunWorkerAsync();
+
+            InitializeConnectionInfoTimer();
+
+            void InitializeConnectionInfoTimer()
+            {
+                connectionInfoTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(20)
+                };
+                connectionInfoTimer.Tick += (sender, e) => RefreshConnectionInfo();
+            }
 
             void InitializeRunWorker()
             {
@@ -266,6 +287,9 @@ namespace InvisibleGorillaXRay
             TryStartHidden();
             TryAutoConnect();
 
+            connectionInfoTimer.Start();
+            RefreshConnectionInfo();
+
             AnalyticsService.SendEvent(new AppOpenedEvent());
         }
 
@@ -435,6 +459,10 @@ namespace InvisibleGorillaXRay
             buttonStop.Visibility = Visibility.Visible;
             buttonCancel.Visibility = Visibility.Hidden;
             buttonRun.Visibility = Visibility.Hidden;
+
+            isConnected = true;
+            // Give the tunnel/proxy a moment to take over routing before probing the exit IP.
+            ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(2));
         }
 
         private void ShowStopStatus()
@@ -446,6 +474,9 @@ namespace InvisibleGorillaXRay
             buttonRun.Visibility = Visibility.Visible;
             buttonCancel.Visibility = Visibility.Hidden;
             buttonStop.Visibility = Visibility.Hidden;
+
+            isConnected = false;
+            ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(1));
         }
 
         private void ShowWaitForRunStatus()
@@ -457,6 +488,100 @@ namespace InvisibleGorillaXRay
             buttonCancel.Visibility = Visibility.Visible;
             buttonRun.Visibility = Visibility.Hidden;
             buttonStop.Visibility = Visibility.Hidden;
+        }
+
+        private void OnRefreshInfoButtonClick(object sender, RoutedEventArgs e)
+        {
+            RefreshConnectionInfo();
+        }
+
+        private void ScheduleConnectionInfoRefresh(TimeSpan delay)
+        {
+            DispatcherTimer once = new DispatcherTimer { Interval = delay };
+            once.Tick += (s, e) =>
+            {
+                once.Stop();
+                RefreshConnectionInfo();
+            };
+            once.Start();
+        }
+
+        private async void RefreshConnectionInfo()
+        {
+            connectionInfoCts?.Cancel();
+            connectionInfoCts = new CancellationTokenSource();
+            CancellationToken token = connectionInfoCts.Token;
+
+            bool connected = isConnected;
+
+            textInfoIp.Text = Loc("Lang.ConnectionInfo.Checking");
+            textInfoLocation.Text = string.Empty;
+            textInfoOrg.Text = string.Empty;
+            infoStatusDot.Fill = Brushes.Gray;
+
+            ConnectionInfo info;
+            try
+            {
+                info = await connectionInfoService.LookupAsync(WebRequest.GetSystemWebProxy(), token);
+            }
+            catch (Exception)
+            {
+                info = new ConnectionInfo { Ok = false };
+            }
+
+            if (token.IsCancellationRequested)
+                return;
+
+            if (!info.Ok)
+            {
+                textInfoIp.Text = Loc("Lang.ConnectionInfo.Unknown");
+                textInfoLocation.Text = string.Empty;
+                textInfoOrg.Text = string.Empty;
+                textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Error");
+                textInfoVerdict.Foreground = Brushes.Gray;
+                infoStatusDot.Fill = Brushes.Gray;
+                return;
+            }
+
+            textInfoIp.Text = info.Ip;
+            textInfoLocation.Text = info.Location;
+            textInfoOrg.Text = info.Org;
+
+            ApplyVerdict(connected, info.Ip);
+        }
+
+        private void ApplyVerdict(bool connected, string currentIp)
+        {
+            if (!connected)
+            {
+                // Remember the unprotected (real) exit as a baseline to detect leaks later.
+                baselineIp = currentIp;
+                textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Idle");
+                textInfoVerdict.Foreground = Brushes.Gray;
+                infoStatusDot.Fill = Brushes.Gray;
+                return;
+            }
+
+            bool exposed = !string.IsNullOrEmpty(baselineIp) &&
+                string.Equals(baselineIp, currentIp, StringComparison.OrdinalIgnoreCase);
+
+            if (exposed)
+            {
+                textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Exposed");
+                textInfoVerdict.Foreground = (Brush)TryFindResource("Color.Red") ?? Brushes.OrangeRed;
+                infoStatusDot.Fill = (Brush)TryFindResource("Color.Red") ?? Brushes.OrangeRed;
+            }
+            else
+            {
+                textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Protected");
+                textInfoVerdict.Foreground = (Brush)TryFindResource("Color.Green") ?? Brushes.LimeGreen;
+                infoStatusDot.Fill = (Brush)TryFindResource("Color.Green") ?? Brushes.LimeGreen;
+            }
+        }
+
+        private string Loc(string key)
+        {
+            return TryFindResource(key) as string ?? key;
         }
 
         protected override void OnClosing(CancelEventArgs e)
