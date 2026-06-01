@@ -500,6 +500,62 @@
                             IsVisible="False"
                             Click="OnStopClick" />
 
+                    <Border x:Name="ConnectionInfoPanel"
+                            Margin="0,18,0,0"
+                            Padding="14,12"
+                            CornerRadius="12"
+                            BorderBrush="{StaticResource SurfaceBright}"
+                            BorderThickness="1"
+                            Background="{StaticResource SurfaceLight}">
+                        <StackPanel Spacing="6">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Orientation="Horizontal" Spacing="7">
+                                    <Border x:Name="ConnectionInfoDot"
+                                            Width="10"
+                                            Height="10"
+                                            CornerRadius="5"
+                                            Background="#8C8C8C"
+                                            VerticalAlignment="Center" />
+                                    <TextBlock x:Name="ConnectionInfoTitleTextBlock"
+                                               Text="Your connection"
+                                               Foreground="White"
+                                               FontWeight="SemiBold"
+                                               FontSize="13" />
+                                </StackPanel>
+                                <Button Grid.Column="1"
+                                        Width="34"
+                                        Height="28"
+                                        Padding="0"
+                                        Theme="{StaticResource LinkButton}"
+                                        Click="OnRefreshConnectionInfoClick">
+                                    <TextBlock Text="Refresh"
+                                               Foreground="{StaticResource AccentBlue}"
+                                               FontSize="11" />
+                                </Button>
+                            </Grid>
+
+                            <TextBlock x:Name="ConnectionInfoIpTextBlock"
+                                       Text="—"
+                                       Foreground="White"
+                                       FontWeight="Bold"
+                                       FontSize="17"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="ConnectionInfoLocationTextBlock"
+                                       Foreground="{StaticResource TextMuted}"
+                                       FontSize="12"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="ConnectionInfoOrgTextBlock"
+                                       Foreground="#9A9A9A"
+                                       FontSize="11"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="ConnectionInfoVerdictTextBlock"
+                                       Text="Not connected"
+                                       Foreground="#8C8C8C"
+                                       FontSize="12"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
                     <Border x:Name="HomeStatusPanel"
                             Margin="0,18,0,0"
                             Padding="16,14"
@@ -1081,6 +1137,11 @@
                                    FontWeight="SemiBold" />
                         <CheckBox x:Name="TorEnabledCheckBox"
                                   Content="Route traffic through Tor" />
+                        <TextBlock x:Name="TorHowToTextBlock"
+                                   Text="Choose Ask Tor or a bridge method, save settings, then press RUN."
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextMuted}"
+                                   FontSize="12" />
 
                         <TextBlock x:Name="QuickConnectTitleTextBlock"
                                    Text="Quick connect"

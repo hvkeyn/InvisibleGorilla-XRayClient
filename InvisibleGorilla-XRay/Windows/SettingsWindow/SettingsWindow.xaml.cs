@@ -222,15 +222,27 @@ namespace InvisibleGorillaXRay
 
         private TorSettings BuildTorSettingsFromUi()
         {
+            TorSettings existing = getUserSettings.Invoke().GetTorSettings();
             return new TorSettings
             {
                 Enabled = checkBoxTorEnabled.IsChecked == true,
-                Mode = (TorMode)comboBoxTorMode.SelectedValue,
-                BridgeType = (BridgeType)comboBoxBridgeType.SelectedValue,
-                SocksPort = int.TryParse(textBoxTorSocksPort.Text, out int sp) ? sp : 9250,
-                ControlPort = getUserSettings.Invoke().GetTorSettings().GetControlPort(),
+                Mode = GetSelectedValue(comboBoxTorMode, existing.GetMode()),
+                BridgeType = GetSelectedValue(comboBoxBridgeType, existing.GetBridgeType()),
+                SocksPort = int.TryParse(textBoxTorSocksPort.Text, out int sp) && sp > 0 ? sp : existing.GetSocksPort(),
+                ControlPort = existing.GetControlPort(),
                 BridgeLines = SplitBridgeLines(textBoxBridges.Text)
             };
+        }
+
+        private static T GetSelectedValue<T>(ComboBox comboBox, T fallback)
+        {
+            if (comboBox.SelectedValue is T value)
+                return value;
+
+            if (comboBox.SelectedItem is KeyValuePair<T, string> pair)
+                return pair.Key;
+
+            return fallback;
         }
 
         private static List<string> SplitBridgeLines(string text)

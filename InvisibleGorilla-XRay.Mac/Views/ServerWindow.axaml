@@ -2,9 +2,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="InvisibleGorillaXRay.Mac.Views.ServerWindow"
         Title="Invisible Gorilla XRay - Server config"
-        Height="520" 
+        Height="650" 
         Width="350"
-        CanResize="False"
+        CanResize="True"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="{StaticResource Color.DarkGray}">
@@ -52,7 +52,7 @@
             <!-- Config list panel -->
             <Grid Grid.Row="1" IsVisible="True" x:Name="panelConfig">
                 <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                    <StackPanel Orientation="Vertical" x:Name="listConfigs"/>
+                    <StackPanel Orientation="Vertical" Margin="0,0,0,70" x:Name="listConfigs"/>
                 </ScrollViewer>
 
                 <TextBlock x:Name="textNoConfig"
@@ -82,7 +82,7 @@
 
                     <ScrollViewer Grid.Row="1"
                         HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Orientation="Vertical" x:Name="listSubscriptions"/>
+                        <StackPanel Orientation="Vertical" Margin="0,0,0,70" x:Name="listSubscriptions"/>
                     </ScrollViewer>
 
                     <!-- Subscription control bar -->

@@ -7,10 +7,10 @@
         xmlns:Controls="clr-namespace:InvisibleGorillaXRay.Components"
         mc:Ignorable="d"
         Title="Invisible Gorilla XRay - Server config"
-        Height="520" 
+        Height="650" 
         Width="350" 
         WindowStartupLocation="CenterOwner"  
-        ResizeMode="NoResize"
+        ResizeMode="CanResize"
         ShowInTaskbar="False">
 
     <Window.Background>
@@ -59,7 +59,7 @@
 
             <Grid Grid.Row="1" Visibility="Visible" x:Name="panelConfig">
                 <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                    <StackPanel Orientation="Vertical" x:Name="listConfigs"></StackPanel>
+                    <StackPanel Orientation="Vertical" Margin="0 0 0 70" x:Name="listConfigs"></StackPanel>
                 </ScrollViewer>
 
                 <TextBlock x:Name="textNoConfig"
@@ -94,7 +94,7 @@
 
                     <ScrollViewer Grid.Row="1"
                         HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Orientation="Vertical" x:Name="listSubscriptions"></StackPanel>
+                        <StackPanel Orientation="Vertical" Margin="0 0 0 70" x:Name="listSubscriptions"></StackPanel>
                     </ScrollViewer>
 
                     <Grid Grid.Row="0" Background="{StaticResource Color.DarkGray}"

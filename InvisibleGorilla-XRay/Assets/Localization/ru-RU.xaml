@@ -90,6 +90,7 @@
     <system:String x:Key="Lang.Window.Settings.Tab.Tor">Tor</system:String>
     <system:String x:Key="Lang.Window.Settings.Tab.Log">Логи</system:String>
     <system:String x:Key="Lang.Tor.Enable">Пускать трафик через Tor</system:String>
+    <system:String x:Key="Lang.Tor.HowTo">Выберите «Спросить Tor» или метод моста, нажмите «ПОДТВЕРДИТЬ», затем «ЗАПУСК». Если Горилла уже работает, она переподключится автоматически.</system:String>
     <system:String x:Key="Lang.Tor.Mode">Режим</system:String>
     <system:String x:Key="Lang.Tor.BridgeType">Тип моста</system:String>
     <system:String x:Key="Lang.Tor.SocksPort">SOCKS-порт Tor</system:String>

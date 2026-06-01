@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="InvisibleGorillaXRay.Mac.Views.MainWindow"
         Title="Invisible Gorilla XRay"
-        Height="550" 
+        Height="650" 
         Width="400"
         CanResize="True"
         WindowStartupLocation="CenterScreen"
@@ -11,8 +11,8 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="80"/>
-            <RowDefinition Height="370"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="45"/>
         </Grid.RowDefinitions>
 
         <!-- Header -->
@@ -42,11 +42,12 @@
         <!-- Content -->
         <Grid Grid.Row="1">
             <Grid.RowDefinitions>
-                <RowDefinition Height="210"/>
+                <RowDefinition Height="180"/>
                 <RowDefinition Height="10"/>
                 <RowDefinition Height="35"/>
                 <RowDefinition Height="20"/>
-                <RowDefinition Height="95"/>
+                <RowDefinition Height="75"/>
+                <RowDefinition Height="125"/>
             </Grid.RowDefinitions>
 
             <!-- Stop status -->
@@ -161,6 +162,57 @@
                 FontWeight="Bold" FontSize="15" 
                 Foreground="{StaticResource Color.Gray}" IsVisible="False"
                 Click="OnStopButtonClick" x:Name="buttonStop"/>
+
+            <Border Grid.Row="5"
+                    Margin="15,4,15,0"
+                    Padding="12,8"
+                    VerticalAlignment="Top"
+                    CornerRadius="8"
+                    Background="{StaticResource Color.LightGray}">
+                <StackPanel Spacing="4">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Orientation="Horizontal" Spacing="7">
+                            <Ellipse x:Name="infoStatusDot"
+                                     Width="10"
+                                     Height="10"
+                                     Fill="Gray"
+                                     VerticalAlignment="Center"/>
+                            <TextBlock Text="{DynamicResource Lang.ConnectionInfo.Title}"
+                                       Foreground="White"
+                                       FontWeight="SemiBold"
+                                       FontSize="13"/>
+                        </StackPanel>
+                        <Button Grid.Column="1"
+                                Padding="4,0"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Click="OnRefreshInfoButtonClick">
+                            <TextBlock Text="Refresh"
+                                       Foreground="{StaticResource Color.Blue}"
+                                       FontSize="11"/>
+                        </Button>
+                    </Grid>
+                    <TextBlock x:Name="textInfoIp"
+                               Text="-"
+                               Foreground="White"
+                               FontWeight="Bold"
+                               FontSize="17"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBlock x:Name="textInfoLocation"
+                               Foreground="#CFCFCF"
+                               FontSize="12"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBlock x:Name="textInfoOrg"
+                               Foreground="#9A9A9A"
+                               FontSize="11"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBlock x:Name="textInfoVerdict"
+                               Text="{DynamicResource Lang.ConnectionInfo.Idle}"
+                               Foreground="Gray"
+                               FontSize="11"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
         </Grid>
 
         <!-- Footer -->

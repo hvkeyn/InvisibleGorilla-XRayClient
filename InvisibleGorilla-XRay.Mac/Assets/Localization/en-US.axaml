@@ -13,6 +13,14 @@
     <x:String x:Key="Lang.Status.Stopped">Stopped</x:String>
     <x:String x:Key="Lang.Status.Running">Running</x:String>
     <x:String x:Key="Lang.Status.WaitForRun">Wait for running</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.Title">Your connection</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.Checking">Checking external IP...</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.Unknown">Unknown</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.Error">Connection check failed: {0}</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.Refresh">Refresh</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.Protected">IP changed. Traffic appears to be protected.</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.Exposed">IP did not change. Traffic may still be exposed.</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.Idle">Not connected. This IP is used as the baseline.</x:String>
 
     <x:String x:Key="Lang.Message.NoServerConfiguration">No server configuration</x:String>
     <x:String x:Key="Lang.Message.ConfigHint">Tap the plus to add a new one</x:String>
@@ -67,6 +75,7 @@
 
     <!-- Tor / Bridges -->
     <x:String x:Key="Lang.Tor.Enable">Route traffic through Tor</x:String>
+    <x:String x:Key="Lang.Tor.HowTo">Choose Ask Tor or a bridge method, press CONFIRM, then press RUN. If Gorilla is already running, it reconnects automatically.</x:String>
     <x:String x:Key="Lang.Tor.Mode">Mode</x:String>
     <x:String x:Key="Lang.Tor.BridgeType">Bridge type</x:String>
     <x:String x:Key="Lang.Tor.SocksPort">Tor SOCKS port</x:String>

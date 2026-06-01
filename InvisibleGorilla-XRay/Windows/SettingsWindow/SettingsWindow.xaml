@@ -7,10 +7,10 @@
         xmlns:Controls="clr-namespace:InvisibleGorillaXRay.Components"
         mc:Ignorable="d"
         Title="Invisible Gorilla XRay - Settings"
-        Height="450" 
+        Height="560" 
         Width="420" 
         WindowStartupLocation="CenterOwner"  
-        ResizeMode="NoResize"
+        ResizeMode="CanResize"
         ShowInTaskbar="False">
 
     <Window.Background>
@@ -366,6 +366,9 @@
                         <CheckBox x:Name="checkBoxTorEnabled" Foreground="White"
                             Content="{DynamicResource Lang.Tor.Enable}"
                             FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14"/>
+                        <TextBlock Margin="0 6 0 0" Foreground="#C9C9C9"
+                            Text="{DynamicResource Lang.Tor.HowTo}"
+                            TextWrapping="Wrap" FontFamily="{StaticResource SegoeUI}" FontSize="12"/>
 
                         <Label Margin="0 8 0 0" Foreground="White" Content="{DynamicResource Lang.Tor.QuickConnect}"
                             FontFamily="{StaticResource SegoeUI}" FontWeight="SemiBold" FontSize="14"/>

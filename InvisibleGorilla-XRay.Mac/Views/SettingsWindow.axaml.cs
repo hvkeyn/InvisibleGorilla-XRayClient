@@ -219,13 +219,14 @@ namespace InvisibleGorillaXRay.Mac.Views
 
         private TorSettings BuildTorSettingsFromUi()
         {
+            TorSettings existing = getUserSettings.Invoke().GetTorSettings();
             return new TorSettings
             {
                 Enabled = checkBoxTorEnabled.IsChecked == true,
-                Mode = GetComboBoxSelectedKey<TorMode>(comboBoxTorMode),
-                BridgeType = GetComboBoxSelectedKey<BridgeType>(comboBoxBridgeType),
-                SocksPort = int.TryParse(textBoxTorSocksPort.Text, out int sp) ? sp : 9250,
-                ControlPort = getUserSettings.Invoke().GetTorSettings().GetControlPort(),
+                Mode = GetComboBoxSelectedKey(comboBoxTorMode, existing.GetMode()),
+                BridgeType = GetComboBoxSelectedKey(comboBoxBridgeType, existing.GetBridgeType()),
+                SocksPort = int.TryParse(textBoxTorSocksPort.Text, out int sp) && sp > 0 ? sp : existing.GetSocksPort(),
+                ControlPort = existing.GetControlPort(),
                 BridgeLines = SplitBridgeLines(textBoxBridges.Text)
             };
         }
@@ -259,11 +260,11 @@ namespace InvisibleGorillaXRay.Mac.Views
             }
         }
 
-        private T GetComboBoxSelectedKey<T>(ComboBox comboBox)
+        private T GetComboBoxSelectedKey<T>(ComboBox comboBox, T fallback = default)
         {
             if (comboBox.SelectedItem is KeyValuePair<T, string> kvp)
                 return kvp.Key;
-            return default;
+            return fallback;
         }
 
         private void ReloadDiscoveredApps()

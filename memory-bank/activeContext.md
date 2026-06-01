@@ -1,6 +1,24 @@
 # Active Context
 
 ## Current Focus
+Prepare and publish `v3.5.4` as a patch release for connection-status UI layout, Android/Avalonia status parity, Tor usability, and desktop server-list visibility.
+
+## Recent Changes
+- Moved the Windows live connection widget into the main content area so it stays above the bottom toolbar.
+- Added the shared live connection/IP widget to Android and the Avalonia desktop views used by macOS and Linux.
+- Added Tor usage guidance in Settings and hardened Tor settings persistence by cloning/normalizing saved `TorSettings`.
+- Increased/resized Server config and Settings windows on desktop so longer lists and Tor controls remain accessible.
+- Bumped app versions to `3.5.4` / Android version code `12` and generated release notes plus Windows, Linux, Android arm64, and Android x86_64 assets.
+
+## Validation Snapshot
+- `dotnet build` succeeded for Windows, Android, macOS, and Linux.
+- Windows publish succeeded for `win-x64`.
+- Android signed APKs were published for `arm64-v8a` and `x86_64`.
+- Linux x64 bundle was produced through `build.sh` in WSL.
+
+# Active Context
+
+## Current Focus
 - Android app rules picker usability and correctness.
 - Android release builds for emulator and real devices.
 

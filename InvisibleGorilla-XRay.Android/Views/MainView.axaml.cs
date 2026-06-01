@@ -32,6 +32,7 @@ namespace InvisibleGorillaXRay.Android.Views
     using InvisibleGorillaXRay.Handlers.SmartInput;
     using InvisibleGorillaXRay.Handlers.Tor;
     using InvisibleGorillaXRay.Models;
+    using InvisibleGorillaXRay.Services;
     using InvisibleGorillaXRay.Utilities;
 
     public partial class MainView : UserControl
@@ -61,6 +62,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private static readonly IBrush AvailabilityErrorBrush = new SolidColorBrush(Color.Parse("#D95F5F"));
         private static readonly IBrush AvailabilitySuccessBrush = new SolidColorBrush(Color.Parse("#6DCC8E"));
 
+        private readonly ConnectionInfoService connectionInfoService = new();
         private InvisibleGorillaXRay.Core.InvisibleGorillaXRayCore core = null!;
         private SettingsHandler settingsHandler = null!;
         private ConfigHandler configHandler = null!;
@@ -101,6 +103,10 @@ namespace InvisibleGorillaXRay.Android.Views
         private UpdateInfo? pendingUpdateInfo;
         private ReleaseAsset? pendingUpdateAsset;
         private string? pendingUpdateLocalApkPath;
+        private DispatcherTimer? connectionInfoTimer;
+        private CancellationTokenSource? connectionInfoLookupCancellation;
+        private string baselineIp = string.Empty;
+        private bool isConnectionInfoConnected;
 
         public MainView()
         {
@@ -140,6 +146,7 @@ namespace InvisibleGorillaXRay.Android.Views
             UpdateCurrentConfigSummary();
             DiagnosticLog.Write("MainView", "Current config summary updated");
             SetConnectionState(ConnectionState.Stopped);
+            InitializeConnectionInfo();
             SetStatus(string.Empty);
             isInitialized = true;
             DiagnosticLog.Write("MainView", "Setup completed");
@@ -174,6 +181,12 @@ namespace InvisibleGorillaXRay.Android.Views
         private TextBlock HomeStatusText => GetRequiredControl<TextBlock>("HomeStatusTextBlock");
         private Border HomeInfoPanelContainer => GetRequiredControl<Border>("HomeInfoPanel");
         private TextBlock HomeInfoText => GetRequiredControl<TextBlock>("HomeInfoTextBlock");
+        private Border ConnectionInfoDotControl => GetRequiredControl<Border>("ConnectionInfoDot");
+        private TextBlock ConnectionInfoTitleText => GetRequiredControl<TextBlock>("ConnectionInfoTitleTextBlock");
+        private TextBlock ConnectionInfoIpText => GetRequiredControl<TextBlock>("ConnectionInfoIpTextBlock");
+        private TextBlock ConnectionInfoLocationText => GetRequiredControl<TextBlock>("ConnectionInfoLocationTextBlock");
+        private TextBlock ConnectionInfoOrgText => GetRequiredControl<TextBlock>("ConnectionInfoOrgTextBlock");
+        private TextBlock ConnectionInfoVerdictText => GetRequiredControl<TextBlock>("ConnectionInfoVerdictTextBlock");
         private Border ServersStatusPanelContainer => GetRequiredControl<Border>("ServersStatusPanel");
         private TextBlock ServersStatusText => GetRequiredControl<TextBlock>("ServersStatusTextBlock");
         private TextBlock ServersTitleText => GetRequiredControl<TextBlock>("ServersTitleTextBlock");
@@ -418,6 +431,8 @@ namespace InvisibleGorillaXRay.Android.Views
             CopyConfigLinkActionButton.Content = Localize("Lang.Android.Share.Option.CopyLink");
             ExportConfigActionButton.Content = Localize("Lang.Android.Share.Option.ExportConfig");
             CancelConfigShareActionButton.Content = Localize("Lang.Button.Cancel");
+            ConnectionInfoTitleText.Text = Localize("Lang.ConnectionInfo.Title");
+            ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Idle");
 
             SettingsTitleText.Text = Localize("Lang.Window.Settings.Title");
             SettingsDescriptionText.Text = Localize("Lang.Android.Settings.Description");
@@ -460,6 +475,7 @@ namespace InvisibleGorillaXRay.Android.Views
             TunDescriptionText.Text = Localize("Lang.Android.Settings.TunDescription");
             GetRequiredControl<TextBlock>("TorTitleTextBlock").Text = Localize("Lang.Window.Settings.Tor");
             TorEnabledToggle.Content = Localize("Lang.Tor.Enable");
+            GetRequiredControl<TextBlock>("TorHowToTextBlock").Text = Localize("Lang.Tor.HowTo");
             GetRequiredControl<TextBlock>("TorModeTitleTextBlock").Text = Localize("Lang.Tor.Mode");
             GetRequiredControl<TextBlock>("BridgeTypeTitleTextBlock").Text = Localize("Lang.Tor.BridgeType");
             GetRequiredControl<TextBlock>("TorSocksPortTitleTextBlock").Text = Localize("Lang.Tor.SocksPort");
@@ -2150,6 +2166,8 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void SetConnectionState(ConnectionState state)
         {
+            isConnectionInfoConnected = state == ConnectionState.Running;
+
             switch (state)
             {
                 case ConnectionState.Starting:
@@ -2178,6 +2196,100 @@ namespace InvisibleGorillaXRay.Android.Views
                     ConnectionStateTitleText.Text = Localize("Lang.Status.Stopped");
                     ConnectionStateSubtitleText.Text = Localize("Lang.Android.Home.Subtitle.Stopped");
                     break;
+            }
+
+            TimeSpan delay = state == ConnectionState.Running
+                ? TimeSpan.FromSeconds(3)
+                : TimeSpan.FromMilliseconds(200);
+            ScheduleConnectionInfoRefresh(delay);
+        }
+
+        private void InitializeConnectionInfo()
+        {
+            connectionInfoTimer?.Stop();
+            connectionInfoTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(45)
+            };
+            connectionInfoTimer.Tick += (_, _) => _ = RefreshConnectionInfoAsync();
+            connectionInfoTimer.Start();
+            _ = RefreshConnectionInfoAsync();
+        }
+
+        private void ScheduleConnectionInfoRefresh(TimeSpan delay)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(delay).ConfigureAwait(false);
+                    await RefreshConnectionInfoAsync().ConfigureAwait(false);
+                }
+                catch
+                {
+                }
+            });
+        }
+
+        private async Task RefreshConnectionInfoAsync()
+        {
+            connectionInfoLookupCancellation?.Cancel();
+            connectionInfoLookupCancellation = new CancellationTokenSource();
+            CancellationToken token = connectionInfoLookupCancellation.Token;
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                ConnectionInfoDotControl.Background = AvailabilityPendingBrush;
+                ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Checking");
+            });
+
+            ConnectionInfo info = await connectionInfoService.LookupAsync(token: token).ConfigureAwait(false);
+            if (token.IsCancellationRequested)
+                return;
+
+            Dispatcher.UIThread.Post(() => ApplyConnectionInfo(info));
+        }
+
+        private void ApplyConnectionInfo(ConnectionInfo info)
+        {
+            if (!info.Ok)
+            {
+                ConnectionInfoDotControl.Background = AvailabilityErrorBrush;
+                ConnectionInfoIpText.Text = Localize("Lang.ConnectionInfo.Unknown");
+                ConnectionInfoLocationText.Text = string.Empty;
+                ConnectionInfoOrgText.Text = string.Empty;
+                ConnectionInfoVerdictText.Text = LocalizeFormat("Lang.ConnectionInfo.Error", info.Error);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(baselineIp) && !isConnectionInfoConnected)
+                baselineIp = info.Ip;
+
+            bool changedFromBaseline = !string.IsNullOrWhiteSpace(baselineIp)
+                && !string.Equals(baselineIp, info.Ip, StringComparison.OrdinalIgnoreCase);
+
+            ConnectionInfoDotControl.Background = isConnectionInfoConnected && changedFromBaseline
+                ? AvailabilitySuccessBrush
+                : isConnectionInfoConnected
+                    ? AvailabilityErrorBrush
+                    : AvailabilityPendingBrush;
+
+            ConnectionInfoIpText.Text = info.Ip;
+            ConnectionInfoLocationText.Text = info.Location;
+            ConnectionInfoOrgText.Text = info.Org;
+
+            if (!isConnectionInfoConnected)
+            {
+                baselineIp = info.Ip;
+                ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Idle");
+            }
+            else if (changedFromBaseline)
+            {
+                ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Protected");
+            }
+            else
+            {
+                ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Exposed");
             }
         }
 
@@ -2466,6 +2578,11 @@ namespace InvisibleGorillaXRay.Android.Views
         private void OnSaveSettingsClick(object? sender, RoutedEventArgs e)
         {
             TrySaveSettings(showSuccessMessage: true);
+        }
+
+        private void OnRefreshConnectionInfoClick(object? sender, RoutedEventArgs e)
+        {
+            _ = RefreshConnectionInfoAsync();
         }
 
         private void OnRefreshInstalledAppsClick(object? sender, RoutedEventArgs e)

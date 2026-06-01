@@ -90,6 +90,7 @@
     <system:String x:Key="Lang.Window.Settings.Tab.Tor">Tor</system:String>
     <system:String x:Key="Lang.Window.Settings.Tab.Log">Log</system:String>
     <system:String x:Key="Lang.Tor.Enable">Route traffic through Tor</system:String>
+    <system:String x:Key="Lang.Tor.HowTo">Choose Ask Tor or a bridge method, press CONFIRM, then press RUN. If Gorilla is already running, it reconnects automatically.</system:String>
     <system:String x:Key="Lang.Tor.Mode">Mode</system:String>
     <system:String x:Key="Lang.Tor.BridgeType">Bridge type</system:String>
     <system:String x:Key="Lang.Tor.SocksPort">Tor SOCKS port</system:String>

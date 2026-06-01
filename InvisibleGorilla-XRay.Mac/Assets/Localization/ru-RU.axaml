@@ -13,6 +13,14 @@
     <x:String x:Key="Lang.Status.Stopped">Остановлен</x:String>
     <x:String x:Key="Lang.Status.Running">Работает</x:String>
     <x:String x:Key="Lang.Status.WaitForRun">Ожидание запуска</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.Title">Ваше соединение</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.Checking">Проверяем внешний IP...</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.Unknown">Неизвестно</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.Error">Проверка соединения не удалась: {0}</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.Refresh">Обновить</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.Protected">IP изменился. Трафик выглядит защищённым.</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.Exposed">IP не изменился. Трафик может идти мимо туннеля.</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.Idle">Нет подключения. Этот IP используется как исходный.</x:String>
 
     <x:String x:Key="Lang.Message.NoServerConfiguration">Нет конфигурации сервера</x:String>
     <x:String x:Key="Lang.Message.ConfigHint">Нажмите плюс, чтобы добавить новый</x:String>
@@ -67,6 +75,7 @@
 
     <!-- Tor / Мосты -->
     <x:String x:Key="Lang.Tor.Enable">Пускать трафик через Tor</x:String>
+    <x:String x:Key="Lang.Tor.HowTo">Выберите «Спросить Tor» или метод моста, нажмите «ПОДТВЕРДИТЬ», затем «ЗАПУСК». Если Горилла уже работает, она переподключится автоматически.</x:String>
     <x:String x:Key="Lang.Tor.Mode">Режим</x:String>
     <x:String x:Key="Lang.Tor.BridgeType">Тип моста</x:String>
     <x:String x:Key="Lang.Tor.SocksPort">SOCKS-порт Tor</x:String>

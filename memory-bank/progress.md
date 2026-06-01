@@ -1,5 +1,27 @@
 # Progress
 
+## Recently Fixed (v3.5.4)
+- Windows live connection widget no longer clips into the footer.
+- Android now has the same in-app live public IP/status widget as desktop.
+- macOS/Linux shared Avalonia main window now includes live connection verification.
+- Tor Settings now explains the workflow: choose Ask Tor or bridge method, confirm, then run or auto-reconnect.
+- Tor settings persistence now normalizes/clones saved bridge settings on load/update.
+- Desktop Server config windows are taller/resizable so more than three configurations remain reachable.
+
+## Validation
+- Windows Release build and publish succeeded.
+- Android Release build succeeded and signed APKs were produced for `arm64-v8a` and `x86_64`.
+- macOS Release build succeeded.
+- Linux Release build and x64 bundle succeeded.
+
+## Artifacts
+- `release-assets/InvisibleGorilla-XRay-Windows-v3.5.4.zip`
+- `release-assets/InvisibleGorilla-XRay-Linux-x64-v3.5.4.tar.gz`
+- `release-assets/InvisibleGorilla-XRay-Android-arm64-v3.5.4.apk`
+- `release-assets/InvisibleGorilla-XRay-Android-x86_64-v3.5.4.apk`
+
+# Progress
+
 ## Working
 - Android app rules editor/picker split is implemented.
 - Async installed-app loading is implemented.

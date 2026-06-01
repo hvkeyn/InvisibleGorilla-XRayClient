@@ -90,6 +90,7 @@
     <system:String x:Key="Lang.Window.Settings.Tab.Tor">Tor</system:String>
     <system:String x:Key="Lang.Window.Settings.Tab.Log">گزارش</system:String>
     <system:String x:Key="Lang.Tor.Enable">عبور ترافیک از طریق Tor</system:String>
+    <system:String x:Key="Lang.Tor.HowTo">Ask Tor یا یک روش پل را انتخاب کنید، CONFIRM را بزنید، سپس RUN را بزنید. اگر Gorilla در حال اجرا باشد، خودکار دوباره وصل می‌شود.</system:String>
     <system:String x:Key="Lang.Tor.Mode">حالت</system:String>
     <system:String x:Key="Lang.Tor.BridgeType">نوع پل</system:String>
     <system:String x:Key="Lang.Tor.SocksPort">پورت SOCKS تور</system:String>
