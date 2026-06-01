@@ -7,7 +7,7 @@
         xmlns:Controls="clr-namespace:InvisibleGorillaXRay.Components"
         mc:Ignorable="d"
         Title="Invisible Gorilla XRay - Server config"
-        Height="450" 
+        Height="520" 
         Width="350" 
         WindowStartupLocation="CenterOwner"  
         ResizeMode="NoResize"
@@ -220,7 +220,8 @@
                 <RowDefinition Height="50"/>
             </Grid.RowDefinitions>
             
-            <StackPanel Grid.Row="0" Orientation="Vertical" VerticalAlignment="Center" Margin="20 0">
+            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Orientation="Vertical" VerticalAlignment="Center" Margin="20 10">
                     <RadioButton GroupName="GroupImport" Content="{DynamicResource Lang.Window.Server.Import.File}" 
                         Foreground="White" IsChecked="True"
                         FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14"
@@ -265,6 +266,7 @@
                     FontFamily="{StaticResource SegoeUI}" Visibility="Collapsed"
                     x:Name="textBlockSmartImportStatus"/>
             </StackPanel>
+            </ScrollViewer>
             
             <StackPanel Grid.Row="1" Orientation="Horizontal" 
                 HorizontalAlignment="Right" Margin="15 0">

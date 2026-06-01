@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 namespace InvisibleGorillaXRay.Handlers.SmartInput
 {
     using Models;
+    using Values;
 
     /// <summary>
     /// What a single pasted token represents.
@@ -87,6 +88,16 @@ namespace InvisibleGorillaXRay.Handlers.SmartInput
                 if (line.Length == 0)
                     continue;
 
+                // invxray:// deep links exported by the app itself (config / config-data / subscription).
+                if (TryNormalizeDeepLink(line, out string deepPayload, out PastedItemKind deepKind))
+                {
+                    if (deepKind == PastedItemKind.SubscriptionLink)
+                        result.SubscriptionLinks.Add(deepPayload);
+                    else
+                        result.ServerLinks.Add(deepPayload);
+                    continue;
+                }
+
                 switch (ClassifyLine(line, out BridgeType bridgeType))
                 {
                     case PastedItemKind.ServerLink:
@@ -152,6 +163,38 @@ namespace InvisibleGorillaXRay.Handlers.SmartInput
                 return PastedItemKind.SubscriptionLink;
 
             return PastedItemKind.Unknown;
+        }
+
+        // Unwrap an invxray:// deep link into its underlying payload so the same
+        // links exported/shared by the app (older versions included) import cleanly.
+        private static bool TryNormalizeDeepLink(string line, out string payload, out PastedItemKind kind)
+        {
+            payload = null;
+            kind = PastedItemKind.Unknown;
+
+            // Check config-data before config: "config-data/" is not a prefix of "config/".
+            if (line.StartsWith(DeepLink.CONFIG_DATA, StringComparison.OrdinalIgnoreCase))
+            {
+                payload = Uri.UnescapeDataString(line.Substring(DeepLink.CONFIG_DATA.Length).Trim());
+                kind = PastedItemKind.ServerLink;
+                return payload.Length > 0;
+            }
+
+            if (line.StartsWith(DeepLink.CONFIG, StringComparison.OrdinalIgnoreCase))
+            {
+                payload = line.Substring(DeepLink.CONFIG.Length).Trim();
+                kind = PastedItemKind.ServerLink;
+                return payload.Length > 0;
+            }
+
+            if (line.StartsWith(DeepLink.SUBSCRIPTION, StringComparison.OrdinalIgnoreCase))
+            {
+                payload = line.Substring(DeepLink.SUBSCRIPTION.Length).Trim();
+                kind = PastedItemKind.SubscriptionLink;
+                return payload.Length > 0;
+            }
+
+            return false;
         }
 
         // Tolerate lines copied with a leading "Bridge " directive (torrc style).

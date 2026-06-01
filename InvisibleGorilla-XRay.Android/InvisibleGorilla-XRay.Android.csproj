@@ -9,8 +9,8 @@
     <SupportedOSPlatformVersion>24</SupportedOSPlatformVersion>
     <ApplicationId>io.invisiblegorilla.xray</ApplicationId>
     <ApplicationTitle>Invisible Gorilla XRay</ApplicationTitle>
-    <ApplicationVersion>8</ApplicationVersion>
-    <ApplicationDisplayVersion>3.5.0</ApplicationDisplayVersion>
+    <ApplicationVersion>9</ApplicationVersion>
+    <ApplicationDisplayVersion>3.5.1</ApplicationDisplayVersion>
     <AndroidPackageFormats>apk</AndroidPackageFormats>
     <AndroidUseSharedRuntime>false</AndroidUseSharedRuntime>
     <AndroidManifest>AndroidManifest.xml</AndroidManifest>

@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="InvisibleGorillaXRay.Mac.Views.ServerWindow"
         Title="Invisible Gorilla XRay - Server config"
-        Height="450" 
+        Height="520" 
         Width="350"
         CanResize="False"
         WindowStartupLocation="CenterOwner"
@@ -185,7 +185,8 @@
                 <RowDefinition Height="50"/>
             </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="0" Orientation="Vertical" VerticalAlignment="Center" Margin="20,0">
+            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Orientation="Vertical" VerticalAlignment="Center" Margin="20,10">
                 <RadioButton GroupName="GroupImport"
                     Content="{DynamicResource Lang.Window.Server.AddConfig.FromFile}"
                     Foreground="White" IsChecked="True"
@@ -228,6 +229,7 @@
                     IsVisible="False"
                     x:Name="textBlockSmartImportStatus"/>
             </StackPanel>
+            </ScrollViewer>
 
             <StackPanel Grid.Row="1" Orientation="Horizontal" 
                 HorizontalAlignment="Right" Margin="15,0">
