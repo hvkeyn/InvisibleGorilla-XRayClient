@@ -66,11 +66,12 @@ namespace InvisibleGorillaXRay.Services
 
         private static async Task<ConnectionInfo> TryLookupAsync(string url, IWebProxy proxy, CancellationToken token)
         {
-            HttpClientHandler handler = new HttpClientHandler
+            SocketsHttpHandler handler = new SocketsHttpHandler
             {
                 UseProxy = proxy != null,
                 Proxy = proxy,
-                AllowAutoRedirect = true
+                AllowAutoRedirect = true,
+                ConnectTimeout = TimeSpan.FromSeconds(8)
             };
 
             using HttpClient client = new HttpClient(handler)
