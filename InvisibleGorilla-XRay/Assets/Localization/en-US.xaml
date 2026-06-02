@@ -152,6 +152,8 @@
     <system:String x:Key="Lang.AppRules.Manage">Manage</system:String>
     <system:String x:Key="Lang.AppRules.ManagerDescription">Choose a template, switch between all apps, bypass, or only selected modes, and reuse one shared template library across configurations.</system:String>
     <system:String x:Key="Lang.AppRules.CurrentConfig">Current configuration</system:String>
+    <system:String x:Key="Lang.AppRules.Connection">Apply rules to connection</system:String>
+    <system:String x:Key="Lang.AppRules.ConnectionHint">Pick any server config (active or not) to assign its own template and mode.</system:String>
     <system:String x:Key="Lang.AppRules.Search">Search apps</system:String>
     <system:String x:Key="Lang.AppRules.Save">Save app rules</system:String>
     <system:String x:Key="Lang.AppRules.Summary">Template: {0} / Mode: {1} / Selected apps: {2}</system:String>

@@ -152,6 +152,8 @@
     <system:String x:Key="Lang.AppRules.Manage">Управлять</system:String>
     <system:String x:Key="Lang.AppRules.ManagerDescription">Выберите шаблон, переключайте режимы для всех приложений, обхода выбранных или допуска только выбранных и используйте общую библиотеку шаблонов для разных конфигураций.</system:String>
     <system:String x:Key="Lang.AppRules.CurrentConfig">Текущая конфигурация</system:String>
+    <system:String x:Key="Lang.AppRules.Connection">Применить правила к подключению</system:String>
+    <system:String x:Key="Lang.AppRules.ConnectionHint">Выберите любую конфигурацию сервера (активную или нет), чтобы задать ей свой шаблон и режим.</system:String>
     <system:String x:Key="Lang.AppRules.Search">Поиск приложений</system:String>
     <system:String x:Key="Lang.AppRules.Save">Сохранить правила приложений</system:String>
     <system:String x:Key="Lang.AppRules.Summary">Шаблон: {0} / Режим: {1} / Выбрано приложений: {2}</system:String>

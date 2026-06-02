@@ -51,15 +51,26 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.5.9
+
+- **Per-connection app rules (Windows)** - the App rules dialog now has an *"Apply rules to connection"* selector, so you can assign a template and routing mode to any server config (active or not), then switch between them like VLESS keys.
+- **Cleaner app picker (Windows)** - running apps are listed by their friendly product name instead of the current window title (no more giant browser-tab headings), the dialog is resizable, and the app list is taller and easier to scan.
+- **Tor bridge profiles (Android)** - paste a bridge key to create a switchable Tor profile in the server list, check its availability/latency, and see it on the main screen (from v3.5.8).
+- **Faster bridge fetch + fallback** - bridge requests time out in 20s and fall back to built-in obfs4 bridges when the bridge service is unreachable (from v3.5.8).
+- **Analytics removed** - the client never transmits usage data, and the "Send analytics" checkbox is gone on all platforms (from v3.5.8).
+
 ## Features
 
 - **One-click connect** on desktop - import config and press Run
 - **VLESS, VMess, Trojan, Shadowsocks** - all major protocols supported
+- **Tor support** - route over the Tor network with built-in or custom obfs4 bridges (Orbot-style); Android exposes Tor bridges as switchable profiles
 - **Proxy and TUN modes** - Windows/macOS desktop routing, Linux GNOME proxy + TUN support, Android groundwork for local proxy and future mobile VPN
+- **Per-connection app rules** - choose all-apps / bypass-selected / only-selected routing per server config with reusable templates (Windows)
 - **Server management** - add, test, switch between multiple servers
 - **Connection testing** - check latency with one click
 - **Subscription support** - auto-update server lists from provider links
-- **Shared core logic** - common config, templates, analytics, and Xray wrapper integration across platforms
+- **Shared core logic** - common config, templates, and Xray wrapper integration across platforms
+- **Privacy-first** - no analytics or telemetry; nothing is sent anywhere
 - **Diagnostic logging** - startup/runtime troubleshooting for both desktop and mobile app roots
 
 ## Screenshots

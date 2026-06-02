@@ -80,9 +80,10 @@ namespace InvisibleGorillaXRay.Services
                         if (string.IsNullOrWhiteSpace(executablePath))
                             continue;
 
-                        string displayName = !string.IsNullOrWhiteSpace(process.MainWindowTitle)
-                            ? process.MainWindowTitle.Trim()
-                            : Path.GetFileNameWithoutExtension(executablePath);
+                        // Use the executable's friendly product/description name rather than the
+                        // current window title (e.g. a browser tab heading), so each running app
+                        // collapses into a single, short, recognizable entry.
+                        string displayName = GetFriendlyExecutableName(executablePath);
 
                         AddApp(executablePath, displayName, executablePath, "process");
                     }
@@ -111,6 +112,26 @@ namespace InvisibleGorillaXRay.Services
                     Source = source
                 };
             }
+        }
+
+        private static string GetFriendlyExecutableName(string executablePath)
+        {
+            try
+            {
+                FileVersionInfo info = FileVersionInfo.GetVersionInfo(executablePath);
+                string description = info.FileDescription?.Trim() ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(description))
+                    return description;
+
+                string product = info.ProductName?.Trim() ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(product))
+                    return product;
+            }
+            catch
+            {
+            }
+
+            return Path.GetFileNameWithoutExtension(executablePath);
         }
 
         private static string NormalizeExecutablePath(string? rawPath)
