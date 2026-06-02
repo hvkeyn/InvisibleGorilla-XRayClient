@@ -149,7 +149,8 @@
                             Content="{DynamicResource Lang.Window.Settings.AutoConnect}"
                             FontWeight="Normal" FontSize="14"/>
 
-                        <CheckBox x:Name="checkBoxSendAnalytics" Margin="5,15,0,0" Foreground="White" 
+                        <CheckBox x:Name="checkBoxSendAnalytics" Margin="5,15,0,0" Foreground="White"
+                            IsVisible="False"
                             Content="{DynamicResource Lang.Window.Settings.SendAnalytics}"
                             FontWeight="Normal" FontSize="14"/>
 

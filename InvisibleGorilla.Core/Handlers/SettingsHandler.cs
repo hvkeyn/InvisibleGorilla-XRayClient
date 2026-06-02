@@ -46,6 +46,7 @@ namespace InvisibleGorillaXRay.Handlers
             this.userSettings.AppRuleTemplates = CloneAppRuleTemplates(userSettings.AppRuleTemplates);
             this.userSettings.AppRuleTemplateBindings = CloneAppRuleTemplateBindings(userSettings.AppRuleTemplateBindings);
             this.userSettings.Tor = (userSettings.Tor ?? this.userSettings.Tor ?? new TorSettings()).Clone();
+            this.userSettings.TorProfiles = CloneTorProfiles(userSettings.TorProfiles);
 
             UpdateStartupSetting();
             SaveUserSettings();
@@ -103,6 +104,7 @@ namespace InvisibleGorillaXRay.Handlers
                 settings.AppRuleTemplates = CloneAppRuleTemplates(settings.AppRuleTemplates);
                 settings.AppRuleTemplateBindings = CloneAppRuleTemplateBindings(settings.AppRuleTemplateBindings);
                 settings.Tor = (settings.Tor ?? new TorSettings()).Clone();
+                settings.TorProfiles = CloneTorProfiles(settings.TorProfiles);
                 return settings;
             }
         }
@@ -165,6 +167,17 @@ namespace InvisibleGorillaXRay.Handlers
                 .Select(binding => new AppRuleTemplateBinding(
                     configPath: NormalizeConfigPath(binding.ConfigPath),
                     templateId: binding.TemplateId.Trim()))
+                .ToList();
+        }
+
+        private static System.Collections.Generic.List<TorProfile> CloneTorProfiles(System.Collections.Generic.IEnumerable<TorProfile>? profiles)
+        {
+            if (profiles == null)
+                return new System.Collections.Generic.List<TorProfile>();
+
+            return profiles
+                .Where(profile => profile != null && !string.IsNullOrWhiteSpace(profile.ConfigPath))
+                .Select(profile => profile.Clone())
                 .ToList();
         }
 

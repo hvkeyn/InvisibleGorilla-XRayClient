@@ -63,7 +63,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 }
             }
 
-            var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(45) };
+            var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(20) };
             client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "InvisibleGorilla-XRay/Tor");
             return client;
         }

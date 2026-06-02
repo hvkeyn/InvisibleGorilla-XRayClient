@@ -92,4 +92,74 @@ namespace InvisibleGorillaXRay.Models
             };
         }
     }
+
+    /// <summary>
+    /// A reusable, switchable Tor bridge profile that shows up in the server list like a VLESS
+    /// config. Selecting it activates Tor with these bridges; it can be availability/speed checked
+    /// just like a normal server. The matching <see cref="ConfigPath"/> points at a minimal Tor-only
+    /// Xray config file so the existing "select + run" pipeline works unchanged.
+    /// </summary>
+    public class TorProfile
+    {
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public string Name;
+
+        // Path of the generated Tor-only Xray config file that represents this profile in the list.
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public string ConfigPath;
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public TorMode Mode;
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public BridgeType BridgeType;
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public List<string> BridgeLines;
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public int SocksPort;
+
+        // Latency (ms) of the last successful bridge check, or -1 when never/failed.
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public int LastLatencyMs;
+
+        public TorProfile()
+        {
+            Name = "";
+            ConfigPath = "";
+            Mode = TorMode.ONLY_TOR;
+            BridgeType = BridgeType.OBFS4;
+            BridgeLines = new List<string>();
+            SocksPort = 9250;
+            LastLatencyMs = -1;
+        }
+
+        public List<string> GetBridgeLines()
+        {
+            if (BridgeLines == null)
+                return new List<string>();
+
+            return BridgeLines
+                .Where(line => !string.IsNullOrWhiteSpace(line))
+                .Select(line => line.Trim())
+                .ToList();
+        }
+
+        public int GetSocksPort() => SocksPort > 0 ? SocksPort : 9250;
+
+        public TorProfile Clone()
+        {
+            return new TorProfile
+            {
+                Name = Name ?? "",
+                ConfigPath = ConfigPath ?? "",
+                Mode = Mode,
+                BridgeType = BridgeType,
+                BridgeLines = GetBridgeLines(),
+                SocksPort = GetSocksPort(),
+                LastLatencyMs = LastLatencyMs
+            };
+        }
+    }
 }

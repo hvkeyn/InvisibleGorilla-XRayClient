@@ -1108,6 +1108,7 @@
                         <CheckBox x:Name="UdpEnabledCheckBox"
                                   Content="Enable UDP" />
                         <CheckBox x:Name="AnalyticsCheckBox"
+                                  IsVisible="False"
                                   Content="Send anonymous analytics" />
                     </StackPanel>
                 </Border>

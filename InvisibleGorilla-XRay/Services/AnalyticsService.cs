@@ -60,7 +60,8 @@ namespace InvisibleGorillaXRay.Services
             SendBufferedRequests();
             SendRequest(payload);
 
-            bool IsSendingAnalytics() => getSendingAnalyticsEnabled.Invoke() || isForced;
+            // Analytics removed: the client never transmits usage data to any endpoint.
+            bool IsSendingAnalytics() => false;
 
             string GetAnalyticsEventScope() => analyticsEvent.Scope;
 

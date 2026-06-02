@@ -104,6 +104,8 @@
     <x:String x:Key="Lang.Tor.Status.Ready">Tor is bundled and ready.</x:String>
     <x:String x:Key="Lang.Tor.Status.Unavailable">Tor binary is not bundled in this build.</x:String>
     <x:String x:Key="Lang.Tor.Status.LoadedDefaults">Loaded {0} built-in bridge(s).</x:String>
+    <x:String x:Key="Lang.Tor.Status.MoatFallback">Bridge service unreachable — loaded {0} built-in bridge(s).</x:String>
+    <x:String x:Key="Lang.Tor.Profile.Subtitle">Tor bridge · {0}</x:String>
     <x:String x:Key="Lang.Tor.Status.Checking">Checking bridge…</x:String>
     <x:String x:Key="Lang.Tor.Status.CheckOk">Bridge OK — connected in {0} ms.</x:String>
     <x:String x:Key="Lang.Tor.Status.CheckFail">Bridge check failed: {0}</x:String>

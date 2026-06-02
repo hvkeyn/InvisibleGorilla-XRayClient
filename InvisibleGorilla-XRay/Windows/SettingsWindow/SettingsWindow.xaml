@@ -163,7 +163,8 @@
                         <CheckBox x:Name="checkBoxAutoConnect" Margin="5 15 0 0" Foreground="White" 
                             Content="{DynamicResource Lang.Window.Settings.Basic.AutoConnect}" FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14"/>
                         
-                        <CheckBox x:Name="checkBoxSendAnalytics" Margin="5 15 0 0" Foreground="White" 
+                        <CheckBox x:Name="checkBoxSendAnalytics" Margin="5 15 0 0" Foreground="White"
+                            Visibility="Collapsed"
                             FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14">
 
                             <TextBlock>

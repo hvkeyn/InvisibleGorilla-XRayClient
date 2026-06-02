@@ -104,6 +104,8 @@
     <x:String x:Key="Lang.Tor.Status.Ready">Tor встроен и готов.</x:String>
     <x:String x:Key="Lang.Tor.Status.Unavailable">Бинарник Tor не включён в эту сборку.</x:String>
     <x:String x:Key="Lang.Tor.Status.LoadedDefaults">Загружено встроенных мостов: {0}.</x:String>
+    <x:String x:Key="Lang.Tor.Status.MoatFallback">Сервис мостов недоступен — загружено встроенных мостов: {0}.</x:String>
+    <x:String x:Key="Lang.Tor.Profile.Subtitle">Tor-мост · {0}</x:String>
     <x:String x:Key="Lang.Tor.Status.Checking">Проверка моста…</x:String>
     <x:String x:Key="Lang.Tor.Status.CheckOk">Мост работает — подключение за {0} мс.</x:String>
     <x:String x:Key="Lang.Tor.Status.CheckFail">Проверка моста не удалась: {0}</x:String>
