@@ -521,7 +521,8 @@ namespace InvisibleGorillaXRay.Mac.Views
             }
             else if (changedFromBaseline)
             {
-                textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Protected");
+                bool torActive = getUserSettings?.Invoke()?.GetTorSettings()?.GetEnabled() == true;
+                textInfoVerdict.Text = Loc(torActive ? "Lang.ConnectionInfo.ProtectedTor" : "Lang.ConnectionInfo.Protected");
             }
             else
             {

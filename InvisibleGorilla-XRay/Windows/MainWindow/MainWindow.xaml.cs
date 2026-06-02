@@ -611,7 +611,8 @@ namespace InvisibleGorillaXRay
             }
             else
             {
-                textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Protected");
+                bool torActive = getUserSettings?.Invoke()?.GetTorSettings()?.GetEnabled() == true;
+                textInfoVerdict.Text = Loc(torActive ? "Lang.ConnectionInfo.ProtectedTor" : "Lang.ConnectionInfo.Protected");
                 textInfoVerdict.Foreground = (Brush)TryFindResource("Color.Green") ?? Brushes.LimeGreen;
                 infoStatusDot.Fill = (Brush)TryFindResource("Color.Green") ?? Brushes.LimeGreen;
             }

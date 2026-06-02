@@ -18,6 +18,7 @@
     <system:String x:Key="Lang.ConnectionInfo.Error">Сервис проверки недоступен</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Refresh">Обновить</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Protected">Трафик идёт через VPN</system:String>
+    <system:String x:Key="Lang.ConnectionInfo.ProtectedTor">Трафик идёт через Tor-мост</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Exposed">Виден реальный IP — трафик идёт мимо VPN</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Idle">Не подключено</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Mode">Режим:</system:String>

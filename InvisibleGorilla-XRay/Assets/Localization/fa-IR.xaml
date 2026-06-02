@@ -18,6 +18,7 @@
     <system:String x:Key="Lang.ConnectionInfo.Error">سرویس بررسی در دسترس نیست</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Refresh">بازخوانی</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Protected">ترافیک از طریق VPN عبور می‌کند</system:String>
+    <system:String x:Key="Lang.ConnectionInfo.ProtectedTor">ترافیک از طریق پل Tor عبور می‌کند</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Exposed">IP واقعی نمایان است — ترافیک از VPN عبور نمی‌کند</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Idle">متصل نیست</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Mode">حالت:</system:String>

@@ -19,6 +19,7 @@
     <x:String x:Key="Lang.ConnectionInfo.Error">Connection check failed: {0}</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Refresh">Refresh</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Protected">IP changed. Traffic appears to be protected.</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.ProtectedTor">IP changed. Traffic exits through the Tor bridge.</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Exposed">IP did not change. Traffic may still be exposed.</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Idle">Not connected. This IP is used as the baseline.</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Mode">Mode:</x:String>

@@ -19,6 +19,7 @@
     <x:String x:Key="Lang.ConnectionInfo.Error">Проверка соединения не удалась: {0}</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Refresh">Обновить</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Protected">IP изменился. Трафик выглядит защищённым.</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.ProtectedTor">IP изменился. Трафик идёт через Tor-мост.</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Exposed">IP не изменился. Трафик может идти мимо туннеля.</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Idle">Нет подключения. Этот IP используется как исходный.</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Mode">Режим:</x:String>

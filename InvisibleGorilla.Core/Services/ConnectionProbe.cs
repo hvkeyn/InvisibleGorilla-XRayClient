@@ -58,9 +58,10 @@ namespace InvisibleGorillaXRay.Services
                 else
                     egress = $"{protocolLabel} over Tor";
 
+                // Make the Tor path explicit so the main-screen widget clearly states it is a
+                // Tor bridge connection and which pluggable transport carries it.
                 string bridge = DescribeBridge(tor.GetBridgeType());
-                if (!string.IsNullOrEmpty(bridge))
-                    egress += $" ({bridge})";
+                egress += string.IsNullOrEmpty(bridge) ? " (direct)" : $" (bridge {bridge})";
             }
             else
             {

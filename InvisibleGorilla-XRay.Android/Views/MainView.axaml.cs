@@ -90,6 +90,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private bool isShowingAdvancedImport;
         private bool isServersSectionInitialized;
         private bool isSettingsSectionInitialized;
+        private bool isSettingsLoadedIntoControls;
         private bool suppressSubscriptionSelectionChanged;
         private bool updateAvailable;
         private string latestRemoteVersion = string.Empty;
@@ -107,6 +108,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private CancellationTokenSource? connectionInfoLookupCancellation;
         private string baselineIp = string.Empty;
         private bool isConnectionInfoConnected;
+        private bool isConnectionInfoTor;
 
         public MainView()
         {
@@ -602,16 +604,22 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void EnsureSettingsSectionInitialized()
         {
-            if (!isSettingsSectionInitialized)
-            {
-                ProtocolSelector.ItemsSource = Enum.GetNames(typeof(Protocol));
-                TorModeSelector.ItemsSource = TorModeOptions.Values.ToList();
-                BridgeTypeSelector.ItemsSource = BridgeTypeOptions.Values.ToList();
-                isSettingsSectionInitialized = true;
-            }
-
+            EnsureSettingsControlsCreated();
             LoadSettingsIntoControls();
             UpdateRuntimeSummary();
+        }
+
+        // One-time control wiring (ItemsSource) without touching the user-entered values,
+        // so it is safe to call right before reading the UI on save.
+        private void EnsureSettingsControlsCreated()
+        {
+            if (isSettingsSectionInitialized)
+                return;
+
+            ProtocolSelector.ItemsSource = Enum.GetNames(typeof(Protocol));
+            TorModeSelector.ItemsSource = TorModeOptions.Values.ToList();
+            BridgeTypeSelector.ItemsSource = BridgeTypeOptions.Values.ToList();
+            isSettingsSectionInitialized = true;
         }
 
         private void LoadSettingsIntoControls()
@@ -626,6 +634,7 @@ namespace InvisibleGorillaXRay.Android.Views
             AnalyticsToggle.IsChecked = settings.GetSendingAnalyticsEnabled();
             LoadTorSettingsIntoControls(settings);
             RefreshAppRulesSummary();
+            isSettingsLoadedIntoControls = true;
         }
 
         private void LoadTorSettingsIntoControls(UserSettings settings)
@@ -1945,7 +1954,17 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private bool TrySaveSettings(bool showSuccessMessage)
         {
-            EnsureSettingsSectionInitialized();
+            EnsureSettingsControlsCreated();
+
+            // If the Settings panel was never opened this session, the controls hold no
+            // user input (they were never populated). Reading them here would wipe the
+            // persisted Tor bridges / ports, so keep the saved settings untouched.
+            if (!isSettingsLoadedIntoControls)
+            {
+                if (showSuccessMessage)
+                    SetStatus(Localize("Lang.Android.Status.SettingsSaved"));
+                return true;
+            }
 
             if (!TryParseProxyPort(ProxyPortInput.Text, out int proxyPort))
                 return false;
@@ -2252,6 +2271,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     probeProxy = core.CreateActiveProbeProxy();
                 string outbound = ConnectionProbe.DetectOutboundProtocol(settings.GetCurrentConfigPath());
                 modeText = ConnectionProbe.DescribeMode(settings.GetMode(), settings.GetProtocol(), settings.GetTorSettings(), outbound);
+                isConnectionInfoTor = settings.GetTorSettings().GetEnabled();
             }
             catch
             {
@@ -2308,7 +2328,9 @@ namespace InvisibleGorillaXRay.Android.Views
             }
             else if (changedFromBaseline)
             {
-                ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Protected");
+                ConnectionInfoVerdictText.Text = isConnectionInfoTor
+                    ? Localize("Lang.ConnectionInfo.ProtectedTor")
+                    : Localize("Lang.ConnectionInfo.Protected");
             }
             else
             {
