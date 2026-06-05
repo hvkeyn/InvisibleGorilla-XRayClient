@@ -27,6 +27,11 @@ namespace InvisibleGorillaXRay.Services
 
         public string FlagEmoji => CountryDisplay.GetFlagEmoji(CountryCode);
 
+        public string FlagImageUrl =>
+            string.IsNullOrWhiteSpace(CountryCode) || CountryCode.Length != 2
+                ? string.Empty
+                : $"https://flagcdn.com/w40/{CountryCode.ToLowerInvariant()}.png";
+
         public string PlaceLine => CountryDisplay.BuildPlaceLine(City, Region);
 
         public string Location

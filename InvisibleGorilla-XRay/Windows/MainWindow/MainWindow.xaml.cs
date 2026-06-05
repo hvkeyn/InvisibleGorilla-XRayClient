@@ -3,6 +3,7 @@ using System.Net;
 using System.Threading;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using System.ComponentModel;
 
@@ -536,10 +537,7 @@ namespace InvisibleGorillaXRay
             bool connected = isConnected;
 
             textInfoIp.Text = Loc("Lang.ConnectionInfo.Checking");
-            textInfoFlag.Text = string.Empty;
-            textInfoLocation.Text = string.Empty;
-            textInfoCountry.Text = string.Empty;
-            textInfoOrg.Text = string.Empty;
+            ClearConnectionInfoDetails();
             infoStatusDot.Fill = Brushes.Gray;
 
             // Route the probe exactly like user traffic: through the local xray listener in
@@ -555,9 +553,7 @@ namespace InvisibleGorillaXRay
                 modeText = ConnectionProbe.DescribeMode(settings.GetMode(), settings.GetProtocol(), settings.GetTorSettings(), outbound);
             }
 
-            textInfoMode.Text = connected && !string.IsNullOrEmpty(modeText)
-                ? $"{Loc("Lang.ConnectionInfo.Mode")} {modeText}"
-                : string.Empty;
+            SetModeBadge(connected, modeText);
 
             ConnectionInfo info;
             try
@@ -575,10 +571,7 @@ namespace InvisibleGorillaXRay
             if (!info.Ok)
             {
                 textInfoIp.Text = Loc("Lang.ConnectionInfo.Unknown");
-                textInfoFlag.Text = string.Empty;
-                textInfoLocation.Text = string.Empty;
-                textInfoCountry.Text = string.Empty;
-                textInfoOrg.Text = string.Empty;
+                ClearConnectionInfoDetails();
                 textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Error");
                 textInfoVerdict.Foreground = Brushes.Gray;
                 infoStatusDot.Fill = Brushes.Gray;
@@ -586,12 +579,77 @@ namespace InvisibleGorillaXRay
             }
 
             textInfoIp.Text = info.Ip;
-            textInfoFlag.Text = info.FlagEmoji;
-            textInfoLocation.Text = info.PlaceLine;
-            textInfoCountry.Text = info.CountryName;
-            textInfoOrg.Text = info.Org;
+            ApplyConnectionInfoDetails(info);
 
             ApplyVerdict(connected, info.Ip);
+        }
+
+        private void ClearConnectionInfoDetails()
+        {
+            textInfoFlag.Text = "🌐";
+            imageInfoFlag.Source = null;
+            imageInfoFlag.Visibility = Visibility.Collapsed;
+            textInfoLocation.Text = "—";
+            textInfoCountry.Text = string.Empty;
+            textInfoOrg.Text = "—";
+        }
+
+        private void ApplyConnectionInfoDetails(ConnectionInfo info)
+        {
+            string place = info.PlaceLine;
+            string country = info.CountryName;
+
+            textInfoLocation.Text = !string.IsNullOrWhiteSpace(place)
+                ? place
+                : !string.IsNullOrWhiteSpace(country) ? country : "—";
+
+            textInfoCountry.Text = !string.IsNullOrWhiteSpace(place) && !string.IsNullOrWhiteSpace(country)
+                ? country
+                : string.Empty;
+
+            textInfoOrg.Text = string.IsNullOrWhiteSpace(info.Org) ? "—" : info.Org;
+            ApplyCountryFlag(info);
+        }
+
+        private void SetModeBadge(bool connected, string modeText)
+        {
+            if (connected && !string.IsNullOrEmpty(modeText))
+            {
+                textInfoMode.Text = $"{Loc("Lang.ConnectionInfo.Mode")} {modeText}";
+                borderInfoMode.Visibility = Visibility.Visible;
+                return;
+            }
+
+            textInfoMode.Text = string.Empty;
+            borderInfoMode.Visibility = Visibility.Collapsed;
+        }
+
+        private void ApplyCountryFlag(ConnectionInfo info)
+        {
+            imageInfoFlag.Source = null;
+            imageInfoFlag.Visibility = Visibility.Collapsed;
+
+            if (!string.IsNullOrWhiteSpace(info.FlagImageUrl))
+            {
+                try
+                {
+                    BitmapImage flag = new BitmapImage();
+                    flag.BeginInit();
+                    flag.UriSource = new Uri(info.FlagImageUrl, UriKind.Absolute);
+                    flag.CacheOption = BitmapCacheOption.OnLoad;
+                    flag.EndInit();
+                    imageInfoFlag.Source = flag;
+                    imageInfoFlag.Visibility = Visibility.Visible;
+                    textInfoFlag.Text = string.Empty;
+                    return;
+                }
+                catch
+                {
+                    // Fall back to emoji when the CDN image cannot be loaded.
+                }
+            }
+
+            textInfoFlag.Text = !string.IsNullOrWhiteSpace(info.FlagEmoji) ? info.FlagEmoji : "🌐";
         }
 
         private void ApplyVerdict(bool connected, string currentIp)

@@ -12,19 +12,33 @@ namespace InvisibleGorillaXRay.Services
         public bool Ok { get; init; }
         public string Ip { get; init; } = string.Empty;
         public string City { get; init; } = string.Empty;
-        public string Country { get; init; } = string.Empty;
+        public string Region { get; init; } = string.Empty;
+        public string CountryCode { get; init; } = string.Empty;
+        public string CountryName { get; init; } = string.Empty;
         public string Org { get; init; } = string.Empty;
         public string Error { get; init; } = string.Empty;
+
+        public string FlagEmoji => CountryDisplay.GetFlagEmoji(CountryCode);
+
+        public string FlagImageUrl =>
+            string.IsNullOrWhiteSpace(CountryCode) || CountryCode.Length != 2
+                ? string.Empty
+                : $"https://flagcdn.com/w40/{CountryCode.ToLowerInvariant()}.png";
+
+        public string PlaceLine => CountryDisplay.BuildPlaceLine(City, Region);
 
         public string Location
         {
             get
             {
-                if (!string.IsNullOrWhiteSpace(City) && !string.IsNullOrWhiteSpace(Country))
-                    return $"{City}, {Country}";
-                if (!string.IsNullOrWhiteSpace(Country))
-                    return Country;
-                return City;
+                string place = PlaceLine;
+                if (!string.IsNullOrWhiteSpace(place) && !string.IsNullOrWhiteSpace(CountryName))
+                    return $"{place}, {CountryName}";
+                if (!string.IsNullOrWhiteSpace(CountryName))
+                    return CountryName;
+                if (!string.IsNullOrWhiteSpace(place))
+                    return place;
+                return string.Empty;
             }
         }
     }
@@ -51,13 +65,14 @@ namespace InvisibleGorillaXRay.Services
             {
                 UseProxy = proxy != null,
                 Proxy = proxy,
+                PreAuthenticate = proxy != null,
                 AllowAutoRedirect = true,
-                ConnectTimeout = TimeSpan.FromSeconds(8)
+                ConnectTimeout = TimeSpan.FromSeconds(12)
             };
 
             using HttpClient client = new HttpClient(handler)
             {
-                Timeout = TimeSpan.FromSeconds(8)
+                Timeout = TimeSpan.FromSeconds(12)
             };
             client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
 
@@ -73,12 +88,24 @@ namespace InvisibleGorillaXRay.Services
                 if (string.IsNullOrWhiteSpace(ip))
                     return new ConnectionInfo { Ok = false, Error = "No IP in response" };
 
+                string countryCode = FirstNonEmpty(root, "country_iso", "country");
+                string countryName = FirstNonEmpty(root, "country_name");
+                if (countryCode.Length > 2)
+                {
+                    countryName = string.IsNullOrWhiteSpace(countryName) ? countryCode : countryName;
+                    countryCode = FirstNonEmpty(root, "country_iso");
+                }
+
+                countryName = CountryDisplay.GetCountryName(countryCode, countryName);
+
                 return new ConnectionInfo
                 {
                     Ok = true,
                     Ip = ip,
                     City = FirstNonEmpty(root, "city"),
-                    Country = FirstNonEmpty(root, "country", "country_iso"),
+                    Region = FirstNonEmpty(root, "region", "regionName"),
+                    CountryCode = countryCode,
+                    CountryName = countryName,
                     Org = FirstNonEmpty(root, "org", "asn_org", "isp")
                 };
             }

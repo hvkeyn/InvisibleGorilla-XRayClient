@@ -23,6 +23,9 @@
     <x:String x:Key="Lang.ConnectionInfo.Exposed">IP не изменился. Трафик может идти мимо туннеля.</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Idle">Нет подключения. Этот IP используется как исходный.</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Mode">Режим:</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.IpLabel">IP-адрес</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.LocationLabel">Местоположение</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.ProviderLabel">Провайдер</x:String>
 
     <x:String x:Key="Lang.Message.NoServerConfiguration">Нет конфигурации сервера</x:String>
     <x:String x:Key="Lang.Message.ConfigHint">Нажмите плюс, чтобы добавить новый</x:String>

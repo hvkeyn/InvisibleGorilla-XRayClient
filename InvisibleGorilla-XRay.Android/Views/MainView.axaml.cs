@@ -2342,8 +2342,15 @@ namespace InvisibleGorillaXRay.Android.Views
                     : AvailabilityPendingBrush;
 
             ConnectionInfoIpText.Text = info.Ip;
-            ConnectionInfoLocationText.Text = info.Location;
-            ConnectionInfoOrgText.Text = info.Org;
+            string flag = !string.IsNullOrWhiteSpace(info.FlagEmoji) ? $"{info.FlagEmoji} " : string.Empty;
+            string place = !string.IsNullOrWhiteSpace(info.PlaceLine) ? info.PlaceLine : info.CountryName;
+            string countrySuffix = !string.IsNullOrWhiteSpace(info.PlaceLine) && !string.IsNullOrWhiteSpace(info.CountryName)
+                ? $"\n{info.CountryName}"
+                : string.Empty;
+            ConnectionInfoLocationText.Text = string.IsNullOrWhiteSpace(place)
+                ? string.Empty
+                : $"{flag}{place}{countrySuffix}";
+            ConnectionInfoOrgText.Text = string.IsNullOrWhiteSpace(info.Org) ? "—" : info.Org;
 
             if (!isConnectionInfoConnected)
             {

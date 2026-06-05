@@ -474,9 +474,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             {
                 infoStatusDot.Fill = Brushes.Gray;
                 textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Checking");
-                textInfoMode.Text = connected && !string.IsNullOrEmpty(modeText)
-                    ? $"{Loc("Lang.ConnectionInfo.Mode")} {modeText}"
-                    : string.Empty;
+                SetModeBadge(connected, modeText);
             });
 
             ConnectionInfo info = await connectionInfoService.LookupAsync(probeProxy, token).ConfigureAwait(false);
@@ -492,8 +490,10 @@ namespace InvisibleGorillaXRay.Mac.Views
             {
                 infoStatusDot.Fill = Brushes.IndianRed;
                 textInfoIp.Text = Loc("Lang.ConnectionInfo.Unknown");
-                textInfoLocation.Text = string.Empty;
-                textInfoOrg.Text = string.Empty;
+                textInfoFlag.Text = "🌐";
+                textInfoLocation.Text = "—";
+                textInfoCountry.Text = string.Empty;
+                textInfoOrg.Text = "—";
                 textInfoVerdict.Text = string.Format(Loc("Lang.ConnectionInfo.Error"), info.Error);
                 return;
             }
@@ -511,8 +511,12 @@ namespace InvisibleGorillaXRay.Mac.Views
                     : Brushes.Gray;
 
             textInfoIp.Text = info.Ip;
-            textInfoLocation.Text = info.Location;
-            textInfoOrg.Text = info.Org;
+            textInfoFlag.Text = !string.IsNullOrWhiteSpace(info.FlagEmoji) ? info.FlagEmoji : "🌐";
+            textInfoLocation.Text = !string.IsNullOrWhiteSpace(info.PlaceLine)
+                ? info.PlaceLine
+                : !string.IsNullOrWhiteSpace(info.CountryName) ? info.CountryName : "—";
+            textInfoCountry.Text = !string.IsNullOrWhiteSpace(info.PlaceLine) ? info.CountryName : string.Empty;
+            textInfoOrg.Text = string.IsNullOrWhiteSpace(info.Org) ? "—" : info.Org;
 
             if (!isConnected)
             {
@@ -528,6 +532,19 @@ namespace InvisibleGorillaXRay.Mac.Views
             {
                 textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Exposed");
             }
+        }
+
+        private void SetModeBadge(bool connected, string modeText)
+        {
+            if (connected && !string.IsNullOrEmpty(modeText))
+            {
+                textInfoMode.Text = $"{Loc("Lang.ConnectionInfo.Mode")} {modeText}";
+                borderInfoMode.IsVisible = true;
+                return;
+            }
+
+            textInfoMode.Text = string.Empty;
+            borderInfoMode.IsVisible = false;
         }
 
         private string Loc(string key)
