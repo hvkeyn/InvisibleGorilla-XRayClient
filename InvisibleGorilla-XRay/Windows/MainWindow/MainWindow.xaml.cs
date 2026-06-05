@@ -536,7 +536,9 @@ namespace InvisibleGorillaXRay
             bool connected = isConnected;
 
             textInfoIp.Text = Loc("Lang.ConnectionInfo.Checking");
+            textInfoFlag.Text = string.Empty;
             textInfoLocation.Text = string.Empty;
+            textInfoCountry.Text = string.Empty;
             textInfoOrg.Text = string.Empty;
             infoStatusDot.Fill = Brushes.Gray;
 
@@ -573,7 +575,9 @@ namespace InvisibleGorillaXRay
             if (!info.Ok)
             {
                 textInfoIp.Text = Loc("Lang.ConnectionInfo.Unknown");
+                textInfoFlag.Text = string.Empty;
                 textInfoLocation.Text = string.Empty;
+                textInfoCountry.Text = string.Empty;
                 textInfoOrg.Text = string.Empty;
                 textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Error");
                 textInfoVerdict.Foreground = Brushes.Gray;
@@ -582,7 +586,9 @@ namespace InvisibleGorillaXRay
             }
 
             textInfoIp.Text = info.Ip;
-            textInfoLocation.Text = info.Location;
+            textInfoFlag.Text = info.FlagEmoji;
+            textInfoLocation.Text = info.PlaceLine;
+            textInfoCountry.Text = info.CountryName;
             textInfoOrg.Text = info.Org;
 
             ApplyVerdict(connected, info.Ip);

@@ -24,6 +24,8 @@ namespace InvisibleGorillaXRay
             public string Name { get; init; } = string.Empty;
         }
 
+        private enum AppFilter { All, Running, Selected }
+
         private Func<UserSettings>? getUserSettings;
         private Action<UserSettings>? onUpdateUserSettings;
         private Func<List<Config>>? getAllConfigs;
@@ -35,6 +37,7 @@ namespace InvisibleGorillaXRay
         private string activeTemplateId = AppRuleTemplate.DefaultTemplateId;
         private string currentConfigPath = string.Empty;
         private string selectedConfigPath = string.Empty;
+        private AppFilter appFilter = AppFilter.All;
         private bool isApplyingTemplate;
         private bool isSwitchingConnection;
         private bool isReady;
@@ -75,10 +78,21 @@ namespace InvisibleGorillaXRay
 
             textBoxSearch.Text = string.Empty;
 
+            PopulateAppFilter();
             PopulateConnectionSelector(currentConfigPath);
 
             string selectedTemplateId = settings.GetBoundAppRuleTemplateId(selectedConfigPath);
             PopulateTemplateSelector(selectedTemplateId);
+        }
+
+        private void PopulateAppFilter()
+        {
+            // Items are ordered to match the AppFilter enum (All, Running, Selected).
+            comboBoxAppFilter.Items.Clear();
+            comboBoxAppFilter.Items.Add(Localize("Lang.AppRules.Filter.All"));
+            comboBoxAppFilter.Items.Add(Localize("Lang.AppRules.Filter.Running"));
+            comboBoxAppFilter.Items.Add(Localize("Lang.AppRules.Filter.Selected"));
+            comboBoxAppFilter.SelectedIndex = (int)appFilter;
         }
 
         private void PopulateConnectionSelector(string preferredConfigPath)
@@ -268,7 +282,16 @@ namespace InvisibleGorillaXRay
                     || app.ExecutablePath.Contains(filter, StringComparison.OrdinalIgnoreCase));
             }
 
-            foreach (WindowsInstalledAppInfo app in filteredApps)
+            filteredApps = appFilter switch
+            {
+                AppFilter.Running => filteredApps.Where(IsRunningApp),
+                AppFilter.Selected => filteredApps.Where(app => selectedPaths.Contains(app.ExecutablePath)),
+                _ => filteredApps
+            };
+
+            List<WindowsInstalledAppInfo> shownApps = filteredApps.ToList();
+
+            foreach (WindowsInstalledAppInfo app in shownApps)
             {
                 CheckBox toggle = new()
                 {
@@ -277,6 +300,9 @@ namespace InvisibleGorillaXRay
                     Margin = new Thickness(0, 2, 0, 0),
                     Foreground = Brushes.White
                 };
+
+                toggle.Checked += (_, __) => UpdateLiveCount();
+                toggle.Unchecked += (_, __) => UpdateLiveCount();
 
                 appRuleToggles[app.ExecutablePath] = toggle;
 
@@ -335,6 +361,82 @@ namespace InvisibleGorillaXRay
             textBlockNoApps.Visibility = panelAppItems.Children.Count == 0
                 ? Visibility.Visible
                 : Visibility.Collapsed;
+
+            UpdateSelectionCount(selectedPaths.Count, shownApps.Count);
+        }
+
+        private static bool IsRunningApp(WindowsInstalledAppInfo app)
+        {
+            return app.Source?.StartsWith("process", StringComparison.OrdinalIgnoreCase) == true;
+        }
+
+        private void UpdateSelectionCount(int selectedCount, int shownCount)
+        {
+            textBlockSelectionCount.Text = string.Format(
+                Localize("Lang.AppRules.SelectionCount"),
+                selectedCount,
+                shownCount);
+        }
+
+        private void UpdateLiveCount()
+        {
+            if (!isReady)
+                return;
+
+            AppRuleTemplate template = GetTemplateById(activeTemplateId);
+            HashSet<string> selected = template.AppRules
+                .Where(rule => rule.Enabled && !string.IsNullOrWhiteSpace(rule.AppId))
+                .Select(rule => rule.AppId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            foreach (KeyValuePair<string, CheckBox> pair in appRuleToggles)
+            {
+                if (pair.Value.IsChecked == true)
+                    selected.Add(pair.Key);
+                else
+                    selected.Remove(pair.Key);
+            }
+
+            UpdateSelectionCount(selected.Count, appRuleToggles.Count);
+        }
+
+        private void OnAppFilterChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!isReady || isApplyingTemplate)
+                return;
+
+            int index = comboBoxAppFilter.SelectedIndex;
+            appFilter = index switch
+            {
+                1 => AppFilter.Running,
+                2 => AppFilter.Selected,
+                _ => AppFilter.All
+            };
+
+            CaptureActiveTemplateState();
+            RenderDiscoveredApps(GetTemplateById(activeTemplateId));
+        }
+
+        private void OnSelectVisibleClick(object sender, RoutedEventArgs e)
+        {
+            SetVisibleSelection(true);
+        }
+
+        private void OnClearVisibleClick(object sender, RoutedEventArgs e)
+        {
+            SetVisibleSelection(false);
+        }
+
+        private void SetVisibleSelection(bool isSelected)
+        {
+            if (!isReady)
+                return;
+
+            foreach (CheckBox toggle in appRuleToggles.Values)
+                toggle.IsChecked = isSelected;
+
+            CaptureActiveTemplateState();
+            RenderDiscoveredApps(GetTemplateById(activeTemplateId));
         }
 
         private void CaptureActiveTemplateState()

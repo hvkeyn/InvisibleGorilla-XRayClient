@@ -28,13 +28,11 @@ namespace InvisibleGorillaXRay.Services
         /// </summary>
         public static IWebProxy BuildExitProxy(bool connected, Mode mode, Protocol protocol, int proxyPort)
         {
-            if (!connected)
-                return null;
+            IWebProxy sessionProxy = ActiveTunnelSession.BuildProbeProxy(connected, mode, proxyPort);
+            if (sessionProxy != null)
+                return sessionProxy;
 
-            if (mode == Mode.TUN)
-                return null;
-
-            if (proxyPort <= 0)
+            if (!connected || proxyPort <= 0)
                 return null;
 
             string scheme = protocol == Protocol.SOCKS ? "socks5" : "http";

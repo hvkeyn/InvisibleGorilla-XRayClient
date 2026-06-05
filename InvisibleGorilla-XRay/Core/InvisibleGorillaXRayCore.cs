@@ -170,6 +170,7 @@ namespace InvisibleGorillaXRay.Core
             bool isUdpEnabled = getUdpEnabled.Invoke();
             bool systemProxy = getSystemProxyUsed.Invoke();
             LocalProxyCredentials localProxyCredentials = CreateLocalProxyCredentials(mode, isSocks);
+            ActiveTunnelSession.Set(mode, localProxyCredentials);
 
             // Xray always listens on the local proxy port; the TUN port is reserved for the control service.
             DiagnosticLog.Write("Run", $"mode={mode}, proxyPort={proxyPort}, tunnelServicePort={tunnelServicePort}, logLevel={logLevel}, isSocks={isSocks}, isUdpEnabled={isUdpEnabled}, systemProxy={systemProxy}");
@@ -283,6 +284,7 @@ namespace InvisibleGorillaXRay.Core
                 DiagnosticLog.Write("Run", "Stopping tor daemon...");
                 torManager.Stop();
             }
+            ActiveTunnelSession.Clear();
             currentRuntimeConfig = null;
 
             void SendServerStartEvent()
@@ -367,6 +369,7 @@ namespace InvisibleGorillaXRay.Core
             XRayCoreWrapper.StopServer();
             DiagnosticLog.Write("Stop", "StopServer returned, stopping Tor (if any)...");
             torManager.Stop();
+            ActiveTunnelSession.Clear();
             DiagnosticLog.Write("Stop", "Stop sequence completed.");
             AnalyticsService.SendEvent(new StoppedEvent());
         }

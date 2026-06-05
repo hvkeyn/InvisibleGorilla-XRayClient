@@ -22,6 +22,9 @@
     <system:String x:Key="Lang.ConnectionInfo.Exposed">Виден реальный IP — трафик идёт мимо VPN</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Idle">Не подключено</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Mode">Режим:</system:String>
+    <system:String x:Key="Lang.ConnectionInfo.IpLabel">IP-адрес</system:String>
+    <system:String x:Key="Lang.ConnectionInfo.LocationLabel">Местоположение</system:String>
+    <system:String x:Key="Lang.ConnectionInfo.ProviderLabel">Провайдер</system:String>
 
     <system:String x:Key="Lang.Button.Import">Импорт</system:String>
     <system:String x:Key="Lang.Button.Confirm">Подтвердить</system:String>
@@ -155,6 +158,12 @@
     <system:String x:Key="Lang.AppRules.Connection">Применить правила к подключению</system:String>
     <system:String x:Key="Lang.AppRules.ConnectionHint">Выберите любую конфигурацию сервера (активную или нет), чтобы задать ей свой шаблон и режим.</system:String>
     <system:String x:Key="Lang.AppRules.Search">Поиск приложений</system:String>
+    <system:String x:Key="Lang.AppRules.Filter.All">Все</system:String>
+    <system:String x:Key="Lang.AppRules.Filter.Running">Запущенные</system:String>
+    <system:String x:Key="Lang.AppRules.Filter.Selected">Выбранные</system:String>
+    <system:String x:Key="Lang.AppRules.SelectVisible">Выбрать показанные</system:String>
+    <system:String x:Key="Lang.AppRules.ClearVisible">Очистить показанные</system:String>
+    <system:String x:Key="Lang.AppRules.SelectionCount">Выбрано: {0} · показано: {1}</system:String>
     <system:String x:Key="Lang.AppRules.Save">Сохранить правила приложений</system:String>
     <system:String x:Key="Lang.AppRules.Summary">Шаблон: {0} / Режим: {1} / Выбрано приложений: {2}</system:String>
     <system:String x:Key="Lang.AppRules.NoConfigSelected">Конфигурация не выбрана. Будет использоваться шаблон по умолчанию.</system:String>

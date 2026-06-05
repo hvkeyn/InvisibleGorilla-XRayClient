@@ -202,6 +202,56 @@
                             Click="OnRefreshAppsClick"/>
                 </Grid>
 
+                <Grid Margin="0 8 0 0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="6"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <ComboBox x:Name="comboBoxAppFilter"
+                              Grid.Column="0"
+                              Width="150"
+                              Height="28"
+                              FontFamily="{StaticResource SegoeUI}"
+                              FontSize="12"
+                              SelectionChanged="OnAppFilterChanged"/>
+
+                    <TextBlock x:Name="textBlockSelectionCount"
+                               Grid.Column="2"
+                               VerticalAlignment="Center"
+                               Foreground="#C9C9C9"
+                               TextTrimming="CharacterEllipsis"
+                               FontFamily="{StaticResource SegoeUI}"
+                               FontSize="11"/>
+
+                    <Button x:Name="buttonSelectVisible"
+                            Grid.Column="4"
+                            Height="28"
+                            Padding="10 0"
+                            Content="{DynamicResource Lang.AppRules.SelectVisible}"
+                            Style="{StaticResource Button.Rectangle.Gray}"
+                            FontFamily="{StaticResource SegoeUI}"
+                            FontSize="12"
+                            Foreground="White"
+                            Click="OnSelectVisibleClick"/>
+
+                    <Button x:Name="buttonClearVisible"
+                            Grid.Column="6"
+                            Height="28"
+                            Padding="10 0"
+                            Content="{DynamicResource Lang.AppRules.ClearVisible}"
+                            Style="{StaticResource Button.Rectangle.Gray}"
+                            FontFamily="{StaticResource SegoeUI}"
+                            FontSize="12"
+                            Foreground="White"
+                            Click="OnClearVisibleClick"/>
+                </Grid>
+
                 <Border Margin="0 10 0 0"
                         Padding="8"
                         BorderBrush="{StaticResource Color.LightGray}"

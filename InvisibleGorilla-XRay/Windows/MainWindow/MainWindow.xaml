@@ -145,12 +145,12 @@
                 </Button>
 
                 <Border Grid.Row="5" VerticalAlignment="Top" Margin="15 4 15 0"
-                    CornerRadius="8" Background="{StaticResource Color.LightGray}">
+                    CornerRadius="10" Background="{StaticResource Color.LightGray}">
                     <Border.Effect>
                         <DropShadowEffect Direction="270" Opacity="0.3" ShadowDepth="1"/>
                     </Border.Effect>
 
-                    <StackPanel Orientation="Vertical" Margin="12 8 12 10">
+                    <StackPanel Orientation="Vertical" Margin="12 10 12 12">
                         <Grid>
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
                                 <Ellipse Width="10" Height="10" Margin="0 0 6 0" VerticalAlignment="Center"
@@ -169,27 +169,59 @@
                             </Button>
                         </Grid>
 
-                        <TextBlock Margin="0 6 0 0" FontFamily="{StaticResource SegoeUI}"
-                            FontWeight="Bold" FontSize="17" Foreground="White"
-                            TextTrimming="CharacterEllipsis" x:Name="textInfoIp"
-                            Text="—"/>
+                        <Border Margin="0 8 0 0" Padding="10 8" CornerRadius="6" Background="#2A2A2A">
+                            <StackPanel Orientation="Vertical">
+                                <TextBlock FontFamily="{StaticResource SegoeUI}" FontSize="10"
+                                    Foreground="#8A8A8A" Text="{DynamicResource Lang.ConnectionInfo.IpLabel}"/>
+                                <TextBlock Margin="0 2 0 0" FontFamily="{StaticResource SegoeUI}"
+                                    FontWeight="SemiBold" FontSize="16" Foreground="White"
+                                    TextTrimming="CharacterEllipsis" x:Name="textInfoIp"
+                                    Text="—"/>
+                            </StackPanel>
+                        </Border>
 
-                        <TextBlock Margin="0 2 0 0" FontFamily="{StaticResource SegoeUI}"
-                            FontWeight="Light" FontSize="12" Foreground="#CFCFCF"
-                            TextTrimming="CharacterEllipsis" x:Name="textInfoLocation"
-                            Text=""/>
+                        <Grid Margin="0 8 0 0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
 
-                        <TextBlock Margin="0 1 0 0" FontFamily="{StaticResource SegoeUI}"
-                            FontWeight="Light" FontSize="11" Foreground="#9A9A9A"
-                            TextTrimming="CharacterEllipsis" x:Name="textInfoOrg"
-                            Text=""/>
+                            <TextBlock Grid.Column="0" Margin="0 2 10 0" VerticalAlignment="Top"
+                                FontFamily="Segoe UI Emoji" FontSize="26" x:Name="textInfoFlag"
+                                Text=""/>
 
-                        <TextBlock Margin="0 4 0 0" FontFamily="{StaticResource SegoeUI}"
-                            FontWeight="SemiBold" FontSize="11" TextWrapping="Wrap"
-                            Foreground="#7FB2FF" x:Name="textInfoMode"
-                            Text=""/>
+                            <StackPanel Grid.Column="1" Orientation="Vertical">
+                                <TextBlock FontFamily="{StaticResource SegoeUI}" FontSize="10"
+                                    Foreground="#8A8A8A" Text="{DynamicResource Lang.ConnectionInfo.LocationLabel}"/>
+                                <TextBlock Margin="0 2 0 0" FontFamily="{StaticResource SegoeUI}"
+                                    FontWeight="Normal" FontSize="13" Foreground="#E8E8E8"
+                                    TextTrimming="CharacterEllipsis" x:Name="textInfoLocation"
+                                    Text=""/>
+                                <TextBlock Margin="0 1 0 0" FontFamily="{StaticResource SegoeUI}"
+                                    FontWeight="Light" FontSize="12" Foreground="#B0B0B0"
+                                    TextTrimming="CharacterEllipsis" x:Name="textInfoCountry"
+                                    Text=""/>
+                            </StackPanel>
+                        </Grid>
 
-                        <TextBlock Margin="0 6 0 0" FontFamily="{StaticResource SegoeUI}"
+                        <StackPanel Margin="0 8 0 0" Orientation="Vertical">
+                            <TextBlock FontFamily="{StaticResource SegoeUI}" FontSize="10"
+                                Foreground="#8A8A8A" Text="{DynamicResource Lang.ConnectionInfo.ProviderLabel}"/>
+                            <TextBlock Margin="0 2 0 0" FontFamily="{StaticResource SegoeUI}"
+                                FontWeight="Light" FontSize="12" Foreground="#CFCFCF"
+                                TextTrimming="CharacterEllipsis" x:Name="textInfoOrg"
+                                Text=""/>
+                        </StackPanel>
+
+                        <Border Margin="0 10 0 0" Padding="8 4" CornerRadius="4"
+                            HorizontalAlignment="Left" Background="#1E3A5F">
+                            <TextBlock FontFamily="{StaticResource SegoeUI}"
+                                FontWeight="SemiBold" FontSize="11"
+                                Foreground="#7FB2FF" x:Name="textInfoMode"
+                                Text=""/>
+                        </Border>
+
+                        <TextBlock Margin="0 8 0 0" FontFamily="{StaticResource SegoeUI}"
                             FontWeight="Normal" FontSize="11" TextWrapping="Wrap"
                             Foreground="Gray" x:Name="textInfoVerdict"
                             Text="{DynamicResource Lang.ConnectionInfo.Idle}"/>

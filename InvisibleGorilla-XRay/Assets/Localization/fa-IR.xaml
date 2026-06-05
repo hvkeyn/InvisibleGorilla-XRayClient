@@ -22,6 +22,9 @@
     <system:String x:Key="Lang.ConnectionInfo.Exposed">IP واقعی نمایان است — ترافیک از VPN عبور نمی‌کند</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Idle">متصل نیست</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Mode">حالت:</system:String>
+    <system:String x:Key="Lang.ConnectionInfo.IpLabel">آدرس IP</system:String>
+    <system:String x:Key="Lang.ConnectionInfo.LocationLabel">موقعیت</system:String>
+    <system:String x:Key="Lang.ConnectionInfo.ProviderLabel">ارائه‌دهنده</system:String>
 
     <system:String x:Key="Lang.Button.Import">وارد کردن</system:String>
     <system:String x:Key="Lang.Button.Confirm">تأیید</system:String>
