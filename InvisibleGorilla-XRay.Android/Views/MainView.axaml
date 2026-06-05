@@ -500,6 +500,68 @@
                             IsVisible="False"
                             Click="OnStopClick" />
 
+                    <Border x:Name="ConnectionInfoPanel"
+                            Margin="0,18,0,0"
+                            Padding="14,12"
+                            CornerRadius="12"
+                            BorderBrush="{StaticResource SurfaceBright}"
+                            BorderThickness="1"
+                            Background="{StaticResource SurfaceLight}">
+                        <StackPanel Spacing="6">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Orientation="Horizontal" Spacing="7">
+                                    <Border x:Name="ConnectionInfoDot"
+                                            Width="10"
+                                            Height="10"
+                                            CornerRadius="5"
+                                            Background="#8C8C8C"
+                                            VerticalAlignment="Center" />
+                                    <TextBlock x:Name="ConnectionInfoTitleTextBlock"
+                                               Text="Your connection"
+                                               Foreground="White"
+                                               FontWeight="SemiBold"
+                                               FontSize="13" />
+                                </StackPanel>
+                                <Button Grid.Column="1"
+                                        Width="34"
+                                        Height="28"
+                                        Padding="0"
+                                        Theme="{StaticResource LinkButton}"
+                                        Click="OnRefreshConnectionInfoClick">
+                                    <TextBlock Text="Refresh"
+                                               Foreground="{StaticResource AccentBlue}"
+                                               FontSize="11" />
+                                </Button>
+                            </Grid>
+
+                            <TextBlock x:Name="ConnectionInfoIpTextBlock"
+                                       Text="—"
+                                       Foreground="White"
+                                       FontWeight="Bold"
+                                       FontSize="17"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="ConnectionInfoLocationTextBlock"
+                                       Foreground="{StaticResource TextMuted}"
+                                       FontSize="12"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="ConnectionInfoOrgTextBlock"
+                                       Foreground="#9A9A9A"
+                                       FontSize="11"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="ConnectionInfoModeTextBlock"
+                                       Foreground="#7FB2FF"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Margin="0,4,0,0"
+                                       TextWrapping="Wrap" />
+                            <TextBlock x:Name="ConnectionInfoVerdictTextBlock"
+                                       Text="Not connected"
+                                       Foreground="#8C8C8C"
+                                       FontSize="12"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
                     <Border x:Name="HomeStatusPanel"
                             Margin="0,18,0,0"
                             Padding="16,14"
@@ -838,8 +900,10 @@
                                 <Grid ColumnDefinitions="*,Auto">
                             <TextBox x:Name="ConfigLinkTextBox"
                                              Grid.Column="0"
-                                             MinHeight="48"
-                                     Watermark="vless://, vmess://, trojan:// or ss://" />
+                                             MinHeight="96"
+                                             AcceptsReturn="True"
+                                             TextWrapping="Wrap"
+                                     Watermark="vless:// vmess:// trojan:// ss:// · http(s):// · obfs4/webtunnel/snowflake" />
                                     <Button x:Name="PasteConfigLinkButton"
                                             Grid.Column="1"
                                             Width="92"
@@ -1044,6 +1108,7 @@
                         <CheckBox x:Name="UdpEnabledCheckBox"
                                   Content="Enable UDP" />
                         <CheckBox x:Name="AnalyticsCheckBox"
+                                  IsVisible="False"
                                   Content="Send anonymous analytics" />
                     </StackPanel>
                 </Border>
@@ -1064,6 +1129,159 @@
                             <TextBlock x:Name="DnsTitleTextBlock"
                                        Text="DNS" />
                         <TextBox x:Name="DnsTextBox" />
+                    </StackPanel>
+                </Border>
+
+                <Border Padding="14"
+                        CornerRadius="12"
+                            BorderBrush="{StaticResource SurfaceBright}"
+                        BorderThickness="1"
+                            Background="{StaticResource SurfaceLight}">
+                    <StackPanel Spacing="10">
+                        <TextBlock x:Name="TorTitleTextBlock"
+                                   Text="Tor / Bridges"
+                                   FontSize="18"
+                                   FontWeight="SemiBold" />
+                        <CheckBox x:Name="TorEnabledCheckBox"
+                                  Content="Route traffic through Tor" />
+                        <TextBlock x:Name="TorHowToTextBlock"
+                                   Text="Choose Ask Tor or a bridge method, save settings, then press RUN."
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextMuted}"
+                                   FontSize="12" />
+
+                        <TextBlock x:Name="QuickConnectTitleTextBlock"
+                                   Text="Quick connect"
+                                   FontWeight="SemiBold" />
+                        <WrapPanel Orientation="Horizontal">
+                            <Button x:Name="AskTorButton"
+                                    Height="34" Margin="0,0,6,6" Padding="12,0"
+                                    Theme="{StaticResource GreenActionButton}"
+                                    Foreground="#252526" FontWeight="SemiBold"
+                                    Click="OnAskTorClick">
+                                <TextBlock x:Name="AskTorButtonTextBlock" Text="Ask Tor (auto)" />
+                            </Button>
+                            <Button x:Name="SnowflakeButton"
+                                    Height="34" Margin="0,0,6,6" Padding="10,0"
+                                    Theme="{StaticResource GrayActionButton}"
+                                    Click="OnSnowflakeClick">
+                                <TextBlock x:Name="SnowflakeButtonTextBlock" Text="Snowflake" />
+                            </Button>
+                            <Button x:Name="SnowflakeAmpButton"
+                                    Height="34" Margin="0,0,6,6" Padding="10,0"
+                                    Theme="{StaticResource GrayActionButton}"
+                                    Click="OnSnowflakeAmpClick">
+                                <TextBlock x:Name="SnowflakeAmpButtonTextBlock" Text="Snowflake AMP" />
+                            </Button>
+                            <Button x:Name="MeekAzureButton"
+                                    Height="34" Margin="0,0,6,6" Padding="10,0"
+                                    Theme="{StaticResource GrayActionButton}"
+                                    Click="OnMeekAzureClick">
+                                <TextBlock x:Name="MeekAzureButtonTextBlock" Text="Meek-Azure" />
+                            </Button>
+                        </WrapPanel>
+                        <TextBlock x:Name="GetBridgesTitleTextBlock"
+                                   Text="Get more bridges (then paste them below):"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextMuted}"
+                                   FontSize="12" />
+                        <WrapPanel Orientation="Horizontal">
+                            <Button x:Name="BridgesEmailButton"
+                                    Height="34" Margin="0,0,6,6" Padding="10,0"
+                                    Theme="{StaticResource GrayActionButton}"
+                                    Click="OnBridgesEmailClick">
+                                <TextBlock x:Name="BridgesEmailButtonTextBlock" Text="via Email" />
+                            </Button>
+                            <Button x:Name="BridgesTelegramButton"
+                                    Height="34" Margin="0,0,6,6" Padding="10,0"
+                                    Theme="{StaticResource GrayActionButton}"
+                                    Click="OnBridgesTelegramClick">
+                                <TextBlock x:Name="BridgesTelegramButtonTextBlock" Text="via Telegram" />
+                            </Button>
+                        </WrapPanel>
+
+                        <TextBlock x:Name="TorModeTitleTextBlock"
+                                   Text="Mode" />
+                        <ComboBox x:Name="TorModeComboBox"
+                                  HorizontalAlignment="Stretch" />
+
+                        <TextBlock x:Name="BridgeTypeTitleTextBlock"
+                                   Text="Bridge type" />
+                        <ComboBox x:Name="BridgeTypeComboBox"
+                                  HorizontalAlignment="Stretch" />
+
+                        <TextBlock x:Name="TorSocksPortTitleTextBlock"
+                                   Text="Tor SOCKS port" />
+                        <TextBox x:Name="TorSocksPortTextBox" />
+
+                        <TextBlock x:Name="BridgesTitleTextBlock"
+                                   Text="Bridge lines" />
+                        <TextBox x:Name="BridgesTextBox"
+                                 AcceptsReturn="True"
+                                 TextWrapping="Wrap"
+                                 Height="110"
+                                 FontSize="11" />
+
+                        <WrapPanel Orientation="Horizontal">
+                            <Button x:Name="UseDefaultBridgesButton"
+                                    Height="34"
+                                    Margin="0,0,6,6"
+                                    Padding="10,0"
+                                    Theme="{StaticResource GrayActionButton}"
+                                    Click="OnUseDefaultBridgesClick">
+                                <TextBlock x:Name="UseDefaultBridgesButtonTextBlock"
+                                           Text="Use built-in" />
+                            </Button>
+                            <Button x:Name="FetchMoatButton"
+                                    Height="34"
+                                    Margin="0,0,6,6"
+                                    Padding="10,0"
+                                    Theme="{StaticResource GrayActionButton}"
+                                    Click="OnFetchMoatClick">
+                                <TextBlock x:Name="FetchMoatButtonTextBlock"
+                                           Text="Request bridges" />
+                            </Button>
+                            <Button x:Name="CheckBridgeButton"
+                                    Height="34"
+                                    Margin="0,0,6,6"
+                                    Padding="10,0"
+                                    Theme="{StaticResource GrayActionButton}"
+                                    Click="OnCheckBridgeClick">
+                                <TextBlock x:Name="CheckBridgeButtonTextBlock"
+                                           Text="Check" />
+                            </Button>
+                        </WrapPanel>
+
+                        <StackPanel x:Name="CaptchaPanel"
+                                    Spacing="6"
+                                    IsVisible="False">
+                            <TextBlock x:Name="CaptchaHintTextBlock"
+                                       Text="Solve the CAPTCHA to receive fresh bridges:"
+                                       TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextMuted}"
+                                       FontSize="12" />
+                            <Image x:Name="CaptchaImage"
+                                   Height="80"
+                                   HorizontalAlignment="Left" />
+                            <TextBox x:Name="CaptchaTextBox" />
+                            <Button x:Name="SubmitCaptchaButton"
+                                    Height="36"
+                                    HorizontalAlignment="Left"
+                                    Padding="12,0"
+                                    Theme="{StaticResource GreenActionButton}"
+                                    Foreground="#252526"
+                                    FontWeight="SemiBold"
+                                    Click="OnSubmitCaptchaClick">
+                                <TextBlock x:Name="SubmitCaptchaButtonTextBlock"
+                                           Text="Submit" />
+                            </Button>
+                        </StackPanel>
+
+                        <TextBlock x:Name="TorStatusTextBlock"
+                                   Text=""
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextMuted}"
+                                   FontSize="12" />
                     </StackPanel>
                 </Border>
 

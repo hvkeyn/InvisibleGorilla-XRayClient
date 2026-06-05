@@ -2,9 +2,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="InvisibleGorillaXRay.Mac.Views.ServerWindow"
         Title="Invisible Gorilla XRay - Server config"
-        Height="450" 
+        Height="650" 
         Width="350"
-        CanResize="False"
+        CanResize="True"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="{StaticResource Color.DarkGray}">
@@ -52,7 +52,7 @@
             <!-- Config list panel -->
             <Grid Grid.Row="1" IsVisible="True" x:Name="panelConfig">
                 <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                    <StackPanel Orientation="Vertical" x:Name="listConfigs"/>
+                    <StackPanel Orientation="Vertical" Margin="0,0,0,70" x:Name="listConfigs"/>
                 </ScrollViewer>
 
                 <TextBlock x:Name="textNoConfig"
@@ -82,7 +82,7 @@
 
                     <ScrollViewer Grid.Row="1"
                         HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Orientation="Vertical" x:Name="listSubscriptions"/>
+                        <StackPanel Orientation="Vertical" Margin="0,0,0,70" x:Name="listSubscriptions"/>
                     </ScrollViewer>
 
                     <!-- Subscription control bar -->
@@ -185,7 +185,8 @@
                 <RowDefinition Height="50"/>
             </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="0" Orientation="Vertical" VerticalAlignment="Center" Margin="20,0">
+            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Orientation="Vertical" VerticalAlignment="Center" Margin="20,10">
                 <RadioButton GroupName="GroupImport"
                     Content="{DynamicResource Lang.Window.Server.AddConfig.FromFile}"
                     Foreground="White" IsChecked="True"
@@ -214,11 +215,21 @@
                     x:Name="radioButtonLink"
                     Click="OnLinkRadioButtonClick"/>
 
-                <TextBox Margin="20" Height="30" VerticalContentAlignment="Center" 
-                    FontWeight="Normal" FontSize="14"
+                <TextBox Margin="20,20,20,4" Height="120" VerticalContentAlignment="Top"
+                    AcceptsReturn="True" AcceptsTab="False" TextWrapping="Wrap"
+                    FontWeight="Normal" FontSize="13"
                     Watermark="{DynamicResource Lang.Window.Server.AddConfig.Placeholder}"
                     x:Name="textBoxConfigLink"/>
+
+                <TextBlock Margin="20,0" Foreground="#888" FontSize="12" TextWrapping="Wrap"
+                    Text="{DynamicResource Lang.SmartImport.Hint}"
+                    x:Name="textBlockSmartImportHint"/>
+
+                <TextBlock Margin="20,6,20,0" Foreground="#43b581" FontSize="13" TextWrapping="Wrap"
+                    IsVisible="False"
+                    x:Name="textBlockSmartImportStatus"/>
             </StackPanel>
+            </ScrollViewer>
 
             <StackPanel Grid.Row="1" Orientation="Horizontal" 
                 HorizontalAlignment="Right" Margin="15,0">

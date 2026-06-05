@@ -25,6 +25,7 @@ namespace InvisibleGorillaXRay
         private Func<bool> isCurrentPathEqualRootConfigPath;
         private Func<string, int> testConnection;
         private Func<string> getLogPath;
+        private Func<List<string>, BridgeType, bool> onAddBridges;
         private string pendingShareContent;
         private string pendingShareConfigName;
 
@@ -56,8 +57,10 @@ namespace InvisibleGorillaXRay
             Action<string, string, string> onCreateSubscription,
             Action<Subscription> onDeleteSubscription,
             Action<GroupType, string> onDeleteConfig,
-            Action<string> onUpdateConfig)
+            Action<string> onUpdateConfig,
+            Func<List<string>, BridgeType, bool> onAddBridges = null)
         {
+            this.onAddBridges = onAddBridges;
             this.getCurrentConfigPath = getCurrentConfigPath;
             this.getUserSettings = getUserSettings;
             this.openAppRulesWindow = openAppRulesWindow;

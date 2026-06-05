@@ -29,7 +29,10 @@ namespace InvisibleGorillaXRay.Android.Views
     using InvisibleGorillaXRay.Android.Services;
     using InvisibleGorillaXRay.Core;
     using InvisibleGorillaXRay.Handlers;
+    using InvisibleGorillaXRay.Handlers.SmartInput;
+    using InvisibleGorillaXRay.Handlers.Tor;
     using InvisibleGorillaXRay.Models;
+    using InvisibleGorillaXRay.Services;
     using InvisibleGorillaXRay.Utilities;
 
     public partial class MainView : UserControl
@@ -59,6 +62,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private static readonly IBrush AvailabilityErrorBrush = new SolidColorBrush(Color.Parse("#D95F5F"));
         private static readonly IBrush AvailabilitySuccessBrush = new SolidColorBrush(Color.Parse("#6DCC8E"));
 
+        private readonly ConnectionInfoService connectionInfoService = new();
         private InvisibleGorillaXRay.Core.InvisibleGorillaXRayCore core = null!;
         private SettingsHandler settingsHandler = null!;
         private ConfigHandler configHandler = null!;
@@ -86,6 +90,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private bool isShowingAdvancedImport;
         private bool isServersSectionInitialized;
         private bool isSettingsSectionInitialized;
+        private bool isSettingsLoadedIntoControls;
         private bool suppressSubscriptionSelectionChanged;
         private bool updateAvailable;
         private string latestRemoteVersion = string.Empty;
@@ -99,6 +104,11 @@ namespace InvisibleGorillaXRay.Android.Views
         private UpdateInfo? pendingUpdateInfo;
         private ReleaseAsset? pendingUpdateAsset;
         private string? pendingUpdateLocalApkPath;
+        private DispatcherTimer? connectionInfoTimer;
+        private CancellationTokenSource? connectionInfoLookupCancellation;
+        private string baselineIp = string.Empty;
+        private bool isConnectionInfoConnected;
+        private bool isConnectionInfoTor;
 
         public MainView()
         {
@@ -138,6 +148,7 @@ namespace InvisibleGorillaXRay.Android.Views
             UpdateCurrentConfigSummary();
             DiagnosticLog.Write("MainView", "Current config summary updated");
             SetConnectionState(ConnectionState.Stopped);
+            InitializeConnectionInfo();
             SetStatus(string.Empty);
             isInitialized = true;
             DiagnosticLog.Write("MainView", "Setup completed");
@@ -172,6 +183,13 @@ namespace InvisibleGorillaXRay.Android.Views
         private TextBlock HomeStatusText => GetRequiredControl<TextBlock>("HomeStatusTextBlock");
         private Border HomeInfoPanelContainer => GetRequiredControl<Border>("HomeInfoPanel");
         private TextBlock HomeInfoText => GetRequiredControl<TextBlock>("HomeInfoTextBlock");
+        private Border ConnectionInfoDotControl => GetRequiredControl<Border>("ConnectionInfoDot");
+        private TextBlock ConnectionInfoTitleText => GetRequiredControl<TextBlock>("ConnectionInfoTitleTextBlock");
+        private TextBlock ConnectionInfoIpText => GetRequiredControl<TextBlock>("ConnectionInfoIpTextBlock");
+        private TextBlock ConnectionInfoLocationText => GetRequiredControl<TextBlock>("ConnectionInfoLocationTextBlock");
+        private TextBlock ConnectionInfoOrgText => GetRequiredControl<TextBlock>("ConnectionInfoOrgTextBlock");
+        private TextBlock ConnectionInfoModeText => GetRequiredControl<TextBlock>("ConnectionInfoModeTextBlock");
+        private TextBlock ConnectionInfoVerdictText => GetRequiredControl<TextBlock>("ConnectionInfoVerdictTextBlock");
         private Border ServersStatusPanelContainer => GetRequiredControl<Border>("ServersStatusPanel");
         private TextBlock ServersStatusText => GetRequiredControl<TextBlock>("ServersStatusTextBlock");
         private TextBlock ServersTitleText => GetRequiredControl<TextBlock>("ServersTitleTextBlock");
@@ -299,6 +317,38 @@ namespace InvisibleGorillaXRay.Android.Views
         private TextBox RawConfigInput => GetRequiredControl<TextBox>("RawConfigTextBox");
         private Button SaveSettingsActionButton => GetRequiredControl<Button>("SaveSettingsButton");
 
+        private CheckBox TorEnabledToggle => GetRequiredControl<CheckBox>("TorEnabledCheckBox");
+        private ComboBox TorModeSelector => GetRequiredControl<ComboBox>("TorModeComboBox");
+        private ComboBox BridgeTypeSelector => GetRequiredControl<ComboBox>("BridgeTypeComboBox");
+        private TextBox TorSocksPortInput => GetRequiredControl<TextBox>("TorSocksPortTextBox");
+        private TextBox BridgesInput => GetRequiredControl<TextBox>("BridgesTextBox");
+        private Button UseDefaultBridgesActionButton => GetRequiredControl<Button>("UseDefaultBridgesButton");
+        private Button FetchMoatActionButton => GetRequiredControl<Button>("FetchMoatButton");
+        private Button CheckBridgeActionButton => GetRequiredControl<Button>("CheckBridgeButton");
+        private StackPanel CaptchaHost => GetRequiredControl<StackPanel>("CaptchaPanel");
+        private global::Avalonia.Controls.Image CaptchaImageControl => GetRequiredControl<global::Avalonia.Controls.Image>("CaptchaImage");
+        private TextBox CaptchaInput => GetRequiredControl<TextBox>("CaptchaTextBox");
+        private Button SubmitCaptchaActionButton => GetRequiredControl<Button>("SubmitCaptchaButton");
+        private TextBlock TorStatusText => GetRequiredControl<TextBlock>("TorStatusTextBlock");
+
+        private static readonly Dictionary<TorMode, string> TorModeOptions = new()
+        {
+            { TorMode.ONLY_TOR, "Tor only" },
+            { TorMode.XRAY_OVER_TOR, "Xray over Tor" }
+        };
+
+        private static readonly Dictionary<BridgeType, string> BridgeTypeOptions = new()
+        {
+            { BridgeType.NONE, "None (direct)" },
+            { BridgeType.OBFS4, "obfs4" },
+            { BridgeType.SNOWFLAKE, "Snowflake" },
+            { BridgeType.MEEK_AZURE, "meek-azure" },
+            { BridgeType.WEBTUNNEL, "WebTunnel" }
+        };
+
+        private readonly TorManager torManager = new TorManager();
+        private MoatChallenge? activeMoatChallenge;
+
         private void InitializeComponent()
         {
             AvaloniaXamlLoader.Load(this);
@@ -384,6 +434,8 @@ namespace InvisibleGorillaXRay.Android.Views
             CopyConfigLinkActionButton.Content = Localize("Lang.Android.Share.Option.CopyLink");
             ExportConfigActionButton.Content = Localize("Lang.Android.Share.Option.ExportConfig");
             CancelConfigShareActionButton.Content = Localize("Lang.Button.Cancel");
+            ConnectionInfoTitleText.Text = Localize("Lang.ConnectionInfo.Title");
+            ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Idle");
 
             SettingsTitleText.Text = Localize("Lang.Window.Settings.Title");
             SettingsDescriptionText.Text = Localize("Lang.Android.Settings.Description");
@@ -424,6 +476,26 @@ namespace InvisibleGorillaXRay.Android.Views
             AppPickerDoneButtonText.Text = Localize("Lang.AppRules.Done");
             TunTitleText.Text = Localize("Lang.Window.Settings.TUN");
             TunDescriptionText.Text = Localize("Lang.Android.Settings.TunDescription");
+            GetRequiredControl<TextBlock>("TorTitleTextBlock").Text = Localize("Lang.Window.Settings.Tor");
+            TorEnabledToggle.Content = Localize("Lang.Tor.Enable");
+            GetRequiredControl<TextBlock>("TorHowToTextBlock").Text = Localize("Lang.Tor.HowTo");
+            GetRequiredControl<TextBlock>("TorModeTitleTextBlock").Text = Localize("Lang.Tor.Mode");
+            GetRequiredControl<TextBlock>("BridgeTypeTitleTextBlock").Text = Localize("Lang.Tor.BridgeType");
+            GetRequiredControl<TextBlock>("TorSocksPortTitleTextBlock").Text = Localize("Lang.Tor.SocksPort");
+            GetRequiredControl<TextBlock>("BridgesTitleTextBlock").Text = Localize("Lang.Tor.Bridges");
+            GetRequiredControl<TextBlock>("UseDefaultBridgesButtonTextBlock").Text = Localize("Lang.Tor.UseDefault");
+            GetRequiredControl<TextBlock>("FetchMoatButtonTextBlock").Text = Localize("Lang.Tor.FetchMoat");
+            GetRequiredControl<TextBlock>("CheckBridgeButtonTextBlock").Text = Localize("Lang.Tor.Check");
+            GetRequiredControl<TextBlock>("QuickConnectTitleTextBlock").Text = Localize("Lang.Tor.QuickConnect");
+            GetRequiredControl<TextBlock>("AskTorButtonTextBlock").Text = Localize("Lang.Tor.AskTor");
+            GetRequiredControl<TextBlock>("SnowflakeButtonTextBlock").Text = Localize("Lang.Tor.Method.Snowflake");
+            GetRequiredControl<TextBlock>("SnowflakeAmpButtonTextBlock").Text = Localize("Lang.Tor.Method.SnowflakeAmp");
+            GetRequiredControl<TextBlock>("MeekAzureButtonTextBlock").Text = Localize("Lang.Tor.Method.Meek");
+            GetRequiredControl<TextBlock>("GetBridgesTitleTextBlock").Text = Localize("Lang.Tor.GetBridges");
+            GetRequiredControl<TextBlock>("BridgesEmailButtonTextBlock").Text = Localize("Lang.Tor.GetBridges.Email");
+            GetRequiredControl<TextBlock>("BridgesTelegramButtonTextBlock").Text = Localize("Lang.Tor.GetBridges.Telegram");
+            GetRequiredControl<TextBlock>("CaptchaHintTextBlock").Text = Localize("Lang.Tor.Captcha.Hint");
+            GetRequiredControl<TextBlock>("SubmitCaptchaButtonTextBlock").Text = Localize("Lang.Tor.Captcha.Submit");
             LogsAndDiagnosticsTitleText.Text = Localize("Lang.Android.Settings.LogsAndDiagnostics");
             LogsDescriptionText.Text = Localize("Lang.Android.Logs.Description");
             ShareLogButtonText.Text = Localize("Lang.Android.Logs.Share");
@@ -532,14 +604,22 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void EnsureSettingsSectionInitialized()
         {
-            if (!isSettingsSectionInitialized)
-            {
-                ProtocolSelector.ItemsSource = Enum.GetNames(typeof(Protocol));
-                isSettingsSectionInitialized = true;
-            }
-
+            EnsureSettingsControlsCreated();
             LoadSettingsIntoControls();
             UpdateRuntimeSummary();
+        }
+
+        // One-time control wiring (ItemsSource) without touching the user-entered values,
+        // so it is safe to call right before reading the UI on save.
+        private void EnsureSettingsControlsCreated()
+        {
+            if (isSettingsSectionInitialized)
+                return;
+
+            ProtocolSelector.ItemsSource = Enum.GetNames(typeof(Protocol));
+            TorModeSelector.ItemsSource = TorModeOptions.Values.ToList();
+            BridgeTypeSelector.ItemsSource = BridgeTypeOptions.Values.ToList();
+            isSettingsSectionInitialized = true;
         }
 
         private void LoadSettingsIntoControls()
@@ -552,7 +632,250 @@ namespace InvisibleGorillaXRay.Android.Views
             DnsInput.Text = settings.GetDns();
             UdpEnabledToggle.IsChecked = settings.GetUdpEnabled();
             AnalyticsToggle.IsChecked = settings.GetSendingAnalyticsEnabled();
+            LoadTorSettingsIntoControls(settings);
             RefreshAppRulesSummary();
+            isSettingsLoadedIntoControls = true;
+        }
+
+        private void LoadTorSettingsIntoControls(UserSettings settings)
+        {
+            TorSettings tor = settings.GetTorSettings();
+            TorEnabledToggle.IsChecked = tor.GetEnabled();
+            TorModeSelector.SelectedIndex = TorModeOptions.Keys.ToList().IndexOf(tor.GetMode());
+            BridgeTypeSelector.SelectedIndex = BridgeTypeOptions.Keys.ToList().IndexOf(tor.GetBridgeType());
+            TorSocksPortInput.Text = tor.GetSocksPort().ToString();
+            BridgesInput.Text = string.Join(Environment.NewLine, tor.GetBridgeLines());
+            TorStatusText.Text = torManager.IsAvailable
+                ? Localize("Lang.Tor.Status.Ready")
+                : Localize("Lang.Tor.Status.Unavailable");
+        }
+
+        private TorSettings BuildTorSettingsFromUi(UserSettings current)
+        {
+            TorSettings existing = current.GetTorSettings();
+            return new TorSettings
+            {
+                Enabled = TorEnabledToggle.IsChecked == true,
+                Mode = GetSelectedKey(TorModeOptions, TorModeSelector.SelectedIndex, existing.GetMode()),
+                BridgeType = GetSelectedKey(BridgeTypeOptions, BridgeTypeSelector.SelectedIndex, existing.GetBridgeType()),
+                SocksPort = int.TryParse(TorSocksPortInput.Text, out int sp) && sp > 0 ? sp : existing.GetSocksPort(),
+                ControlPort = existing.GetControlPort(),
+                BridgeLines = SplitBridgeLines(BridgesInput.Text)
+            };
+        }
+
+        private static TKey GetSelectedKey<TKey>(Dictionary<TKey, string> options, int index, TKey fallback) where TKey : notnull
+        {
+            if (index < 0 || index >= options.Count)
+                return fallback;
+            return options.Keys.ToList()[index];
+        }
+
+        private static List<string> SplitBridgeLines(string? text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return new List<string>();
+
+            return text
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Trim())
+                .Where(line => line.Length > 0)
+                .ToList();
+        }
+
+        private void OnUseDefaultBridgesClick(object? sender, RoutedEventArgs e)
+        {
+            BridgeType type = GetSelectedKey(BridgeTypeOptions, BridgeTypeSelector.SelectedIndex, BridgeType.OBFS4);
+            if (type == BridgeType.NONE)
+            {
+                type = BridgeType.OBFS4;
+                BridgeTypeSelector.SelectedIndex = BridgeTypeOptions.Keys.ToList().IndexOf(BridgeType.OBFS4);
+            }
+
+            List<string> defaults = DefaultBridges.ForType(type);
+            BridgesInput.Text = string.Join(Environment.NewLine, defaults);
+            TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.LoadedDefaults", defaults.Count);
+        }
+
+        private async void OnAskTorClick(object? sender, RoutedEventArgs e)
+        {
+            Button? button = sender as Button;
+            if (button != null) button.IsEnabled = false;
+            TorStatusText.Text = Localize("Lang.Tor.Status.AskingTor");
+
+            try
+            {
+                MoatResult result = await new MoatClient().GetCircumventionSettingsAsync();
+                if (result.Success && result.Bridges.Count > 0)
+                {
+                    BridgeType type = MapTransportToBridgeType(result.Transport);
+                    BridgeTypeSelector.SelectedIndex = BridgeTypeOptions.Keys.ToList().IndexOf(type);
+                    BridgesInput.Text = string.Join(Environment.NewLine, result.Bridges);
+                    TorEnabledToggle.IsChecked = true;
+                    TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.AskTorOk", result.Bridges.Count, type);
+                }
+                else
+                {
+                    ApplyBuiltinFallback();
+                }
+            }
+            catch (Exception)
+            {
+                ApplyBuiltinFallback();
+            }
+            finally
+            {
+                if (button != null) button.IsEnabled = true;
+            }
+        }
+
+        private void OnSnowflakeClick(object? sender, RoutedEventArgs e)
+            => ApplyBuiltinMethod(BridgeType.SNOWFLAKE, DefaultBridges.Snowflake);
+
+        private void OnSnowflakeAmpClick(object? sender, RoutedEventArgs e)
+            => ApplyBuiltinMethod(BridgeType.SNOWFLAKE, DefaultBridges.SnowflakeAmp);
+
+        private void OnMeekAzureClick(object? sender, RoutedEventArgs e)
+            => ApplyBuiltinMethod(BridgeType.MEEK_AZURE, DefaultBridges.MeekAzure);
+
+        private void ApplyBuiltinMethod(BridgeType type, string bridgeLine)
+        {
+            BridgeTypeSelector.SelectedIndex = BridgeTypeOptions.Keys.ToList().IndexOf(type);
+            BridgesInput.Text = bridgeLine;
+            TorEnabledToggle.IsChecked = true;
+            TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.MethodSelected", type);
+        }
+
+        /// <summary>
+        /// When the moat / circumvention service is unreachable (e.g. censored), load the bundled
+        /// built-in obfs4 bridges so the user still gets a working set instead of an empty box.
+        /// </summary>
+        private void ApplyBuiltinFallback()
+        {
+            List<string> defaults = DefaultBridges.ForType(BridgeType.OBFS4);
+            BridgeTypeSelector.SelectedIndex = BridgeTypeOptions.Keys.ToList().IndexOf(BridgeType.OBFS4);
+            BridgesInput.Text = string.Join(Environment.NewLine, defaults);
+            TorEnabledToggle.IsChecked = true;
+            TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.MoatFallback", defaults.Count);
+        }
+
+        private void OnBridgesEmailClick(object? sender, RoutedEventArgs e)
+        {
+            OpenExternalUrl(BridgeRequestLinks.BuildEmailUrl("obfs4"));
+            TorStatusText.Text = Localize("Lang.Tor.Status.RequestSent");
+        }
+
+        private void OnBridgesTelegramClick(object? sender, RoutedEventArgs e)
+        {
+            OpenExternalUrl(BridgeRequestLinks.TelegramBot);
+            TorStatusText.Text = Localize("Lang.Tor.Status.RequestSent");
+        }
+
+        private static BridgeType MapTransportToBridgeType(string? transport)
+        {
+            switch ((transport ?? string.Empty).Trim().ToLowerInvariant())
+            {
+                case "snowflake": return BridgeType.SNOWFLAKE;
+                case "meek": case "meek-azure": case "meek_lite": return BridgeType.MEEK_AZURE;
+                case "webtunnel": return BridgeType.WEBTUNNEL;
+                default: return BridgeType.OBFS4;
+            }
+        }
+
+        private async void OnCheckBridgeClick(object? sender, RoutedEventArgs e)
+        {
+            if (!torManager.IsAvailable)
+            {
+                TorStatusText.Text = Localize("Lang.Tor.Status.Unavailable");
+                return;
+            }
+
+            BridgeType type = GetSelectedKey(BridgeTypeOptions, BridgeTypeSelector.SelectedIndex, BridgeType.OBFS4);
+            string firstLine = SplitBridgeLines(BridgesInput.Text).FirstOrDefault() ?? string.Empty;
+
+            CheckBridgeActionButton.IsEnabled = false;
+            TorStatusText.Text = Localize("Lang.Tor.Status.Checking");
+
+            BridgeCheckResult result = await Task.Run(() => torManager.CheckBridge(type, firstLine));
+
+            TorStatusText.Text = result.Success
+                ? LocalizeFormat("Lang.Tor.Status.CheckOk", result.LatencyMs)
+                : LocalizeFormat("Lang.Tor.Status.CheckFail", result.Message);
+            CheckBridgeActionButton.IsEnabled = true;
+        }
+
+        private async void OnFetchMoatClick(object? sender, RoutedEventArgs e)
+        {
+            FetchMoatActionButton.IsEnabled = false;
+            TorStatusText.Text = Localize("Lang.Tor.Status.FetchingCaptcha");
+
+            try
+            {
+                MoatClient client = new MoatClient();
+                MoatResult result = await client.RequestChallengeAsync("obfs4");
+
+                if (result.Success && result.Challenge != null)
+                {
+                    activeMoatChallenge = result.Challenge;
+                    try
+                    {
+                        using MemoryStream stream = new MemoryStream(result.Challenge.ImagePng);
+                        CaptchaImageControl.Source = new Bitmap(stream);
+                    }
+                    catch { }
+                    CaptchaHost.IsVisible = true;
+                    CaptchaInput.Text = string.Empty;
+                    TorStatusText.Text = Localize("Lang.Tor.Status.CaptchaReady");
+                }
+                else
+                {
+                    ApplyBuiltinFallback();
+                }
+            }
+            catch (Exception)
+            {
+                ApplyBuiltinFallback();
+            }
+            finally
+            {
+                FetchMoatActionButton.IsEnabled = true;
+            }
+        }
+
+        private async void OnSubmitCaptchaClick(object? sender, RoutedEventArgs e)
+        {
+            if (activeMoatChallenge == null)
+                return;
+
+            SubmitCaptchaActionButton.IsEnabled = false;
+            TorStatusText.Text = Localize("Lang.Tor.Status.SubmittingCaptcha");
+
+            try
+            {
+                MoatClient client = new MoatClient();
+                MoatResult result = await client.SubmitSolutionAsync(activeMoatChallenge, CaptchaInput.Text ?? string.Empty);
+
+                if (result.Success && result.Bridges.Count > 0)
+                {
+                    BridgeTypeSelector.SelectedIndex = BridgeTypeOptions.Keys.ToList().IndexOf(BridgeType.OBFS4);
+                    BridgesInput.Text = string.Join(Environment.NewLine, result.Bridges);
+                    CaptchaHost.IsVisible = false;
+                    activeMoatChallenge = null;
+                    TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.MoatBridges", result.Bridges.Count);
+                }
+                else
+                {
+                    TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.MoatFail", result.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.MoatFail", ex.Message);
+            }
+            finally
+            {
+                SubmitCaptchaActionButton.IsEnabled = true;
+            }
         }
 
         private void ReloadDiscoveredAndroidApps()
@@ -1315,7 +1638,8 @@ namespace InvisibleGorillaXRay.Android.Views
                 AppRulesMode = workingDefaultAppRuleTemplate.Mode,
                 AppRules = workingDefaultAppRuleTemplate.AppRules.Select(rule => rule.Clone()).ToList(),
                 AppRuleTemplates = templates,
-                AppRuleTemplateBindings = bindings
+                AppRuleTemplateBindings = bindings,
+                Tor = current.GetTorSettings()
             });
 
             RefreshAppRulesSummary();
@@ -1413,6 +1737,8 @@ namespace InvisibleGorillaXRay.Android.Views
                 config.Path,
                 StringComparison.OrdinalIgnoreCase);
 
+            TorProfile? torProfile = settingsHandler.UserSettings.FindTorProfileByPath(config.Path);
+
             Border border = new()
             {
                 Background = isSelected ? SelectedConfigBrush : IdleConfigBrush,
@@ -1447,8 +1773,10 @@ namespace InvisibleGorillaXRay.Android.Views
             });
             textColumn.Children.Add(new TextBlock
             {
-                Text = config.UpdateTime,
-                Foreground = GetBrushResource("TextMuted", Brushes.Gray),
+                Text = torProfile != null ? BuildTorProfileSubtitle(torProfile) : config.UpdateTime,
+                Foreground = torProfile != null
+                    ? (IBrush)SelectedMarkerBrush
+                    : GetBrushResource("TextMuted", Brushes.Gray),
                 FontSize = 12
             });
             Grid.SetColumn(textColumn, 1);
@@ -1494,9 +1822,16 @@ namespace InvisibleGorillaXRay.Android.Views
                 Margin = new Thickness(0, 4, 0, 0),
                 Spacing = 4
             };
-            actionRow.Children.Add(CreateIconActionButton("Icon.Share", 11, 13, () => _ = ShareConfigAsync(config)));
+            if (torProfile == null)
+                actionRow.Children.Add(CreateIconActionButton("Icon.Share", 11, 13, () => _ = ShareConfigAsync(config)));
             actionRow.Children.Add(CreateIconActionButton("Icon.Delete", 12, 12, () => DeleteSelectedConfig(config)));
-            actionRow.Children.Add(CreateIconActionButton("Icon.Connection", 15, 11, () => _ = CheckConfigAsync(config)));
+            actionRow.Children.Add(CreateIconActionButton("Icon.Connection", 15, 11, () =>
+            {
+                if (torProfile != null)
+                    _ = CheckTorProfileAsync(torProfile);
+                else
+                    _ = CheckConfigAsync(config);
+            }));
             Grid.SetRow(actionRow, 1);
             rightColumn.Children.Add(actionRow);
 
@@ -1643,7 +1978,17 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private bool TrySaveSettings(bool showSuccessMessage)
         {
-            EnsureSettingsSectionInitialized();
+            EnsureSettingsControlsCreated();
+
+            // If the Settings panel was never opened this session, the controls hold no
+            // user input (they were never populated). Reading them here would wipe the
+            // persisted Tor bridges / ports, so keep the saved settings untouched.
+            if (!isSettingsLoadedIntoControls)
+            {
+                if (showSuccessMessage)
+                    SetStatus(Localize("Lang.Android.Status.SettingsSaved"));
+                return true;
+            }
 
             if (!TryParseProxyPort(ProxyPortInput.Text, out int proxyPort))
                 return false;
@@ -1671,7 +2016,8 @@ namespace InvisibleGorillaXRay.Android.Views
                 AppRulesMode = current.GetAppRulesMode(),
                 AppRules = current.GetAppRules(),
                 AppRuleTemplates = current.GetAppRuleTemplates(),
-                AppRuleTemplateBindings = current.GetAppRuleTemplateBindings()
+                AppRuleTemplateBindings = current.GetAppRuleTemplateBindings(),
+                Tor = BuildTorSettingsFromUi(current)
             });
 
             UpdateCurrentConfigSummary();
@@ -1864,6 +2210,8 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void SetConnectionState(ConnectionState state)
         {
+            isConnectionInfoConnected = state == ConnectionState.Running;
+
             switch (state)
             {
                 case ConnectionState.Starting:
@@ -1892,6 +2240,132 @@ namespace InvisibleGorillaXRay.Android.Views
                     ConnectionStateTitleText.Text = Localize("Lang.Status.Stopped");
                     ConnectionStateSubtitleText.Text = Localize("Lang.Android.Home.Subtitle.Stopped");
                     break;
+            }
+
+            TimeSpan delay = state == ConnectionState.Running
+                ? TimeSpan.FromSeconds(3)
+                : TimeSpan.FromMilliseconds(200);
+            ScheduleConnectionInfoRefresh(delay);
+        }
+
+        private void InitializeConnectionInfo()
+        {
+            connectionInfoTimer?.Stop();
+            connectionInfoTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(45)
+            };
+            connectionInfoTimer.Tick += (_, _) => _ = RefreshConnectionInfoAsync();
+            connectionInfoTimer.Start();
+            _ = RefreshConnectionInfoAsync();
+        }
+
+        private void ScheduleConnectionInfoRefresh(TimeSpan delay)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(delay).ConfigureAwait(false);
+                    await RefreshConnectionInfoAsync().ConfigureAwait(false);
+                }
+                catch
+                {
+                }
+            });
+        }
+
+        private async Task RefreshConnectionInfoAsync()
+        {
+            connectionInfoLookupCancellation?.Cancel();
+            connectionInfoLookupCancellation = new CancellationTokenSource();
+            CancellationToken token = connectionInfoLookupCancellation.Token;
+
+            bool connected = isConnectionInfoConnected;
+
+            // The Android app excludes itself from its own VpnService, so a direct request
+            // always leaks the real ISP IP. When connected, probe through the running xray
+            // local SOCKS listener so the reported IP matches the actual tunnel exit.
+            System.Net.IWebProxy probeProxy = null;
+            string modeText = string.Empty;
+            try
+            {
+                UserSettings settings = settingsHandler.UserSettings;
+                if (connected)
+                    probeProxy = core.CreateActiveProbeProxy();
+                string outbound = ConnectionProbe.DetectOutboundProtocol(settings.GetCurrentConfigPath());
+                modeText = ConnectionProbe.DescribeMode(settings.GetMode(), settings.GetProtocol(), settings.GetTorSettings(), outbound);
+                isConnectionInfoTor = settings.GetTorSettings().GetEnabled();
+            }
+            catch
+            {
+            }
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                ConnectionInfoDotControl.Background = AvailabilityPendingBrush;
+                ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Checking");
+                ConnectionInfoModeText.Text = connected && !string.IsNullOrEmpty(modeText)
+                    ? $"{Localize("Lang.ConnectionInfo.Mode")} {modeText}"
+                    : string.Empty;
+            });
+
+            ConnectionInfo info = await connectionInfoService.LookupAsync(probeProxy, token).ConfigureAwait(false);
+            if (token.IsCancellationRequested)
+                return;
+
+            Dispatcher.UIThread.Post(() => ApplyConnectionInfo(info));
+        }
+
+        private void ApplyConnectionInfo(ConnectionInfo info)
+        {
+            if (!info.Ok)
+            {
+                ConnectionInfoDotControl.Background = AvailabilityErrorBrush;
+                ConnectionInfoIpText.Text = Localize("Lang.ConnectionInfo.Unknown");
+                ConnectionInfoLocationText.Text = string.Empty;
+                ConnectionInfoOrgText.Text = string.Empty;
+                ConnectionInfoVerdictText.Text = LocalizeFormat("Lang.ConnectionInfo.Error", info.Error);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(baselineIp) && !isConnectionInfoConnected)
+                baselineIp = info.Ip;
+
+            bool changedFromBaseline = !string.IsNullOrWhiteSpace(baselineIp)
+                && !string.Equals(baselineIp, info.Ip, StringComparison.OrdinalIgnoreCase);
+
+            ConnectionInfoDotControl.Background = isConnectionInfoConnected && changedFromBaseline
+                ? AvailabilitySuccessBrush
+                : isConnectionInfoConnected
+                    ? AvailabilityErrorBrush
+                    : AvailabilityPendingBrush;
+
+            ConnectionInfoIpText.Text = info.Ip;
+            string flag = !string.IsNullOrWhiteSpace(info.FlagEmoji) ? $"{info.FlagEmoji} " : string.Empty;
+            string place = !string.IsNullOrWhiteSpace(info.PlaceLine) ? info.PlaceLine : info.CountryName;
+            string countrySuffix = !string.IsNullOrWhiteSpace(info.PlaceLine) && !string.IsNullOrWhiteSpace(info.CountryName)
+                ? $"\n{info.CountryName}"
+                : string.Empty;
+            ConnectionInfoLocationText.Text = string.IsNullOrWhiteSpace(place)
+                ? string.Empty
+                : $"{flag}{place}{countrySuffix}";
+            ConnectionInfoOrgText.Text = string.IsNullOrWhiteSpace(info.Org) ? "—" : info.Org;
+
+            if (!isConnectionInfoConnected)
+            {
+                baselineIp = info.Ip;
+                ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Idle");
+            }
+            else if (changedFromBaseline)
+            {
+                ConnectionInfoVerdictText.Text = isConnectionInfoTor
+                    ? Localize("Lang.ConnectionInfo.ProtectedTor")
+                    : Localize("Lang.ConnectionInfo.Protected");
+            }
+            else
+            {
+                ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Exposed");
             }
         }
 
@@ -2000,6 +2474,8 @@ namespace InvisibleGorillaXRay.Android.Views
             if (selectedConfig == null)
                 return false;
 
+            ApplyTorStateForSelectedConfig(path);
+
             UpdateCurrentConfigSummary();
             UpdateRuntimeSummary();
             RefreshConfigs();
@@ -2012,6 +2488,161 @@ namespace InvisibleGorillaXRay.Android.Views
                 SetStatus(LocalizeFormat("Lang.Android.Status.SelectedConfig", selectedConfig.Name));
 
             return true;
+        }
+
+        /// <summary>
+        /// Selecting a Tor bridge profile activates Tor with that profile's bridges; selecting any
+        /// normal server switches Tor back off. This makes a Tor profile behave like a VLESS key in
+        /// the list: pick it to route through it, pick another server to leave it.
+        /// </summary>
+        private void ApplyTorStateForSelectedConfig(string path)
+        {
+            UserSettings current = settingsHandler.UserSettings;
+            TorProfile? profile = current.FindTorProfileByPath(path);
+            TorSettings tor = current.GetTorSettings();
+
+            if (profile != null)
+            {
+                tor.Enabled = true;
+                tor.Mode = profile.Mode;
+                tor.BridgeType = profile.BridgeType;
+                tor.BridgeLines = profile.GetBridgeLines();
+                if (profile.GetSocksPort() > 0)
+                    tor.SocksPort = profile.GetSocksPort();
+            }
+            else
+            {
+                if (!tor.Enabled)
+                    return;
+                tor.Enabled = false;
+            }
+
+            current.Tor = tor;
+            settingsHandler.UpdateUserSettings(current);
+
+            if (isSettingsLoadedIntoControls)
+                LoadTorSettingsIntoControls(settingsHandler.UserSettings);
+        }
+
+        /// <summary>
+        /// Creates a switchable Tor bridge profile (a minimal Tor-only Xray config file that shows up
+        /// in the server list) from a set of pasted/fetched bridge lines, and returns its config path.
+        /// </summary>
+        private string CreateTorBridgeProfile(BridgeType bridgeType, List<string> bridgeLines)
+        {
+            List<string> cleaned = (bridgeLines ?? new List<string>())
+                .Where(line => !string.IsNullOrWhiteSpace(line))
+                .Select(line => line.Trim())
+                .ToList();
+
+            int socksPort = settingsHandler.UserSettings.GetTorSettings().GetSocksPort();
+            string remark = MakeUniqueConfigRemark($"Tor bridge ({DescribeBridgeShort(bridgeType)})");
+
+            configHandler.CreateConfig(remark, TorConfigBuilder.BuildTorOnlyConfig(socksPort));
+
+            Config? created = configHandler.GetAllGeneralConfigs().LastOrDefault(config =>
+                string.Equals(config.Name, remark, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(System.IO.Path.GetFileNameWithoutExtension(config.Name), remark, StringComparison.OrdinalIgnoreCase));
+            string path = created?.Path ?? BuildGeneralConfigPath(remark);
+
+            UserSettings current = settingsHandler.UserSettings;
+            current.GetTorProfiles().Add(new TorProfile
+            {
+                Name = remark,
+                ConfigPath = path,
+                Mode = TorMode.ONLY_TOR,
+                BridgeType = bridgeType,
+                BridgeLines = cleaned,
+                SocksPort = socksPort,
+                LastLatencyMs = -1
+            });
+            settingsHandler.UpdateUserSettings(current);
+
+            return path;
+        }
+
+        private string MakeUniqueConfigRemark(string baseRemark)
+        {
+            string safeBase = FileUtility.GetValidFileName(baseRemark);
+            if (string.IsNullOrWhiteSpace(safeBase))
+                safeBase = "Tor bridge";
+
+            HashSet<string> existing = new(
+                configHandler.GetAllGeneralConfigs()
+                    .Select(config => System.IO.Path.GetFileNameWithoutExtension(config.Name)),
+                StringComparer.OrdinalIgnoreCase);
+
+            if (!existing.Contains(safeBase))
+                return safeBase;
+
+            for (int i = 2; i < 1000; i++)
+            {
+                string candidate = $"{safeBase} {i}";
+                if (!existing.Contains(candidate))
+                    return candidate;
+            }
+
+            return $"{safeBase} {Guid.NewGuid():N}".Substring(0, safeBase.Length + 6);
+        }
+
+        private static string DescribeBridgeShort(BridgeType bridgeType) => bridgeType switch
+        {
+            BridgeType.OBFS4 => "obfs4",
+            BridgeType.SNOWFLAKE => "snowflake",
+            BridgeType.MEEK_AZURE => "meek",
+            BridgeType.WEBTUNNEL => "webtunnel",
+            _ => "tor"
+        };
+
+        private string BuildTorProfileSubtitle(TorProfile profile)
+        {
+            string subtitle = LocalizeFormat("Lang.Tor.Profile.Subtitle", DescribeBridgeShort(profile.BridgeType));
+            if (profile.LastLatencyMs >= 0)
+                subtitle += $" · {profile.LastLatencyMs} ms";
+            return subtitle;
+        }
+
+        private void RemoveTorProfileForPath(string path)
+        {
+            UserSettings current = settingsHandler.UserSettings;
+            TorProfile? profile = current.FindTorProfileByPath(path);
+            if (profile == null)
+                return;
+
+            current.GetTorProfiles().Remove(profile);
+            settingsHandler.UpdateUserSettings(current);
+        }
+
+        private async Task CheckTorProfileAsync(TorProfile profile)
+        {
+            if (!torManager.IsAvailable)
+            {
+                SetStatus(Localize("Lang.Tor.Status.Unavailable"));
+                return;
+            }
+
+            SetStatus(Localize("Lang.Tor.Status.Checking"));
+            string firstLine = profile.GetBridgeLines().FirstOrDefault() ?? string.Empty;
+
+            BridgeCheckResult result = await Task.Run(() => torManager.CheckBridge(profile.BridgeType, firstLine));
+
+            if (result.Success)
+            {
+                UserSettings current = settingsHandler.UserSettings;
+                TorProfile? stored = current.FindTorProfileByPath(profile.ConfigPath);
+                if (stored != null)
+                {
+                    stored.LastLatencyMs = result.LatencyMs;
+                    settingsHandler.UpdateUserSettings(current);
+                }
+                SetStatus(LocalizeFormat("Lang.Tor.Status.CheckOk", result.LatencyMs));
+            }
+            else
+            {
+                SetStatus(LocalizeFormat("Lang.Tor.Status.CheckFail", result.Message));
+            }
+
+            RefreshConfigs();
         }
 
         private bool TrySelectConfigByName(string name)
@@ -2180,6 +2811,11 @@ namespace InvisibleGorillaXRay.Android.Views
         private void OnSaveSettingsClick(object? sender, RoutedEventArgs e)
         {
             TrySaveSettings(showSuccessMessage: true);
+        }
+
+        private void OnRefreshConnectionInfoClick(object? sender, RoutedEventArgs e)
+        {
+            _ = RefreshConnectionInfoAsync();
         }
 
         private void OnRefreshInstalledAppsClick(object? sender, RoutedEventArgs e)
@@ -2655,39 +3291,78 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private bool TryImportConfigLink(string? link, bool clearInputOnSuccess)
         {
-            string normalizedLink = link?.Trim() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(normalizedLink))
+            string text = link ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(text))
             {
                 SetStatus("Lang.Message.NoConfigLinkEntered");
                 return false;
             }
 
-            Status status = templateHandler.ConverLinkToConfig(normalizedLink);
-            if (status.Code == Code.ERROR)
+            PastedInputResult classified = PastedInputClassifier.Classify(text);
+            if (!classified.HasAny)
             {
-                SetStatus(status.Content?.ToString() ?? "Lang.Message.UnsopportedConfigLink");
+                SetStatus("Lang.SmartImport.Nothing");
                 return false;
             }
 
-            string[] payload = status.Content as string[] ?? Array.Empty<string>();
-            if (payload.Length < 2)
-            {
-                SetStatus("Lang.Android.Status.ConvertConfigFailed");
-                return false;
-            }
+            string? firstServerRemark = null;
+            SmartImportOutcome outcome = SmartImportService.Apply(
+                classified,
+                templateHandler.ConverLinkToConfig,
+                (remark, data) =>
+                {
+                    configHandler.CreateConfig(remark, data);
+                    firstServerRemark ??= remark;
+                },
+                templateHandler.ConvertLinkToSubscription,
+                (remark, url, data) => configHandler.CreateSubscription(remark, url, data),
+                ApplyBridgesFromSmartImport);
 
-            configHandler.CreateConfig(payload[0], payload[1]);
-            AndroidConfigShareLinkStore.SaveSourceLink(BuildGeneralConfigPath(payload[0]), normalizedLink);
+            if (classified.ServerLinks.Count == 1 && outcome.ServersAdded == 1 && firstServerRemark != null)
+                AndroidConfigShareLinkStore.SaveSourceLink(BuildGeneralConfigPath(firstServerRemark), classified.ServerLinks[0].Trim());
+
             if (clearInputOnSuccess)
                 ConfigLinkInput.Text = string.Empty;
 
             RefreshConfigs();
-            TrySelectConfigByName(payload[0]);
+            RefreshSubscriptions();
+            if (firstServerRemark != null)
+                TrySelectConfigByName(firstServerRemark);
             ShowSection(NavigationSection.Servers);
             ShowServerTab(ServerTab.Configurations);
             SetServersViewMode(ServersViewMode.Browse);
-            SetStatus(LocalizeFormat("Lang.Android.Status.ImportedConfig", payload[0]));
+            SetStatus(BuildSmartImportSummary(outcome));
+            return outcome.AnyAdded;
+        }
+
+        private bool ApplyBridgesFromSmartImport(List<string> bridgeLines, BridgeType bridgeType)
+        {
+            // Create a switchable Tor bridge profile (a server-list entry) from the pasted bridges,
+            // then select it so the app immediately routes through it — just like pasting a VLESS key.
+            string profilePath = CreateTorBridgeProfile(bridgeType, bridgeLines);
+
+            if (!string.IsNullOrWhiteSpace(profilePath))
+                TrySelectConfigByPath(profilePath, showStatus: false);
+
+            LoadTorSettingsIntoControls(settingsHandler.UserSettings);
             return true;
+        }
+
+        private string BuildSmartImportSummary(SmartImportOutcome outcome)
+        {
+            string summary = LocalizeFormat(
+                "Lang.SmartImport.Summary",
+                outcome.ServersAdded,
+                outcome.SubscriptionsAdded,
+                outcome.BridgesAdded);
+
+            if (outcome.Failures > 0)
+                summary += LocalizeFormat("Lang.SmartImport.Failures", outcome.Failures);
+
+            if (outcome.BridgesUpdated)
+                summary += " " + LocalizeFormat("Lang.SmartImport.BridgesEnabled", outcome.BridgeType);
+
+            return summary;
         }
 
         private bool TryImportConfigFileContent(string fileName, string? content)
@@ -2988,6 +3663,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 CleanupEmptySubscriptionDirectory(config);
                 AndroidConfigShareLinkStore.DeleteSourceLink(config.Path);
                 configAvailability.Remove(config.Path);
+                RemoveTorProfileForPath(config.Path);
             }
             catch (Exception ex)
             {

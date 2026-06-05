@@ -23,6 +23,40 @@ namespace InvisibleGorillaXRay.Android.Platforms
             CopyAssetIfPresent("Runtime/geoip.dat", Path.Combine(InvisibleGorillaXRay.Values.Directory.ROOT, "geoip.dat"));
             CopyAssetIfPresent("Runtime/geosite.dat", Path.Combine(InvisibleGorillaXRay.Values.Directory.ROOT, "geosite.dat"));
             DeleteLegacyCopiedNativeRuntime();
+            ConfigureTorBinaries();
+        }
+
+        /// <summary>
+        /// Points the Tor manager at the executables packaged in the app's native library dir.
+        /// On Android the only place binaries may be executed from is nativeLibraryDir, where the
+        /// packager places our lib*.so entries (libTor.so / liblyrebird.so) with exec permission.
+        /// </summary>
+        private static void ConfigureTorBinaries()
+        {
+            try
+            {
+                string? nativeLibDir = Application.Context.ApplicationInfo?.NativeLibraryDir;
+                if (string.IsNullOrWhiteSpace(nativeLibDir))
+                    return;
+
+                string torExe = Path.Combine(nativeLibDir, "libTor.so");
+                string lyrebird = Path.Combine(nativeLibDir, "liblyrebird.so");
+
+                if (!File.Exists(torExe))
+                    return;
+
+                // geoip is not bundled on Android to keep the APK small; tor runs without it for
+                // bridge connectivity (TorrcBuilder omits GeoIPFile when the files are absent).
+                InvisibleGorillaXRay.Values.Path.OverrideTorBinaries(
+                    torExe: torExe,
+                    pluggableTransportExe: File.Exists(lyrebird) ? lyrebird : null,
+                    geoip: null,
+                    geoip6: null);
+            }
+            catch
+            {
+                // Tor stays unavailable if the native dir cannot be resolved; UI surfaces this.
+            }
         }
 
         private static bool CopyAssetIfPresent(string assetPath, string destinationPath, string? assetIdentity = null)

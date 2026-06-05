@@ -80,6 +80,13 @@ namespace InvisibleGorillaXRay.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
         public List<AppRuleTemplateBinding> AppRuleTemplateBindings;
 
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public TorSettings Tor;
+
+        // Switchable Tor bridge profiles that appear in the server list alongside VLESS configs.
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public List<TorProfile> TorProfiles;
+
         public UserSettings()
         {
             this.ClientId = "";
@@ -104,6 +111,8 @@ namespace InvisibleGorillaXRay.Models
             this.AppRules = new List<AppRule>();
             this.AppRuleTemplates = new List<AppRuleTemplate>();
             this.AppRuleTemplateBindings = new List<AppRuleTemplateBinding>();
+            this.Tor = new TorSettings();
+            this.TorProfiles = new List<TorProfile>();
         }
 
         public UserSettings(
@@ -149,6 +158,24 @@ namespace InvisibleGorillaXRay.Models
             this.AppRules = NormalizeAppRules(appRules);
             this.AppRuleTemplates = NormalizeAppRuleTemplates(appRuleTemplates);
             this.AppRuleTemplateBindings = NormalizeTemplateBindings(appRuleTemplateBindings);
+            this.Tor = new TorSettings();
+            this.TorProfiles = new List<TorProfile>();
+        }
+
+        public TorSettings GetTorSettings() => Tor ??= new TorSettings();
+
+        public List<TorProfile> GetTorProfiles() => TorProfiles ??= new List<TorProfile>();
+
+        public TorProfile FindTorProfileByPath(string configPath)
+        {
+            if (string.IsNullOrWhiteSpace(configPath))
+                return null;
+
+            string normalized = NormalizeConfigPath(configPath);
+            return GetTorProfiles().LastOrDefault(profile =>
+                profile != null
+                && (string.Equals(NormalizeConfigPath(profile.ConfigPath), normalized, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(profile.ConfigPath, configPath, StringComparison.OrdinalIgnoreCase)));
         }
 
         public string GetClientId() => ClientId;

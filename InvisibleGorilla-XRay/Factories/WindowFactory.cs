@@ -38,6 +38,7 @@ namespace InvisibleGorillaXRay.Factories
                 shouldStartHidden: ShouldStartHidden,
                 isNeedToAutoConnect: IsNeedToAutoConnect,
                 getConfig: configHandler.GetCurrentConfig,
+                getUserSettings: () => settingsHandler.UserSettings,
                 loadConfig: core.LoadConfig,
                 enableMode: core.EnableMode,
                 checkForUpdate: updateHandler.CheckForUpdate,
@@ -192,7 +193,8 @@ namespace InvisibleGorillaXRay.Factories
                 onCreateSubscription: configHandler.CreateSubscription,
                 onDeleteSubscription: configHandler.DeleteSubscription,
                 onDeleteConfig: configHandler.LoadFiles,
-                onUpdateConfig: UpdateConfig
+                onUpdateConfig: UpdateConfig,
+                onAddBridges: AddBridges
             );
 
             SetupLocalizedWindowTitle(
@@ -208,6 +210,16 @@ namespace InvisibleGorillaXRay.Factories
                 mainWindow.UpdateUI();
                 mainWindow.TryRerun();
             }
+
+            bool AddBridges(System.Collections.Generic.List<string> bridgeLines, BridgeType bridgeType)
+            {
+                UserSettings settings = settingsHandler.UserSettings;
+                settings.Tor = Handlers.SmartInput.SmartImportService.MergeBridges(settings.GetTorSettings(), bridgeLines, bridgeType);
+                settingsHandler.UpdateUserSettings(settings);
+                mainWindow.UpdateUI();
+                mainWindow.TryDisableModeAndRerun();
+                return true;
+            }
         }
 
         public AppRulesWindow CreateAppRulesWindow()
@@ -215,11 +227,13 @@ namespace InvisibleGorillaXRay.Factories
             SettingsHandler settingsHandler = handlersManager.GetHandler<SettingsHandler>();
             NotifyHandler notifyHandler = handlersManager.GetHandler<NotifyHandler>();
             LocalizationHandler localizationHandler = handlersManager.GetHandler<LocalizationHandler>();
+            ConfigHandler configHandler = handlersManager.GetHandler<ConfigHandler>();
 
             AppRulesWindow appRulesWindow = new AppRulesWindow();
             appRulesWindow.Setup(
                 getUserSettings: () => settingsHandler.UserSettings,
-                onUpdateUserSettings: UpdateUserSettings
+                onUpdateUserSettings: UpdateUserSettings,
+                getAllConfigs: GetAllSelectableConfigs
             );
 
             SetupLocalizedWindowTitle(
@@ -236,6 +250,36 @@ namespace InvisibleGorillaXRay.Factories
                 notifyHandler.InitializeNotifyIcon();
                 notifyHandler.CheckModeItem(userSettings.GetMode());
                 GetMainWindow().TryDisableModeAndRerun();
+            }
+
+            System.Collections.Generic.List<Config> GetAllSelectableConfigs()
+            {
+                System.Collections.Generic.List<Config> configs = new();
+
+                try
+                {
+                    configs.AddRange(configHandler.GetAllGeneralConfigs());
+                }
+                catch
+                {
+                }
+
+                try
+                {
+                    foreach (Subscription group in configHandler.GetAllGroups())
+                    {
+                        string groupPath = group?.Directory?.FullName;
+                        if (string.IsNullOrWhiteSpace(groupPath))
+                            continue;
+
+                        configs.AddRange(configHandler.GetAllSubscriptionConfigs(groupPath));
+                    }
+                }
+                catch
+                {
+                }
+
+                return configs;
             }
         }
 

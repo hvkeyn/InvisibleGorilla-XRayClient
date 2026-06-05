@@ -1,6 +1,31 @@
 # Active Context
 
 ## Current Focus
+Published `v3.5.5`: fixed the live connection widget reporting the real ISP IP while traffic actually exits through the VPN, and added active-mode/protocol details to the widget on all platforms. Also re-encoded the corrupted v3.5.4 release notes as UTF-8.
+
+## Recent Changes (v3.5.5)
+- Added `ConnectionProbe` helper (Core + WPF duplicate): builds the probe `IWebProxy` matching real traffic (local xray listener in proxy mode, direct in TUN/disconnected), a compact mode descriptor (e.g. "VLESS · Proxy/SOCKS", "Tor", "VLESS over Tor (obfs4)"), and outbound-protocol detection from the config JSON.
+- Desktop (WPF/Mac/Linux): the IP probe now routes through the active local listener in proxy mode instead of `WebRequest.GetSystemWebProxy()` (which ignores SOCKS). Passed `getUserSettings` into `MainWindow.Setup` across WPF/Mac/Linux factories.
+- Android: the app excludes itself from its own `VpnService`, so a direct probe always leaked the real IP. Added `InvisibleGorillaXRayCore.CreateActiveProbeProxy()` (authenticated local SOCKS using the session credentials) and routed the Android probe through it.
+- Added `Lang.ConnectionInfo.Mode` localization (en/ru/fa for WPF; en/ru for Avalonia) and a mode TextBlock to each connection widget.
+- Bumped versions to `3.5.5` / Android version code `13`; built and published Windows, Linux x64, Android arm64 and x86_64 assets; release notes written as UTF-8.
+
+## Prior Focus (v3.5.4)
+- Moved the Windows live connection widget into the main content area so it stays above the bottom toolbar.
+- Added the shared live connection/IP widget to Android and the Avalonia desktop views used by macOS and Linux.
+- Added Tor usage guidance in Settings and hardened Tor settings persistence by cloning/normalizing saved `TorSettings`.
+- Increased/resized Server config and Settings windows on desktop so longer lists and Tor controls remain accessible.
+- Bumped app versions to `3.5.4` / Android version code `12` and generated release notes plus Windows, Linux, Android arm64, and Android x86_64 assets.
+
+## Validation Snapshot
+- `dotnet build` succeeded for Windows, Android, macOS, and Linux.
+- Windows publish succeeded for `win-x64`.
+- Android signed APKs were published for `arm64-v8a` and `x86_64`.
+- Linux x64 bundle was produced through `build.sh` in WSL.
+
+# Active Context
+
+## Current Focus
 - Android app rules picker usability and correctness.
 - Android release builds for emulator and real devices.
 

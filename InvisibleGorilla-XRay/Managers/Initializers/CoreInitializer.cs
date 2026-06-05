@@ -36,6 +36,8 @@
                 getTunnel: tunnelHandler.GetTunnel,
                 onFailLoadingConfig: configHandler.RemoveConfigFromList
             );
+
+            Core.SetupTor(getTorSettings: settingsHandler.UserSettings.GetTorSettings);
         }
     }
 }

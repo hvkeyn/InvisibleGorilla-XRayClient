@@ -19,10 +19,21 @@
 # Build outputs
 /publish
 /publish-android
+/publish-android-x64
+/publish-android-arm64
 /publish-linux
 /publish-macos
 /publish-windows
 /dist
+
+# Bundled Tor binaries + geoip (fetched by build scripts, not committed)
+/InvisibleGorilla-XRay/Tor/
+/InvisibleGorilla-XRay.Linux/Tor/
+/test-tools/
+/release-assets/
+build-windows.log
+build-android.log
+build-linux.log
 /dist-linux
 /dist-macos
 /.dotnet-sdk

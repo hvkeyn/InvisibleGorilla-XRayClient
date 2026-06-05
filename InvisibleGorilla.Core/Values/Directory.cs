@@ -13,6 +13,10 @@ namespace InvisibleGorillaXRay.Values
         public static string DATA_TUN => System.IO.Path.Combine(DATA_ROOT, "TUN");
         public static string CONFIGS => System.IO.Path.Combine(DATA_ROOT, "Configs");
         public static string LOGS => System.IO.Path.Combine(DATA_ROOT, "Logs");
+        // Bundled Tor daemon + pluggable transports (read-only, ships with the app).
+        public static string TOR => System.IO.Path.Combine(RUNTIME_ROOT, "Tor");
+        // Writable Tor runtime: generated torrc, tor DataDirectory, control cookie.
+        public static string TOR_DATA => System.IO.Path.Combine(DATA_ROOT, "Tor");
         public static string ASSETS => System.IO.Path.Combine(RUNTIME_ROOT, "Assets");
         public static string LOCALIZATION => System.IO.Path.Combine(ASSETS, "Localization");
 
@@ -44,6 +48,7 @@ namespace InvisibleGorillaXRay.Values
             TryCreate(CONFIGS);
             TryCreate(LOGS);
             TryCreate(DATA_TUN);
+            TryCreate(TOR_DATA);
 
             static void TryCreate(string path)
             {

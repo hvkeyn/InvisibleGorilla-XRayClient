@@ -7,10 +7,10 @@
         xmlns:Controls="clr-namespace:InvisibleGorillaXRay.Components"
         mc:Ignorable="d"
         Title="Invisible Gorilla XRay - Server config"
-        Height="450" 
+        Height="650" 
         Width="350" 
         WindowStartupLocation="CenterOwner"  
-        ResizeMode="NoResize"
+        ResizeMode="CanResize"
         ShowInTaskbar="False">
 
     <Window.Background>
@@ -59,7 +59,7 @@
 
             <Grid Grid.Row="1" Visibility="Visible" x:Name="panelConfig">
                 <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                    <StackPanel Orientation="Vertical" x:Name="listConfigs"></StackPanel>
+                    <StackPanel Orientation="Vertical" Margin="0 0 0 70" x:Name="listConfigs"></StackPanel>
                 </ScrollViewer>
 
                 <TextBlock x:Name="textNoConfig"
@@ -94,7 +94,7 @@
 
                     <ScrollViewer Grid.Row="1"
                         HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Orientation="Vertical" x:Name="listSubscriptions"></StackPanel>
+                        <StackPanel Orientation="Vertical" Margin="0 0 0 70" x:Name="listSubscriptions"></StackPanel>
                     </ScrollViewer>
 
                     <Grid Grid.Row="0" Background="{StaticResource Color.DarkGray}"
@@ -220,7 +220,8 @@
                 <RowDefinition Height="50"/>
             </Grid.RowDefinitions>
             
-            <StackPanel Grid.Row="0" Orientation="Vertical" VerticalAlignment="Center" Margin="20 0">
+            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Orientation="Vertical" VerticalAlignment="Center" Margin="20 10">
                     <RadioButton GroupName="GroupImport" Content="{DynamicResource Lang.Window.Server.Import.File}" 
                         Foreground="White" IsChecked="True"
                         FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14"
@@ -249,11 +250,23 @@
                     x:Name="radioButtonLink"
                     Click="OnLinkRadioButtonClick"/>
 
-                <TextBox Margin="20" Height="30" VerticalContentAlignment="Center" 
+                <TextBox Margin="20,20,20,4" Height="110" VerticalContentAlignment="Top"
+                    AcceptsReturn="True" TextWrapping="Wrap"
+                    VerticalScrollBarVisibility="Auto"
                     Style="{StaticResource TextBox.Default}" FontFamily="{StaticResource SegoeUI}" 
-                    FontWeight="Normal" FontSize="14"
+                    FontWeight="Normal" FontSize="13"
                     x:Name="textBoxConfigLink"/>
+
+                <TextBlock Margin="20,0" Foreground="#888" FontSize="12" TextWrapping="Wrap"
+                    FontFamily="{StaticResource SegoeUI}"
+                    Text="{DynamicResource Lang.SmartImport.Hint}"
+                    x:Name="textBlockSmartImportHint"/>
+
+                <TextBlock Margin="20,6,20,0" Foreground="#43b581" FontSize="13" TextWrapping="Wrap"
+                    FontFamily="{StaticResource SegoeUI}" Visibility="Collapsed"
+                    x:Name="textBlockSmartImportStatus"/>
             </StackPanel>
+            </ScrollViewer>
             
             <StackPanel Grid.Row="1" Orientation="Horizontal" 
                 HorizontalAlignment="Right" Margin="15 0">

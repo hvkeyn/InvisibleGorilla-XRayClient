@@ -1,8 +1,11 @@
 using System;
+using System.Net;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Input;
+using Avalonia.Media;
 using Avalonia.Threading;
 
 namespace InvisibleGorillaXRay.Mac.Views
@@ -19,11 +22,17 @@ namespace InvisibleGorillaXRay.Mac.Views
         private bool isRerunRequest;
         private bool isRunWorkerBusy;
         private bool isDialogOpen;
+        private readonly ConnectionInfoService connectionInfoService = new();
+        private DispatcherTimer connectionInfoTimer;
+        private CancellationTokenSource connectionInfoCancellation;
+        private string baselineIp = string.Empty;
+        private bool isConnected;
 
         private Func<bool> isNeedToShowPolicyWindow;
         private Func<bool> shouldStartHidden;
         private Func<bool> isNeedToAutoConnect;
         private Func<Config> getConfig;
+        private Func<UserSettings> getUserSettings;
         private Func<Status> loadConfig;
         private Func<Status> enableMode;
         private Func<Status> checkForUpdate;
@@ -56,6 +65,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             Func<bool> shouldStartHidden,
             Func<bool> isNeedToAutoConnect,
             Func<Config> getConfig,
+            Func<UserSettings> getUserSettings,
             Func<Status> loadConfig,
             Func<Status> enableMode,
             Func<Status> checkForUpdate,
@@ -77,6 +87,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             this.shouldStartHidden = shouldStartHidden;
             this.isNeedToAutoConnect = isNeedToAutoConnect;
             this.getConfig = getConfig;
+            this.getUserSettings = getUserSettings;
             this.loadConfig = loadConfig;
             this.checkForUpdate = checkForUpdate;
             this.openServerWindow = openServerWindow;
@@ -102,6 +113,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             try
             {
                 TryOpenPolicyWindow();
+                InitializeConnectionInfoTimer();
                 TryStartHidden();
                 TryAutoConnect();
                 RunUpdateCheck();
@@ -294,6 +306,11 @@ namespace InvisibleGorillaXRay.Mac.Views
             AnalyticsService.SendEvent(new UpdateButtonClickedEvent());
         }
 
+        private void OnRefreshInfoButtonClick(object sender, RoutedEventArgs e)
+        {
+            _ = RefreshConnectionInfoAsync();
+        }
+
         private void OnAboutButtonClick(object sender, RoutedEventArgs e)
         {
             OpenAboutWindow();
@@ -368,6 +385,7 @@ namespace InvisibleGorillaXRay.Mac.Views
 
         private void ShowRunStatus()
         {
+            isConnected = true;
             statusRun.IsVisible = true;
             statusStop.IsVisible = false;
             statusWaitForRun.IsVisible = false;
@@ -375,10 +393,12 @@ namespace InvisibleGorillaXRay.Mac.Views
             buttonStop.IsVisible = true;
             buttonCancel.IsVisible = false;
             buttonRun.IsVisible = false;
+            ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(3));
         }
 
         private void ShowStopStatus()
         {
+            isConnected = false;
             statusStop.IsVisible = true;
             statusRun.IsVisible = false;
             statusWaitForRun.IsVisible = false;
@@ -386,6 +406,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             buttonRun.IsVisible = true;
             buttonCancel.IsVisible = false;
             buttonStop.IsVisible = false;
+            ScheduleConnectionInfoRefresh(TimeSpan.FromMilliseconds(200));
         }
 
         private void ShowWaitForRunStatus()
@@ -397,6 +418,139 @@ namespace InvisibleGorillaXRay.Mac.Views
             buttonCancel.IsVisible = true;
             buttonRun.IsVisible = false;
             buttonStop.IsVisible = false;
+        }
+
+        private void InitializeConnectionInfoTimer()
+        {
+            if (connectionInfoTimer != null)
+                return;
+
+            connectionInfoTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(45)
+            };
+            connectionInfoTimer.Tick += (_, _) => _ = RefreshConnectionInfoAsync();
+            connectionInfoTimer.Start();
+            _ = RefreshConnectionInfoAsync();
+        }
+
+        private void ScheduleConnectionInfoRefresh(TimeSpan delay)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(delay).ConfigureAwait(false);
+                    await RefreshConnectionInfoAsync().ConfigureAwait(false);
+                }
+                catch
+                {
+                }
+            });
+        }
+
+        private async Task RefreshConnectionInfoAsync()
+        {
+            connectionInfoCancellation?.Cancel();
+            connectionInfoCancellation = new CancellationTokenSource();
+            CancellationToken token = connectionInfoCancellation.Token;
+
+            bool connected = isConnected;
+
+            // Mirror real traffic: probe through the local xray listener in proxy mode, or
+            // directly in TUN/disconnected. A direct request would ignore a SOCKS proxy and
+            // always report the real ISP IP even while the tunnel works.
+            IWebProxy probeProxy = null;
+            string modeText = string.Empty;
+            UserSettings settings = getUserSettings?.Invoke();
+            if (settings != null)
+            {
+                probeProxy = ConnectionProbe.BuildExitProxy(connected, settings.GetMode(), settings.GetProtocol(), settings.GetProxyPort());
+                string outbound = ConnectionProbe.DetectOutboundProtocol(getConfig?.Invoke()?.Path);
+                modeText = ConnectionProbe.DescribeMode(settings.GetMode(), settings.GetProtocol(), settings.GetTorSettings(), outbound);
+            }
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                infoStatusDot.Fill = Brushes.Gray;
+                textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Checking");
+                SetModeBadge(connected, modeText);
+            });
+
+            ConnectionInfo info = await connectionInfoService.LookupAsync(probeProxy, token).ConfigureAwait(false);
+            if (token.IsCancellationRequested)
+                return;
+
+            Dispatcher.UIThread.Post(() => ApplyConnectionInfo(info));
+        }
+
+        private void ApplyConnectionInfo(ConnectionInfo info)
+        {
+            if (!info.Ok)
+            {
+                infoStatusDot.Fill = Brushes.IndianRed;
+                textInfoIp.Text = Loc("Lang.ConnectionInfo.Unknown");
+                textInfoFlag.Text = "🌐";
+                textInfoLocation.Text = "—";
+                textInfoCountry.Text = string.Empty;
+                textInfoOrg.Text = "—";
+                textInfoVerdict.Text = string.Format(Loc("Lang.ConnectionInfo.Error"), info.Error);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(baselineIp) && !isConnected)
+                baselineIp = info.Ip;
+
+            bool changedFromBaseline = !string.IsNullOrWhiteSpace(baselineIp)
+                && !string.Equals(baselineIp, info.Ip, StringComparison.OrdinalIgnoreCase);
+
+            infoStatusDot.Fill = isConnected && changedFromBaseline
+                ? Brushes.LightGreen
+                : isConnected
+                    ? Brushes.IndianRed
+                    : Brushes.Gray;
+
+            textInfoIp.Text = info.Ip;
+            textInfoFlag.Text = !string.IsNullOrWhiteSpace(info.FlagEmoji) ? info.FlagEmoji : "🌐";
+            textInfoLocation.Text = !string.IsNullOrWhiteSpace(info.PlaceLine)
+                ? info.PlaceLine
+                : !string.IsNullOrWhiteSpace(info.CountryName) ? info.CountryName : "—";
+            textInfoCountry.Text = !string.IsNullOrWhiteSpace(info.PlaceLine) ? info.CountryName : string.Empty;
+            textInfoOrg.Text = string.IsNullOrWhiteSpace(info.Org) ? "—" : info.Org;
+
+            if (!isConnected)
+            {
+                baselineIp = info.Ip;
+                textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Idle");
+            }
+            else if (changedFromBaseline)
+            {
+                bool torActive = getUserSettings?.Invoke()?.GetTorSettings()?.GetEnabled() == true;
+                textInfoVerdict.Text = Loc(torActive ? "Lang.ConnectionInfo.ProtectedTor" : "Lang.ConnectionInfo.Protected");
+            }
+            else
+            {
+                textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Exposed");
+            }
+        }
+
+        private void SetModeBadge(bool connected, string modeText)
+        {
+            if (connected && !string.IsNullOrEmpty(modeText))
+            {
+                textInfoMode.Text = $"{Loc("Lang.ConnectionInfo.Mode")} {modeText}";
+                borderInfoMode.IsVisible = true;
+                return;
+            }
+
+            textInfoMode.Text = string.Empty;
+            borderInfoMode.IsVisible = false;
+        }
+
+        private string Loc(string key)
+        {
+            string term = LocalizationService.GetTerm(key);
+            return string.IsNullOrWhiteSpace(term) ? key : term;
         }
 
         public void ShowAndActivate()

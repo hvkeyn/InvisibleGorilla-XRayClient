@@ -57,7 +57,7 @@
 
 [CmdletBinding()]
 param(
-    [ValidateSet("All", "GoWrapper", "GeoFiles", "TUN", "DotNet")]
+    [ValidateSet("All", "GoWrapper", "GeoFiles", "TUN", "Tor", "DotNet")]
     [string]$Step = "All",
 
     [ValidateSet("Debug", "Release")]
@@ -70,6 +70,8 @@ param(
     [string]$OutputDir = ".\publish",
 
     [switch]$SkipTUN,
+
+    [switch]$SkipTor,
 
     [switch]$NoStopRunningApp
 )
@@ -84,6 +86,7 @@ $WrapperDir   = Join-Path $RootDir "XRay-Wrapper"
 $AppDir       = Join-Path $RootDir "InvisibleGorilla-XRay"
 $LibrariesDir = Join-Path $AppDir "Libraries"
 $TunDir       = Join-Path $AppDir "TUN"
+$TorDir       = Join-Path $AppDir "Tor"
 $SolutionFile = Join-Path $RootDir "InvisibleGorilla-XRay.sln"
 $WindowsProjectFile = Join-Path $AppDir "InvisibleGorilla-XRay.csproj"
 $LocalTunRepoDir = Join-Path (Split-Path $RootDir -Parent) "InvisibleGorilla-TUN"
@@ -100,6 +103,11 @@ $W64DevkitFile    = "w64devkit-x64-2.0.0.exe"
 $GeoIpUrl     = "https://github.com/v2fly/geoip/releases/latest/download/geoip.dat"
 $GeoSiteUrl   = "https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat"
 $TunRelease   = "https://api.github.com/repos/hvkeyn/InvisibleGorilla-TUN/releases/latest"
+
+# Tor Expert Bundle (tor daemon + pluggable transports: lyrebird/obfs4, snowflake, conjure).
+# The bundle version tracks the Tor Browser version; bump $TorBrowserVersion when updating.
+$TorBrowserVersion = "14.5.7"
+$TorBundleBaseUrl  = "https://archive.torproject.org/tor-package-archive/torbrowser"
 
 # ─── Вспомогательные функции ──────────────────────────────────────────────────
 
@@ -917,6 +925,80 @@ function Get-TunService {
     }
 }
 
+# ─── Шаг 3b: Скачивание Tor Expert Bundle ────────────────────────────────────
+
+function Get-TorBundle {
+    Write-StepHeader "Шаг 3b: Скачивание Tor Expert Bundle (tor + pluggable transports)"
+
+    if (-not (Test-Path $TorDir)) {
+        New-Item -ItemType Directory -Path $TorDir -Force | Out-Null
+        Write-Info "Создана директория: $TorDir"
+    }
+
+    $torExePath = Join-Path $TorDir "tor.exe"
+    if (Test-Path $torExePath) {
+        Write-Info "tor.exe уже существует, пропуск"
+        return
+    }
+
+    $bundleName = "tor-expert-bundle-windows-x86_64-$TorBrowserVersion.tar.gz"
+    $bundleUrl  = "$TorBundleBaseUrl/$TorBrowserVersion/$bundleName"
+    $tempArchive = Join-Path $env:TEMP $bundleName
+    $tempExtract = Join-Path $env:TEMP ("tor-bundle-" + [guid]::NewGuid().ToString("N"))
+
+    try {
+        Invoke-Download -Uri $bundleUrl -OutFile $tempArchive -MinimumSize 2MB `
+            -Label "Скачивание $bundleName..."
+
+        New-Item -ItemType Directory -Path $tempExtract -Force | Out-Null
+
+        Write-Info "Распаковка Tor Expert Bundle..."
+        & tar -xzf $tempArchive -C $tempExtract
+        if ($LASTEXITCODE -ne 0) {
+            throw "tar завершился с кодом $LASTEXITCODE"
+        }
+
+        # Bundle layout: tor/tor.exe, tor/pluggable_transports/*.exe, data/geoip, data/geoip6
+        $binaries = @(
+            (Join-Path $tempExtract "tor\tor.exe"),
+            (Join-Path $tempExtract "tor\pluggable_transports\lyrebird.exe"),
+            (Join-Path $tempExtract "tor\pluggable_transports\snowflake-client.exe"),
+            (Join-Path $tempExtract "tor\pluggable_transports\conjure-client.exe")
+        )
+        foreach ($bin in $binaries) {
+            if (Test-Path $bin) {
+                Copy-Item -Path $bin -Destination $TorDir -Force
+            }
+        }
+
+        foreach ($geo in @("geoip", "geoip6")) {
+            $geoSrc = Join-Path $tempExtract "data\$geo"
+            if (Test-Path $geoSrc) {
+                Copy-Item -Path $geoSrc -Destination (Join-Path $TorDir $geo) -Force
+            }
+        }
+
+        # Tor on Windows needs its dependent DLLs alongside tor.exe.
+        Get-ChildItem -Path (Join-Path $tempExtract "tor") -Filter *.dll -ErrorAction SilentlyContinue |
+            ForEach-Object { Copy-Item -Path $_.FullName -Destination $TorDir -Force }
+
+        if (Test-Path $torExePath) {
+            Write-Success "Tor Expert Bundle -> $TorDir"
+        }
+        else {
+            Write-Err "tor.exe не найден после распаковки. Проверьте версию `$TorBrowserVersion ($TorBrowserVersion)."
+        }
+    }
+    catch {
+        Write-Err "Не удалось скачать/распаковать Tor Expert Bundle: $_"
+        Write-Err "Скачайте вручную с https://www.torproject.org/download/tor/ и поместите бинарники в: $TorDir"
+    }
+    finally {
+        Remove-Item $tempArchive -Force -ErrorAction SilentlyContinue
+        Remove-Item $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 # ─── Шаг 4: Сборка .NET приложения ───────────────────────────────────────────
 
 function Stop-RunningWindowsAppForBuild {
@@ -1090,11 +1172,18 @@ switch ($Step) {
         else {
             Write-Info "Шаг 3 (TUN) пропущен (-SkipTUN)"
         }
+        if (-not $SkipTor) {
+            Get-TorBundle
+        }
+        else {
+            Write-Info "Шаг 3b (Tor) пропущен (-SkipTor)"
+        }
         Build-DotNetApp
     }
     "GoWrapper" { Build-GoWrapper }
     "GeoFiles"  { Get-GeoFiles }
     "TUN"       { Get-TunService }
+    "Tor"       { Get-TorBundle }
     "DotNet"    { Build-DotNetApp }
 }
 

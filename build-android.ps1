@@ -9,6 +9,8 @@ param(
 
     [switch]$SkipGeoFiles,
 
+    [switch]$SkipTor,
+
     [switch]$NoPublish,
 
     [string]$OutputDir = ".\publish-android",
@@ -47,6 +49,9 @@ $AbsoluteOutputDir = [System.IO.Path]::GetFullPath((Join-Path $RootDir $OutputDi
 
 $GeoIpUrl = "https://github.com/v2fly/geoip/releases/latest/download/geoip.dat"
 $GeoSiteUrl = "https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat"
+# Tor Expert Bundle for Android (tor + pluggable transports). Version tracks Tor Browser.
+$TorBrowserVersion = "14.5.7"
+$TorBundleBaseUrl = "https://archive.torproject.org/tor-package-archive/torbrowser"
 $AndroidCmdlineToolsUrl = "https://dl.google.com/android/repository/commandlinetools-win-11391160_latest.zip"
 $TemurinInstallerUrl = "https://api.adoptium.net/v3/installer/latest/17/ga/windows/x64/jdk/hotspot/normal/eclipse"
 $TemurinWingetId = "EclipseAdoptium.Temurin.17.JDK"
@@ -789,6 +794,71 @@ function Get-GeoFiles {
     Write-Success "Android runtime geo files are ready"
 }
 
+function Get-TorAndroidBundle {
+    Write-Step "Fetching Tor Expert Bundle (Android: tor + lyrebird)"
+
+    New-DirectoryIfMissing $RuntimeDir
+
+    # Bundle ships tor as lib*.so already; pluggable transports need renaming to lib*.so
+    # so the Android packager places them in nativeLibraryDir with exec permission.
+    $targets = @(
+        @{ Abi = "arm64-v8a"; TorArch = "aarch64" },
+        @{ Abi = "x86_64";    TorArch = "x86_64" }
+    )
+
+    foreach ($t in $targets) {
+        $abiDir = Join-Path $RuntimeDir $t.Abi
+        New-DirectoryIfMissing $abiDir
+        $torDest = Join-Path $abiDir "libTor.so"
+
+        if (Test-Path $torDest) {
+            Write-Info "libTor.so ($($t.Abi)) already present, skipping"
+            continue
+        }
+
+        $bundle = "tor-expert-bundle-android-$($t.TorArch)-$TorBrowserVersion.tar.gz"
+        $url = "$TorBundleBaseUrl/$TorBrowserVersion/$bundle"
+        $tmp = Join-Path $env:TEMP $bundle
+        $extract = Join-Path $env:TEMP ("tor-android-" + [guid]::NewGuid().ToString("N"))
+
+        try {
+            Get-RemoteFile -Uri $url -Destination $tmp
+
+            New-DirectoryIfMissing $extract
+            & tar -xzf $tmp -C $extract
+            if ($LASTEXITCODE -ne 0) {
+                throw "tar exited with code $LASTEXITCODE"
+            }
+
+            # Bundle layout: tor/libTor.so, tor/pluggable_transports/{lyrebird,conjure-client}
+            $torSrc = Join-Path $extract "tor\libTor.so"
+            if (Test-Path $torSrc) {
+                Copy-Item -Path $torSrc -Destination $torDest -Force
+            }
+
+            $lyreSrc = Join-Path $extract "tor\pluggable_transports\lyrebird"
+            if (Test-Path $lyreSrc) {
+                Copy-Item -Path $lyreSrc -Destination (Join-Path $abiDir "liblyrebird.so") -Force
+            }
+
+            if (Test-Path $torDest) {
+                Write-Success "Tor binaries for $($t.Abi) -> $abiDir"
+            }
+            else {
+                Write-Err "libTor.so not found after extraction for $($t.Abi) (check `$TorBrowserVersion=$TorBrowserVersion)"
+            }
+        }
+        catch {
+            Write-Err "Failed to fetch/extract Tor bundle for $($t.Abi): $_"
+            Write-Err "Tor mode/bridges will be unavailable on $($t.Abi)."
+        }
+        finally {
+            Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+            Remove-Item $extract -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function Resolve-AndroidClang {
     param(
         [Parameter(Mandatory)][string]$NdkRoot,
@@ -977,6 +1047,13 @@ if (-not $SkipNativeBridge) {
 }
 else {
     Write-Info "Skipping native bridge build"
+}
+
+if (-not $SkipTor) {
+    Get-TorAndroidBundle
+}
+else {
+    Write-Info "Skipping Tor bundle"
 }
 
 if (-not $NoPublish) {

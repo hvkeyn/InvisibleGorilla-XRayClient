@@ -1,5 +1,10 @@
 using System;
+using System.Net;
+using System.Threading;
 using System.Windows;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using System.ComponentModel;
 
 namespace InvisibleGorillaXRay
@@ -14,10 +19,17 @@ namespace InvisibleGorillaXRay
     {
         private bool isRerunRequest;
 
+        private readonly ConnectionInfoService connectionInfoService = new ConnectionInfoService();
+        private DispatcherTimer connectionInfoTimer;
+        private CancellationTokenSource connectionInfoCts;
+        private bool isConnected;
+        private string baselineIp;
+
         private Func<bool> isNeedToShowPolicyWindow;
         private Func<bool> shouldStartHidden;
         private Func<bool> isNeedToAutoConnect;
         private Func<Config> getConfig;
+        private Func<UserSettings> getUserSettings;
         private Func<Status> loadConfig;
         private Func<Status> enableMode;
         private Func<Status> checkForUpdate;
@@ -52,6 +64,17 @@ namespace InvisibleGorillaXRay
 
             updateWorker.RunWorkerAsync();
             broadcastWorker.RunWorkerAsync();
+
+            InitializeConnectionInfoTimer();
+
+            void InitializeConnectionInfoTimer()
+            {
+                connectionInfoTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(20)
+                };
+                connectionInfoTimer.Tick += (sender, e) => RefreshConnectionInfo();
+            }
 
             void InitializeRunWorker()
             {
@@ -115,7 +138,25 @@ namespace InvisibleGorillaXRay
                         ShowRunStatus();
                     }));
 
-                    onRunServer.Invoke(configStatus.Content.ToString());
+                    try
+                    {
+                        onRunServer.Invoke(configStatus.Content.ToString());
+                    }
+                    catch (Exception ex)
+                    {
+                        Dispatcher.BeginInvoke(new Action(delegate {
+                            MessageBox.Show(
+                                this,
+                                ex.Message,
+                                Caption.ERROR,
+                                MessageBoxButton.OK,
+                                MessageBoxImage.Error
+                            );
+                            ShowStopStatus();
+                        }));
+
+                        return;
+                    }
 
                     Dispatcher.BeginInvoke(new Action(delegate {
                         ShowStopStatus();
@@ -217,6 +258,7 @@ namespace InvisibleGorillaXRay
             Func<bool> shouldStartHidden,
             Func<bool> isNeedToAutoConnect,
             Func<Config> getConfig,
+            Func<UserSettings> getUserSettings,
             Func<Status> loadConfig, 
             Func<Status> enableMode,
             Func<Status> checkForUpdate,
@@ -239,6 +281,7 @@ namespace InvisibleGorillaXRay
             this.shouldStartHidden = shouldStartHidden;
             this.isNeedToAutoConnect = isNeedToAutoConnect;
             this.getConfig = getConfig;
+            this.getUserSettings = getUserSettings;
             this.loadConfig = loadConfig;
             this.checkForUpdate = checkForUpdate;
             this.checkForBroadcast = checkForBroadcast;
@@ -265,6 +308,9 @@ namespace InvisibleGorillaXRay
             TryOpenPolicyWindow();
             TryStartHidden();
             TryAutoConnect();
+
+            connectionInfoTimer.Start();
+            RefreshConnectionInfo();
 
             AnalyticsService.SendEvent(new AppOpenedEvent());
         }
@@ -435,6 +481,10 @@ namespace InvisibleGorillaXRay
             buttonStop.Visibility = Visibility.Visible;
             buttonCancel.Visibility = Visibility.Hidden;
             buttonRun.Visibility = Visibility.Hidden;
+
+            isConnected = true;
+            // Give the tunnel/proxy a moment to take over routing before probing the exit IP.
+            ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(2));
         }
 
         private void ShowStopStatus()
@@ -446,6 +496,9 @@ namespace InvisibleGorillaXRay
             buttonRun.Visibility = Visibility.Visible;
             buttonCancel.Visibility = Visibility.Hidden;
             buttonStop.Visibility = Visibility.Hidden;
+
+            isConnected = false;
+            ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(1));
         }
 
         private void ShowWaitForRunStatus()
@@ -457,6 +510,181 @@ namespace InvisibleGorillaXRay
             buttonCancel.Visibility = Visibility.Visible;
             buttonRun.Visibility = Visibility.Hidden;
             buttonStop.Visibility = Visibility.Hidden;
+        }
+
+        private void OnRefreshInfoButtonClick(object sender, RoutedEventArgs e)
+        {
+            RefreshConnectionInfo();
+        }
+
+        private void ScheduleConnectionInfoRefresh(TimeSpan delay)
+        {
+            DispatcherTimer once = new DispatcherTimer { Interval = delay };
+            once.Tick += (s, e) =>
+            {
+                once.Stop();
+                RefreshConnectionInfo();
+            };
+            once.Start();
+        }
+
+        private async void RefreshConnectionInfo()
+        {
+            connectionInfoCts?.Cancel();
+            connectionInfoCts = new CancellationTokenSource();
+            CancellationToken token = connectionInfoCts.Token;
+
+            bool connected = isConnected;
+
+            textInfoIp.Text = Loc("Lang.ConnectionInfo.Checking");
+            ClearConnectionInfoDetails();
+            infoStatusDot.Fill = Brushes.Gray;
+
+            // Route the probe exactly like user traffic: through the local xray listener in
+            // proxy mode, or directly in TUN/disconnected. A plain request ignores a SOCKS
+            // system proxy and would always report the real ISP IP.
+            IWebProxy probeProxy = null;
+            string modeText = string.Empty;
+            UserSettings settings = getUserSettings?.Invoke();
+            if (settings != null)
+            {
+                probeProxy = ConnectionProbe.BuildExitProxy(connected, settings.GetMode(), settings.GetProtocol(), settings.GetProxyPort());
+                string outbound = ConnectionProbe.DetectOutboundProtocol(getConfig?.Invoke()?.Path);
+                modeText = ConnectionProbe.DescribeMode(settings.GetMode(), settings.GetProtocol(), settings.GetTorSettings(), outbound);
+            }
+
+            SetModeBadge(connected, modeText);
+
+            ConnectionInfo info;
+            try
+            {
+                info = await connectionInfoService.LookupAsync(probeProxy, token);
+            }
+            catch (Exception)
+            {
+                info = new ConnectionInfo { Ok = false };
+            }
+
+            if (token.IsCancellationRequested)
+                return;
+
+            if (!info.Ok)
+            {
+                textInfoIp.Text = Loc("Lang.ConnectionInfo.Unknown");
+                ClearConnectionInfoDetails();
+                textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Error");
+                textInfoVerdict.Foreground = Brushes.Gray;
+                infoStatusDot.Fill = Brushes.Gray;
+                return;
+            }
+
+            textInfoIp.Text = info.Ip;
+            ApplyConnectionInfoDetails(info);
+
+            ApplyVerdict(connected, info.Ip);
+        }
+
+        private void ClearConnectionInfoDetails()
+        {
+            textInfoFlag.Text = "🌐";
+            imageInfoFlag.Source = null;
+            imageInfoFlag.Visibility = Visibility.Collapsed;
+            textInfoLocation.Text = "—";
+            textInfoCountry.Text = string.Empty;
+            textInfoOrg.Text = "—";
+        }
+
+        private void ApplyConnectionInfoDetails(ConnectionInfo info)
+        {
+            string place = info.PlaceLine;
+            string country = info.CountryName;
+
+            textInfoLocation.Text = !string.IsNullOrWhiteSpace(place)
+                ? place
+                : !string.IsNullOrWhiteSpace(country) ? country : "—";
+
+            textInfoCountry.Text = !string.IsNullOrWhiteSpace(place) && !string.IsNullOrWhiteSpace(country)
+                ? country
+                : string.Empty;
+
+            textInfoOrg.Text = string.IsNullOrWhiteSpace(info.Org) ? "—" : info.Org;
+            ApplyCountryFlag(info);
+        }
+
+        private void SetModeBadge(bool connected, string modeText)
+        {
+            if (connected && !string.IsNullOrEmpty(modeText))
+            {
+                textInfoMode.Text = $"{Loc("Lang.ConnectionInfo.Mode")} {modeText}";
+                borderInfoMode.Visibility = Visibility.Visible;
+                return;
+            }
+
+            textInfoMode.Text = string.Empty;
+            borderInfoMode.Visibility = Visibility.Collapsed;
+        }
+
+        private void ApplyCountryFlag(ConnectionInfo info)
+        {
+            imageInfoFlag.Source = null;
+            imageInfoFlag.Visibility = Visibility.Collapsed;
+
+            if (!string.IsNullOrWhiteSpace(info.FlagImageUrl))
+            {
+                try
+                {
+                    BitmapImage flag = new BitmapImage();
+                    flag.BeginInit();
+                    flag.UriSource = new Uri(info.FlagImageUrl, UriKind.Absolute);
+                    flag.CacheOption = BitmapCacheOption.OnLoad;
+                    flag.EndInit();
+                    imageInfoFlag.Source = flag;
+                    imageInfoFlag.Visibility = Visibility.Visible;
+                    textInfoFlag.Text = string.Empty;
+                    return;
+                }
+                catch
+                {
+                    // Fall back to emoji when the CDN image cannot be loaded.
+                }
+            }
+
+            textInfoFlag.Text = !string.IsNullOrWhiteSpace(info.FlagEmoji) ? info.FlagEmoji : "🌐";
+        }
+
+        private void ApplyVerdict(bool connected, string currentIp)
+        {
+            if (!connected)
+            {
+                // Remember the unprotected (real) exit as a baseline to detect leaks later.
+                baselineIp = currentIp;
+                textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Idle");
+                textInfoVerdict.Foreground = Brushes.Gray;
+                infoStatusDot.Fill = Brushes.Gray;
+                return;
+            }
+
+            bool exposed = !string.IsNullOrEmpty(baselineIp) &&
+                string.Equals(baselineIp, currentIp, StringComparison.OrdinalIgnoreCase);
+
+            if (exposed)
+            {
+                textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Exposed");
+                textInfoVerdict.Foreground = (Brush)TryFindResource("Color.Red") ?? Brushes.OrangeRed;
+                infoStatusDot.Fill = (Brush)TryFindResource("Color.Red") ?? Brushes.OrangeRed;
+            }
+            else
+            {
+                bool torActive = getUserSettings?.Invoke()?.GetTorSettings()?.GetEnabled() == true;
+                textInfoVerdict.Text = Loc(torActive ? "Lang.ConnectionInfo.ProtectedTor" : "Lang.ConnectionInfo.Protected");
+                textInfoVerdict.Foreground = (Brush)TryFindResource("Color.Green") ?? Brushes.LimeGreen;
+                infoStatusDot.Fill = (Brush)TryFindResource("Color.Green") ?? Brushes.LimeGreen;
+            }
+        }
+
+        private string Loc(string key)
+        {
+            return TryFindResource(key) as string ?? key;
         }
 
         protected override void OnClosing(CancelEventArgs e)

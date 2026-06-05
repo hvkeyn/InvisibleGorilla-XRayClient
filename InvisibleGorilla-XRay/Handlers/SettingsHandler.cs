@@ -42,6 +42,7 @@ namespace InvisibleGorillaXRay.Handlers
             this.userSettings.AppRules = CloneAppRules(userSettings.AppRules);
             this.userSettings.AppRuleTemplates = CloneAppRuleTemplates(userSettings.AppRuleTemplates);
             this.userSettings.AppRuleTemplateBindings = CloneAppRuleTemplateBindings(userSettings.AppRuleTemplateBindings);
+            this.userSettings.Tor = (userSettings.Tor ?? this.userSettings.Tor ?? new TorSettings()).Clone();
 
             UpdateStartupSetting();
             SaveUserSettings();
@@ -94,6 +95,7 @@ namespace InvisibleGorillaXRay.Handlers
                 settings.AppRuleTemplateBindings ??= new System.Collections.Generic.List<AppRuleTemplateBinding>();
                 settings.AppRuleTemplates = CloneAppRuleTemplates(settings.AppRuleTemplates);
                 settings.AppRuleTemplateBindings = CloneAppRuleTemplateBindings(settings.AppRuleTemplateBindings);
+                settings.Tor = (settings.Tor ?? new TorSettings()).Clone();
                 return settings;
             }
         }

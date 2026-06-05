@@ -2,9 +2,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="InvisibleGorillaXRay.Mac.Views.SettingsWindow"
         Title="Invisible Gorilla XRay - Settings"
-        Height="450" 
+        Height="560" 
         Width="350"
-        CanResize="False"
+        CanResize="True"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="{StaticResource Color.DarkGray}">
@@ -31,6 +31,8 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="2"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="2"/>
+                    <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
                 <Grid Grid.Column="0">
@@ -38,7 +40,7 @@
                         x:Name="buttonBasicTab" Click="OnBasicTabClick"/>
                     <TextBlock Text="{DynamicResource Lang.Window.Settings.Basic}"
                         HorizontalAlignment="Center" VerticalAlignment="Center"
-                        Foreground="White" FontWeight="Normal" FontSize="14"
+                        Foreground="White" FontWeight="Normal" FontSize="13"
                         IsHitTestVisible="False"/>
                 </Grid>
 
@@ -47,7 +49,7 @@
                         x:Name="buttonPortTab" Click="OnPortTabClick"/>
                     <TextBlock Text="{DynamicResource Lang.Window.Settings.Port}"
                         HorizontalAlignment="Center" VerticalAlignment="Center"
-                        Foreground="White" FontWeight="Normal" FontSize="14"
+                        Foreground="White" FontWeight="Normal" FontSize="13"
                         IsHitTestVisible="False"/>
                 </Grid>
 
@@ -56,16 +58,25 @@
                         x:Name="buttonTunTab" Click="OnTunTabClick"/>
                     <TextBlock Text="{DynamicResource Lang.Window.Settings.TUN}"
                         HorizontalAlignment="Center" VerticalAlignment="Center"
-                        Foreground="White" FontWeight="Normal" FontSize="14"
+                        Foreground="White" FontWeight="Normal" FontSize="13"
                         IsHitTestVisible="False"/>
                 </Grid>
 
                 <Grid Grid.Column="6">
                     <Button Theme="{StaticResource Button.Rectangle.Gray}"
+                        x:Name="buttonTorTab" Click="OnTorTabClick"/>
+                    <TextBlock Text="{DynamicResource Lang.Window.Settings.Tor}"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Foreground="White" FontWeight="Normal" FontSize="13"
+                        IsHitTestVisible="False"/>
+                </Grid>
+
+                <Grid Grid.Column="8">
+                    <Button Theme="{StaticResource Button.Rectangle.Gray}"
                         x:Name="buttonLogTab" Click="OnLogTabClick"/>
                     <TextBlock Text="{DynamicResource Lang.Window.Settings.Log}"
                         HorizontalAlignment="Center" VerticalAlignment="Center"
-                        Foreground="White" FontWeight="Normal" FontSize="14"
+                        Foreground="White" FontWeight="Normal" FontSize="13"
                         IsHitTestVisible="False"/>
                 </Grid>
             </Grid>
@@ -138,7 +149,8 @@
                             Content="{DynamicResource Lang.Window.Settings.AutoConnect}"
                             FontWeight="Normal" FontSize="14"/>
 
-                        <CheckBox x:Name="checkBoxSendAnalytics" Margin="5,15,0,0" Foreground="White" 
+                        <CheckBox x:Name="checkBoxSendAnalytics" Margin="5,15,0,0" Foreground="White"
+                            IsVisible="False"
                             Content="{DynamicResource Lang.Window.Settings.SendAnalytics}"
                             FontWeight="Normal" FontSize="14"/>
 
@@ -301,6 +313,144 @@
                             x:Name="textBoxLogPath"/>
                     </Grid>
                 </StackPanel>
+
+                <!-- Tor / Bridges panel -->
+                <ScrollViewer x:Name="panelTor" HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollBarVisibility="Auto" IsVisible="False">
+                    <StackPanel Orientation="Vertical" Margin="20,15,20,10" Spacing="8">
+                        <CheckBox x:Name="checkBoxTorEnabled" Foreground="White"
+                            Content="{DynamicResource Lang.Tor.Enable}"
+                            FontWeight="Normal" FontSize="14"/>
+                        <TextBlock Foreground="#C9C9C9"
+                            Text="{DynamicResource Lang.Tor.HowTo}"
+                            TextWrapping="Wrap"
+                            FontSize="12"/>
+
+                        <TextBlock Foreground="White" Margin="0,4,0,0"
+                            Text="{DynamicResource Lang.Tor.QuickConnect}"
+                            FontWeight="SemiBold" FontSize="14"/>
+                        <WrapPanel Orientation="Horizontal">
+                            <Button x:Name="buttonAskTor" Height="28" Margin="0,0,6,6"
+                                Content="{DynamicResource Lang.Tor.AskTor}"
+                                Theme="{StaticResource Button.Rectangle.Green}"
+                                FontWeight="Bold" FontSize="12"
+                                Foreground="{StaticResource Color.Gray}"
+                                Click="OnAskTorClick"/>
+                            <Button x:Name="buttonSnowflake" Height="28" Margin="0,0,6,6"
+                                Content="{DynamicResource Lang.Tor.Method.Snowflake}"
+                                Theme="{StaticResource Button.Rectangle.Gray}"
+                                FontWeight="Normal" FontSize="12" Foreground="White"
+                                Click="OnSnowflakeClick"/>
+                            <Button x:Name="buttonSnowflakeAmp" Height="28" Margin="0,0,6,6"
+                                Content="{DynamicResource Lang.Tor.Method.SnowflakeAmp}"
+                                Theme="{StaticResource Button.Rectangle.Gray}"
+                                FontWeight="Normal" FontSize="12" Foreground="White"
+                                Click="OnSnowflakeAmpClick"/>
+                            <Button x:Name="buttonMeekAzure" Height="28" Margin="0,0,6,6"
+                                Content="{DynamicResource Lang.Tor.Method.Meek}"
+                                Theme="{StaticResource Button.Rectangle.Gray}"
+                                FontWeight="Normal" FontSize="12" Foreground="White"
+                                Click="OnMeekAzureClick"/>
+                        </WrapPanel>
+                        <TextBlock Foreground="#C9C9C9" TextWrapping="Wrap" FontSize="12"
+                            Text="{DynamicResource Lang.Tor.GetBridges}"/>
+                        <WrapPanel Orientation="Horizontal">
+                            <Button x:Name="buttonBridgesEmail" Height="28" Margin="0,0,6,6"
+                                Content="{DynamicResource Lang.Tor.GetBridges.Email}"
+                                Theme="{StaticResource Button.Rectangle.Gray}"
+                                FontWeight="Normal" FontSize="12" Foreground="White"
+                                Click="OnBridgesEmailClick"/>
+                            <Button x:Name="buttonBridgesTelegram" Height="28" Margin="0,0,6,6"
+                                Content="{DynamicResource Lang.Tor.GetBridges.Telegram}"
+                                Theme="{StaticResource Button.Rectangle.Gray}"
+                                FontWeight="Normal" FontSize="12" Foreground="White"
+                                Click="OnBridgesTelegramClick"/>
+                        </WrapPanel>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Foreground="White"
+                                Text="{DynamicResource Lang.Tor.Mode}"
+                                FontWeight="Normal" FontSize="14" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="comboBoxTorMode" Grid.Column="1" Height="26"
+                                FontWeight="Normal" FontSize="14"/>
+                        </Grid>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Foreground="White"
+                                Text="{DynamicResource Lang.Tor.BridgeType}"
+                                FontWeight="Normal" FontSize="14" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="comboBoxBridgeType" Grid.Column="1" Height="26"
+                                FontWeight="Normal" FontSize="14"/>
+                        </Grid>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Foreground="White"
+                                Text="{DynamicResource Lang.Tor.SocksPort}"
+                                FontWeight="Normal" FontSize="14" VerticalAlignment="Center"/>
+                            <TextBox Grid.Column="1" VerticalContentAlignment="Center"
+                                FontWeight="Normal" FontSize="14" x:Name="textBoxTorSocksPort"/>
+                        </Grid>
+
+                        <TextBlock Foreground="White" Margin="0,4,0,0"
+                            Text="{DynamicResource Lang.Tor.Bridges}"
+                            FontWeight="Normal" FontSize="14"/>
+                        <TextBox x:Name="textBoxBridges" Height="90"
+                            AcceptsReturn="True" TextWrapping="Wrap"
+                            VerticalContentAlignment="Top"
+                            FontWeight="Normal" FontSize="12"
+                            Watermark="{DynamicResource Lang.Tor.Bridges.Hint}"/>
+
+                        <WrapPanel Orientation="Horizontal">
+                            <Button x:Name="buttonUseDefaultBridges" Height="28" Margin="0,0,6,6"
+                                Content="{DynamicResource Lang.Tor.UseDefault}"
+                                Theme="{StaticResource Button.Rectangle.Gray}"
+                                FontWeight="Normal" FontSize="12" Foreground="White"
+                                Click="OnUseDefaultBridgesClick"/>
+                            <Button x:Name="buttonFetchMoat" Height="28" Margin="0,0,6,6"
+                                Content="{DynamicResource Lang.Tor.FetchMoat}"
+                                Theme="{StaticResource Button.Rectangle.Gray}"
+                                FontWeight="Normal" FontSize="12" Foreground="White"
+                                Click="OnFetchMoatClick"/>
+                            <Button x:Name="buttonCheckBridge" Height="28" Margin="0,0,6,6"
+                                Content="{DynamicResource Lang.Tor.Check}"
+                                Theme="{StaticResource Button.Rectangle.Gray}"
+                                FontWeight="Normal" FontSize="12" Foreground="White"
+                                Click="OnCheckBridgeClick"/>
+                        </WrapPanel>
+
+                        <!-- moat captcha -->
+                        <StackPanel x:Name="panelCaptcha" IsVisible="False" Spacing="6"
+                            Margin="0,4,0,0">
+                            <TextBlock Foreground="#C9C9C9" TextWrapping="Wrap" FontSize="12"
+                                Text="{DynamicResource Lang.Tor.Captcha.Hint}"/>
+                            <Image x:Name="imageCaptcha" Height="80" HorizontalAlignment="Left"/>
+                            <TextBox x:Name="textBoxCaptcha" Height="28"
+                                FontWeight="Normal" FontSize="13"
+                                Watermark="{DynamicResource Lang.Tor.Captcha.Input}"/>
+                            <Button x:Name="buttonSubmitCaptcha" Height="28" HorizontalAlignment="Left"
+                                Content="{DynamicResource Lang.Tor.Captcha.Submit}"
+                                Theme="{StaticResource Button.Rectangle.Green}"
+                                FontWeight="Bold" FontSize="12"
+                                Foreground="{StaticResource Color.Gray}"
+                                Click="OnSubmitCaptchaClick"/>
+                        </StackPanel>
+
+                        <TextBlock x:Name="textBlockTorStatus" Foreground="#C9C9C9"
+                            TextWrapping="Wrap" FontSize="12" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </ScrollViewer>
 
                 <!-- Confirm / Cancel buttons -->
                 <StackPanel Grid.Row="1" Orientation="Horizontal" 

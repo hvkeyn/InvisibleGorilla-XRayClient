@@ -34,7 +34,7 @@ set -euo pipefail
 
 # ─── Settings ─────────────────────────────────────────────────────────────────
 
-readonly APP_VERSION="3.3.2.0"
+readonly APP_VERSION="3.5.9.0"
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly WRAPPER_DIR="$SCRIPT_DIR/XRay-Wrapper"
 readonly LINUX_DIR="$SCRIPT_DIR/InvisibleGorilla-XRay.Linux"
@@ -54,6 +54,10 @@ readonly GEOSITE_URL="https://github.com/v2fly/domain-list-community/releases/la
 # tun2socks (xjasonlyu) — auth-aware SOCKS5 client, the same component the macOS build uses.
 readonly TUN2SOCKS_RELEASES="https://github.com/xjasonlyu/tun2socks/releases/latest/download"
 
+# Tor Expert Bundle (tor daemon + pluggable transports). Version tracks Tor Browser.
+readonly TOR_BROWSER_VERSION="14.5.7"
+readonly TOR_BUNDLE_BASE_URL="https://archive.torproject.org/tor-package-archive/torbrowser"
+
 STEP="all"
 CONFIGURATION="Release"
 OUTPUT_DIR="./publish-linux"
@@ -64,9 +68,9 @@ DOTNET_SDK_VERSION=""
 
 ARCH="$(uname -m)"
 case "$ARCH" in
-    x86_64|amd64) RUNTIME="linux-x64";  GO_ARCH="amd64"; TUN2SOCKS_ASSET="tun2socks-linux-amd64.zip" ;;
-    aarch64|arm64) RUNTIME="linux-arm64"; GO_ARCH="arm64"; TUN2SOCKS_ASSET="tun2socks-linux-arm64.zip" ;;
-    *) RUNTIME="linux-x64"; GO_ARCH="amd64"; TUN2SOCKS_ASSET="tun2socks-linux-amd64.zip" ;;
+    x86_64|amd64) RUNTIME="linux-x64";  GO_ARCH="amd64"; TUN2SOCKS_ASSET="tun2socks-linux-amd64.zip"; TOR_ARCH="linux-x86_64" ;;
+    aarch64|arm64) RUNTIME="linux-arm64"; GO_ARCH="arm64"; TUN2SOCKS_ASSET="tun2socks-linux-arm64.zip"; TOR_ARCH="linux-aarch64" ;;
+    *) RUNTIME="linux-x64"; GO_ARCH="amd64"; TUN2SOCKS_ASSET="tun2socks-linux-amd64.zip"; TOR_ARCH="linux-x86_64" ;;
 esac
 
 # ─── Output helpers ───────────────────────────────────────────────────────────
@@ -515,6 +519,54 @@ fetch_tun2socks() {
     ok "tun2socks → $tun_dir/tun2socks ($(format_size "$(stat -c%s "$tun_dir/tun2socks")"))"
 }
 
+# ─── Step 2b: Fetch Tor Expert Bundle ─────────────────────────────────────────
+
+fetch_tor_bundle() {
+    step_header "Step 2b: Fetch Tor Expert Bundle (tor + pluggable transports)"
+
+    local tor_dir="$LINUX_DIR/Tor"
+    mkdir -p "$tor_dir"
+
+    if [[ -f "$tor_dir/tor" ]]; then
+        info "tor already present, skipping"
+        return
+    fi
+
+    local bundle="tor-expert-bundle-${TOR_ARCH}-${TOR_BROWSER_VERSION}.tar.gz"
+    local url="$TOR_BUNDLE_BASE_URL/$TOR_BROWSER_VERSION/$bundle"
+    local tmp="/tmp/$bundle"
+    local extract="/tmp/tor-bundle-extract"
+
+    if ! download_file "$url" "$tmp" "Downloading $bundle..." 2000000; then
+        err "Failed to download Tor Expert Bundle; bridges/Tor mode will be unavailable."
+        err "Download manually from https://www.torproject.org/download/tor/ into $tor_dir"
+        return
+    fi
+
+    rm -rf "$extract"; mkdir -p "$extract"
+    tar -xzf "$tmp" -C "$extract"
+    rm -f "$tmp"
+
+    # Bundle layout: tor/tor, tor/pluggable_transports/*, data/geoip, data/geoip6
+    cp "$extract/tor/tor" "$tor_dir/tor" 2>/dev/null && chmod +x "$tor_dir/tor"
+    for pt in lyrebird snowflake-client conjure-client; do
+        if [[ -f "$extract/tor/pluggable_transports/$pt" ]]; then
+            cp "$extract/tor/pluggable_transports/$pt" "$tor_dir/$pt"
+            chmod +x "$tor_dir/$pt"
+        fi
+    done
+    for geo in geoip geoip6; do
+        [[ -f "$extract/data/$geo" ]] && cp "$extract/data/$geo" "$tor_dir/$geo"
+    done
+    rm -rf "$extract"
+
+    if [[ -f "$tor_dir/tor" ]]; then
+        ok "Tor Expert Bundle → $tor_dir"
+    else
+        err "tor binary not found after extraction (check TOR_BROWSER_VERSION=$TOR_BROWSER_VERSION)"
+    fi
+}
+
 # ─── Step 3: Geo files ────────────────────────────────────────────────────────
 
 download_geo_files() {
@@ -673,6 +725,17 @@ COMMAND
         cp "$tun_src" "$stage/bin/TUN/"
         chmod +x "$stage/bin/TUN/tun2socks"
         ok "Bundled: tun2socks"
+    fi
+
+    local tor_src_dir="$LINUX_DIR/Tor"
+    if [[ -f "$tor_src_dir/tor" ]]; then
+        mkdir -p "$stage/bin/Tor"
+        cp -R "$tor_src_dir/." "$stage/bin/Tor/"
+        chmod +x "$stage/bin/Tor/tor" 2>/dev/null || true
+        for pt in lyrebird snowflake-client conjure-client; do
+            chmod +x "$stage/bin/Tor/$pt" 2>/dev/null || true
+        done
+        ok "Bundled: Tor + pluggable transports"
     fi
 
     for dat in geoip.dat geosite.dat; do
@@ -838,7 +901,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$STEP" in
-    all|deps|go|tun2socks|geo|dotnet|bundle) ;;
+    all|deps|go|tun2socks|tor|geo|dotnet|bundle) ;;
     *) err "Unknown step: $STEP"; exit 1 ;;
 esac
 
@@ -872,6 +935,7 @@ case "$STEP" in
         install_deps
         build_go_wrapper
         fetch_tun2socks
+        fetch_tor_bundle
         download_geo_files
         build_dotnet_app
         package_bundle
@@ -879,6 +943,7 @@ case "$STEP" in
     deps)      install_deps ;;
     go)        ensure_go; build_go_wrapper ;;
     tun2socks) fetch_tun2socks ;;
+    tor)       fetch_tor_bundle ;;
     geo)       download_geo_files ;;
     dotnet)    ensure_dotnet; build_dotnet_app ;;
     bundle)    package_bundle ;;

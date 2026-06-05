@@ -18,8 +18,17 @@ namespace InvisibleGorillaXRay
             public string Name { get; init; } = string.Empty;
         }
 
+        private sealed class ConnectionComboItem
+        {
+            public string Path { get; init; } = string.Empty;
+            public string Name { get; init; } = string.Empty;
+        }
+
+        private enum AppFilter { All, Running, Selected }
+
         private Func<UserSettings>? getUserSettings;
         private Action<UserSettings>? onUpdateUserSettings;
+        private Func<List<Config>>? getAllConfigs;
         private readonly List<WindowsInstalledAppInfo> discoveredWindowsApps = new();
         private readonly Dictionary<string, CheckBox> appRuleToggles = new(StringComparer.OrdinalIgnoreCase);
         private readonly List<AppRuleTemplate> workingCustomTemplates = new();
@@ -27,7 +36,10 @@ namespace InvisibleGorillaXRay
         private AppRuleTemplate workingDefaultTemplate = new();
         private string activeTemplateId = AppRuleTemplate.DefaultTemplateId;
         private string currentConfigPath = string.Empty;
+        private string selectedConfigPath = string.Empty;
+        private AppFilter appFilter = AppFilter.All;
         private bool isApplyingTemplate;
+        private bool isSwitchingConnection;
         private bool isReady;
 
         public AppRulesWindow()
@@ -35,10 +47,14 @@ namespace InvisibleGorillaXRay
             InitializeComponent();
         }
 
-        public void Setup(Func<UserSettings> getUserSettings, Action<UserSettings> onUpdateUserSettings)
+        public void Setup(
+            Func<UserSettings> getUserSettings,
+            Action<UserSettings> onUpdateUserSettings,
+            Func<List<Config>>? getAllConfigs = null)
         {
             this.getUserSettings = getUserSettings;
             this.onUpdateUserSettings = onUpdateUserSettings;
+            this.getAllConfigs = getAllConfigs;
 
             LoadState();
             isReady = true;
@@ -48,6 +64,7 @@ namespace InvisibleGorillaXRay
         {
             UserSettings settings = RequireCurrentSettings();
             currentConfigPath = settings.GetCurrentConfigPath();
+            selectedConfigPath = currentConfigPath;
 
             workingDefaultTemplate = settings.GetAppRuleTemplateById(AppRuleTemplate.DefaultTemplateId);
             workingCustomTemplates.Clear();
@@ -59,13 +76,132 @@ namespace InvisibleGorillaXRay
             discoveredWindowsApps.Clear();
             discoveredWindowsApps.AddRange(WindowsInstalledAppDiscovery.GetApps());
 
-            textBlockCurrentConfig.Text = string.IsNullOrWhiteSpace(currentConfigPath)
-                ? Localize("Lang.AppRules.NoConfigSelected")
-                : currentConfigPath;
             textBoxSearch.Text = string.Empty;
 
-            string selectedTemplateId = settings.GetBoundAppRuleTemplateId(currentConfigPath);
+            PopulateAppFilter();
+            PopulateConnectionSelector(currentConfigPath);
+
+            string selectedTemplateId = settings.GetBoundAppRuleTemplateId(selectedConfigPath);
             PopulateTemplateSelector(selectedTemplateId);
+        }
+
+        private void PopulateAppFilter()
+        {
+            // Items are ordered to match the AppFilter enum (All, Running, Selected).
+            comboBoxAppFilter.Items.Clear();
+            comboBoxAppFilter.Items.Add(Localize("Lang.AppRules.Filter.All"));
+            comboBoxAppFilter.Items.Add(Localize("Lang.AppRules.Filter.Running"));
+            comboBoxAppFilter.Items.Add(Localize("Lang.AppRules.Filter.Selected"));
+            comboBoxAppFilter.SelectedIndex = (int)appFilter;
+        }
+
+        private void PopulateConnectionSelector(string preferredConfigPath)
+        {
+            List<ConnectionComboItem> items = new();
+
+            List<Config> configs = getAllConfigs?.Invoke() ?? new List<Config>();
+            foreach (Config config in configs)
+            {
+                if (config == null || string.IsNullOrWhiteSpace(config.Path))
+                    continue;
+
+                if (items.Any(item => string.Equals(
+                        NormalizeConfigPath(item.Path),
+                        NormalizeConfigPath(config.Path),
+                        StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                items.Add(new ConnectionComboItem
+                {
+                    Path = config.Path,
+                    Name = string.IsNullOrWhiteSpace(config.Name)
+                        ? System.IO.Path.GetFileNameWithoutExtension(config.Path)
+                        : config.Name
+                });
+            }
+
+            // Always ensure the active/preferred connection is selectable, even if it is not part
+            // of the discovered list (e.g. a subscription entry that is not currently loaded).
+            if (!string.IsNullOrWhiteSpace(preferredConfigPath)
+                && !items.Any(item => string.Equals(
+                    NormalizeConfigPath(item.Path),
+                    NormalizeConfigPath(preferredConfigPath),
+                    StringComparison.OrdinalIgnoreCase)))
+            {
+                items.Insert(0, new ConnectionComboItem
+                {
+                    Path = preferredConfigPath,
+                    Name = System.IO.Path.GetFileNameWithoutExtension(preferredConfigPath)
+                });
+            }
+
+            if (items.Count == 0)
+            {
+                items.Add(new ConnectionComboItem
+                {
+                    Path = string.Empty,
+                    Name = Localize("Lang.AppRules.NoConfigSelected")
+                });
+            }
+
+            isSwitchingConnection = true;
+            comboBoxConnection.ItemsSource = items;
+
+            ConnectionComboItem? match = items.FirstOrDefault(item => string.Equals(
+                NormalizeConfigPath(item.Path),
+                NormalizeConfigPath(preferredConfigPath),
+                StringComparison.OrdinalIgnoreCase));
+
+            ConnectionComboItem selected = match ?? items[0];
+            comboBoxConnection.SelectedValue = selected.Path;
+            selectedConfigPath = selected.Path;
+            isSwitchingConnection = false;
+        }
+
+        private void OnConnectionSelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!isReady || isSwitchingConnection)
+                return;
+
+            // Persist the template choice for the connection we are leaving.
+            CaptureActiveTemplateState();
+            SetBindingForSelectedConnection();
+
+            selectedConfigPath = (comboBoxConnection.SelectedValue as string) ?? string.Empty;
+
+            string boundTemplateId = GetWorkingBoundTemplateId(selectedConfigPath);
+            PopulateTemplateSelector(boundTemplateId);
+        }
+
+        private string GetWorkingBoundTemplateId(string configPath)
+        {
+            string normalized = NormalizeConfigPath(configPath);
+            if (string.IsNullOrWhiteSpace(normalized))
+                return AppRuleTemplate.DefaultTemplateId;
+
+            AppRuleTemplateBinding? binding = workingBindings
+                .LastOrDefault(candidate => string.Equals(
+                    NormalizeConfigPath(candidate.ConfigPath),
+                    normalized,
+                    StringComparison.OrdinalIgnoreCase));
+
+            return binding?.TemplateId ?? AppRuleTemplate.DefaultTemplateId;
+        }
+
+        private void SetBindingForSelectedConnection()
+        {
+            string normalized = NormalizeConfigPath(selectedConfigPath);
+            if (string.IsNullOrWhiteSpace(normalized))
+                return;
+
+            workingBindings.RemoveAll(binding => string.Equals(
+                NormalizeConfigPath(binding.ConfigPath),
+                normalized,
+                StringComparison.OrdinalIgnoreCase));
+
+            workingBindings.Add(new AppRuleTemplateBinding(
+                configPath: normalized,
+                templateId: activeTemplateId));
         }
 
         private void PopulateTemplateSelector(string preferredTemplateId)
@@ -146,7 +282,16 @@ namespace InvisibleGorillaXRay
                     || app.ExecutablePath.Contains(filter, StringComparison.OrdinalIgnoreCase));
             }
 
-            foreach (WindowsInstalledAppInfo app in filteredApps)
+            filteredApps = appFilter switch
+            {
+                AppFilter.Running => filteredApps.Where(IsRunningApp),
+                AppFilter.Selected => filteredApps.Where(app => selectedPaths.Contains(app.ExecutablePath)),
+                _ => filteredApps
+            };
+
+            List<WindowsInstalledAppInfo> shownApps = filteredApps.ToList();
+
+            foreach (WindowsInstalledAppInfo app in shownApps)
             {
                 CheckBox toggle = new()
                 {
@@ -156,6 +301,9 @@ namespace InvisibleGorillaXRay
                     Foreground = Brushes.White
                 };
 
+                toggle.Checked += (_, __) => UpdateLiveCount();
+                toggle.Unchecked += (_, __) => UpdateLiveCount();
+
                 appRuleToggles[app.ExecutablePath] = toggle;
 
                 TextBlock title = new()
@@ -163,7 +311,9 @@ namespace InvisibleGorillaXRay
                     Text = app.DisplayName,
                     Foreground = Brushes.White,
                     FontWeight = FontWeights.SemiBold,
-                    TextWrapping = TextWrapping.Wrap
+                    TextWrapping = TextWrapping.NoWrap,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    ToolTip = app.DisplayName
                 };
 
                 TextBlock meta = new()
@@ -171,7 +321,9 @@ namespace InvisibleGorillaXRay
                     Text = app.ExecutablePath,
                     Foreground = new SolidColorBrush(Color.FromRgb(201, 201, 201)),
                     FontSize = 11,
-                    TextWrapping = TextWrapping.Wrap
+                    TextWrapping = TextWrapping.NoWrap,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    ToolTip = app.ExecutablePath
                 };
 
                 StackPanel textPanel = new();
@@ -209,6 +361,82 @@ namespace InvisibleGorillaXRay
             textBlockNoApps.Visibility = panelAppItems.Children.Count == 0
                 ? Visibility.Visible
                 : Visibility.Collapsed;
+
+            UpdateSelectionCount(selectedPaths.Count, shownApps.Count);
+        }
+
+        private static bool IsRunningApp(WindowsInstalledAppInfo app)
+        {
+            return app.Source?.StartsWith("process", StringComparison.OrdinalIgnoreCase) == true;
+        }
+
+        private void UpdateSelectionCount(int selectedCount, int shownCount)
+        {
+            textBlockSelectionCount.Text = string.Format(
+                Localize("Lang.AppRules.SelectionCount"),
+                selectedCount,
+                shownCount);
+        }
+
+        private void UpdateLiveCount()
+        {
+            if (!isReady)
+                return;
+
+            AppRuleTemplate template = GetTemplateById(activeTemplateId);
+            HashSet<string> selected = template.AppRules
+                .Where(rule => rule.Enabled && !string.IsNullOrWhiteSpace(rule.AppId))
+                .Select(rule => rule.AppId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            foreach (KeyValuePair<string, CheckBox> pair in appRuleToggles)
+            {
+                if (pair.Value.IsChecked == true)
+                    selected.Add(pair.Key);
+                else
+                    selected.Remove(pair.Key);
+            }
+
+            UpdateSelectionCount(selected.Count, appRuleToggles.Count);
+        }
+
+        private void OnAppFilterChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!isReady || isApplyingTemplate)
+                return;
+
+            int index = comboBoxAppFilter.SelectedIndex;
+            appFilter = index switch
+            {
+                1 => AppFilter.Running,
+                2 => AppFilter.Selected,
+                _ => AppFilter.All
+            };
+
+            CaptureActiveTemplateState();
+            RenderDiscoveredApps(GetTemplateById(activeTemplateId));
+        }
+
+        private void OnSelectVisibleClick(object sender, RoutedEventArgs e)
+        {
+            SetVisibleSelection(true);
+        }
+
+        private void OnClearVisibleClick(object sender, RoutedEventArgs e)
+        {
+            SetVisibleSelection(false);
+        }
+
+        private void SetVisibleSelection(bool isSelected)
+        {
+            if (!isReady)
+                return;
+
+            foreach (CheckBox toggle in appRuleToggles.Values)
+                toggle.IsChecked = isSelected;
+
+            CaptureActiveTemplateState();
+            RenderDiscoveredApps(GetTemplateById(activeTemplateId));
         }
 
         private void CaptureActiveTemplateState()
@@ -291,6 +519,7 @@ namespace InvisibleGorillaXRay
 
             CaptureActiveTemplateState();
             activeTemplateId = (comboBoxTemplate.SelectedValue as string) ?? AppRuleTemplate.DefaultTemplateId;
+            SetBindingForSelectedConnection();
             ApplyTemplateToEditor(GetTemplateById(activeTemplateId));
         }
 
@@ -340,6 +569,7 @@ namespace InvisibleGorillaXRay
             workingCustomTemplates.Add(source);
 
             PopulateTemplateSelector(source.Id);
+            SetBindingForSelectedConnection();
         }
 
         private void OnDeleteTemplateClick(object sender, RoutedEventArgs e)
@@ -347,8 +577,17 @@ namespace InvisibleGorillaXRay
             if (IsDefaultTemplate(activeTemplateId))
                 return;
 
+            string removedTemplateId = activeTemplateId;
             workingCustomTemplates.RemoveAll(template =>
-                string.Equals(template.Id, activeTemplateId, StringComparison.OrdinalIgnoreCase));
+                string.Equals(template.Id, removedTemplateId, StringComparison.OrdinalIgnoreCase));
+
+            // Drop any bindings that still point at the template we just removed so connections
+            // fall back to the default template instead of a dangling reference.
+            workingBindings.RemoveAll(binding => string.Equals(
+                binding.TemplateId,
+                removedTemplateId,
+                StringComparison.OrdinalIgnoreCase));
+
             activeTemplateId = AppRuleTemplate.DefaultTemplateId;
             PopulateTemplateSelector(activeTemplateId);
         }
@@ -356,6 +595,7 @@ namespace InvisibleGorillaXRay
         private void OnSaveButtonClick(object sender, RoutedEventArgs e)
         {
             CaptureActiveTemplateState();
+            SetBindingForSelectedConnection();
 
             UserSettings currentSettings = RequireCurrentSettings();
             List<AppRuleTemplate> templates = workingCustomTemplates
@@ -368,22 +608,28 @@ namespace InvisibleGorillaXRay
                 .Append(AppRuleTemplate.DefaultTemplateId)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            string normalizedCurrentConfigPath = NormalizeConfigPath(currentConfigPath);
-            List<AppRuleTemplateBinding> bindings = workingBindings
-                .Select(binding => binding.Clone())
-                .Where(binding => !string.Equals(
-                    NormalizeConfigPath(binding.ConfigPath),
-                    normalizedCurrentConfigPath,
-                    StringComparison.OrdinalIgnoreCase))
-                .Where(binding => validTemplateIds.Contains(binding.TemplateId))
-                .ToList();
-
-            if (!string.IsNullOrWhiteSpace(normalizedCurrentConfigPath))
+            // Keep the last binding per connection, dropping references to deleted templates and
+            // redundant default bindings (the default template is implied when no binding exists).
+            Dictionary<string, AppRuleTemplateBinding> bindingByConfig = new(StringComparer.OrdinalIgnoreCase);
+            foreach (AppRuleTemplateBinding binding in workingBindings)
             {
-                bindings.Add(new AppRuleTemplateBinding(
-                    configPath: normalizedCurrentConfigPath,
-                    templateId: activeTemplateId));
+                string normalizedPath = NormalizeConfigPath(binding.ConfigPath);
+                if (string.IsNullOrWhiteSpace(normalizedPath))
+                    continue;
+
+                if (!validTemplateIds.Contains(binding.TemplateId))
+                    continue;
+
+                if (IsDefaultTemplate(binding.TemplateId))
+                {
+                    bindingByConfig.Remove(normalizedPath);
+                    continue;
+                }
+
+                bindingByConfig[normalizedPath] = new AppRuleTemplateBinding(normalizedPath, binding.TemplateId);
             }
+
+            List<AppRuleTemplateBinding> bindings = bindingByConfig.Values.ToList();
 
             UserSettings updatedSettings = new UserSettings
             {

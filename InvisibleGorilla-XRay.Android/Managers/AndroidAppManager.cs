@@ -69,7 +69,8 @@ namespace InvisibleGorillaXRay.Android.Managers
                 AppRulesMode = settingsHandler.UserSettings.GetAppRulesMode(),
                 AppRules = settingsHandler.UserSettings.GetAppRules(),
                 AppRuleTemplates = settingsHandler.UserSettings.GetAppRuleTemplates(),
-                AppRuleTemplateBindings = settingsHandler.UserSettings.GetAppRuleTemplateBindings()
+                AppRuleTemplateBindings = settingsHandler.UserSettings.GetAppRuleTemplateBindings(),
+                Tor = settingsHandler.UserSettings.GetTorSettings()
             });
         }
     }

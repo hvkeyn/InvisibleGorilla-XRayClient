@@ -19,6 +19,7 @@ namespace InvisibleGorillaXRay.Mac.Views
     using Utilities;
     using InvisibleGorillaXRay.Services.Analytics.ServerWindow;
     using InvisibleGorillaXRay.Services.Analytics.Configuration;
+    using InvisibleGorillaXRay.Handlers.SmartInput;
 
     public partial class ServerWindow : Window
     {
@@ -48,6 +49,7 @@ namespace InvisibleGorillaXRay.Mac.Views
         private Action<Subscription> onDeleteSubscription;
         private Action<GroupType, string> onDeleteConfig;
         private Action<string> onUpdateConfig;
+        private Func<List<string>, BridgeType, bool> onAddBridges;
 
         private AnalyticsService AnalyticsService => ServiceLocator.Get<AnalyticsService>();
         private LocalizationService LocalizationService => ServiceLocator.Get<LocalizationService>();
@@ -80,8 +82,10 @@ namespace InvisibleGorillaXRay.Mac.Views
             Action<string, string, string> onCreateSubscription,
             Action<Subscription> onDeleteSubscription,
             Action<GroupType, string> onDeleteConfig,
-            Action<string> onUpdateConfig)
+            Action<string> onUpdateConfig,
+            Func<List<string>, BridgeType, bool> onAddBridges = null)
         {
+            this.onAddBridges = onAddBridges;
             this.getCurrentConfigPath = getCurrentConfigPath;
             this.getUserSettings = getUserSettings;
             this.openAppRulesWindow = openAppRulesWindow;
@@ -222,16 +226,64 @@ namespace InvisibleGorillaXRay.Mac.Views
 
         private void TryAddConfigFromLink()
         {
-            Status configStatus = convertLinkToConfig.Invoke(textBoxConfigLink.Text);
-            if (configStatus.Code == Code.ERROR)
+            var classified = PastedInputClassifier.Classify(textBoxConfigLink.Text);
+            if (!classified.HasAny)
             {
                 panelLoading.IsVisible = false;
+                ShowSmartImportStatus(Localize("Lang.SmartImport.Nothing"), false);
                 return;
             }
 
-            string[] config = (string[])configStatus.Content;
-            onCreateConfig.Invoke(config[0], config[1]);
-            FinishAddConfig();
+            var outcome = SmartImportService.Apply(
+                classified,
+                convertLinkToConfig,
+                onCreateConfig,
+                convertLinkToSubscription,
+                onCreateSubscription,
+                onAddBridges);
+
+            if (outcome.ServersAdded > 0 || outcome.SubscriptionsAdded > 0)
+            {
+                string lastPath = GetLastConfigPath(GroupType.GENERAL);
+                groupPath = lastPath;
+                onUpdateConfig.Invoke(lastPath);
+            }
+
+            LoadGroupsList();
+            LoadConfigsList(GroupType.GENERAL);
+            LoadConfigsList(GroupType.SUBSCRIPTION);
+            panelLoading.IsVisible = false;
+            textBoxConfigLink.Text = "";
+            ShowSmartImportStatus(BuildSmartImportSummary(outcome), outcome.AnyAdded);
+        }
+
+        private string BuildSmartImportSummary(SmartImportOutcome outcome)
+        {
+            string summary = string.Format(
+                Localize("Lang.SmartImport.Summary"),
+                outcome.ServersAdded,
+                outcome.SubscriptionsAdded,
+                outcome.BridgesAdded);
+
+            if (outcome.Failures > 0)
+                summary += string.Format(Localize("Lang.SmartImport.Failures"), outcome.Failures);
+
+            if (outcome.BridgesUpdated)
+                summary += " " + string.Format(Localize("Lang.SmartImport.BridgesEnabled"), outcome.BridgeType);
+
+            return summary;
+        }
+
+        private void ShowSmartImportStatus(string message, bool success)
+        {
+            if (textBlockSmartImportStatus == null)
+                return;
+
+            textBlockSmartImportStatus.Text = message;
+            textBlockSmartImportStatus.Foreground = success
+                ? Avalonia.Media.Brush.Parse("#43b581")
+                : Avalonia.Media.Brush.Parse("#faa61a");
+            textBlockSmartImportStatus.IsVisible = true;
         }
 
         private void FinishAddConfig()
