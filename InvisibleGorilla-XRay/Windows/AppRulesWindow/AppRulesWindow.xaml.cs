@@ -454,15 +454,19 @@ namespace InvisibleGorillaXRay
 
         private List<AppRule> BuildSelectedAppRules(AppRuleTemplate template)
         {
-            HashSet<string> selectedIds = appRuleToggles.Count == 0
-                ? template.AppRules
-                    .Where(rule => rule.Enabled && !string.IsNullOrWhiteSpace(rule.AppId))
-                    .Select(rule => rule.AppId)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase)
-                : appRuleToggles
-                    .Where(pair => pair.Value.IsChecked == true)
-                    .Select(pair => pair.Key)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            // Keep selections that are hidden by search/filter; only apply changes from visible toggles.
+            HashSet<string> selectedIds = template.AppRules
+                .Where(rule => rule.Enabled && !string.IsNullOrWhiteSpace(rule.AppId))
+                .Select(rule => rule.AppId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            foreach (KeyValuePair<string, CheckBox> pair in appRuleToggles)
+            {
+                if (pair.Value.IsChecked == true)
+                    selectedIds.Add(pair.Key);
+                else
+                    selectedIds.Remove(pair.Key);
+            }
 
             List<AppRule> rules = discoveredWindowsApps
                 .Where(app => selectedIds.Contains(app.ExecutablePath))
