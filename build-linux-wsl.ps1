@@ -133,7 +133,7 @@ if (Test-Path $distDir) {
         Write-Host "  (no archives found in $distDir)" -ForegroundColor Yellow
     }
 } else {
-    Write-Host "  $distDir отсутствует — bundle-шаг не выполнялся." -ForegroundColor Yellow
+    Write-Host "  $distDir missing - bundle step was not run." -ForegroundColor Yellow
 }
 
 Write-Host ""
