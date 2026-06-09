@@ -51,7 +51,18 @@ namespace InvisibleGorillaXRay.Mac.Views
             this.onUpdateUserSettings = onUpdateUserSettings;
             this.onActiveNodeChanged = onActiveNodeChanged;
 
-            PopulateSelectionModes();
+            // Guard init: populating the combo fires SelectionChanged synchronously,
+            // which would save default control values over the user's settings.
+            isApplyingSettings = true;
+            try
+            {
+                PopulateSelectionModes();
+            }
+            finally
+            {
+                isApplyingSettings = false;
+            }
+
             ApplySettingsToControls();
             RefreshList();
             UpdateStatusSummary();

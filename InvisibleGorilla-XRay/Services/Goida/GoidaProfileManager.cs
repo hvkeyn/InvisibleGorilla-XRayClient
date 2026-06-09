@@ -50,6 +50,12 @@ namespace InvisibleGorillaXRay.Services.Goida
         private int backgroundProbeInProgress;
         private int manualProbeInProgress;
 
+        // Nodes that recently failed a real tunnel check; excluded from failover
+        // for a cooldown so a flapping node isn't re-picked immediately.
+        private readonly Dictionary<string, DateTime> recentTunnelFailures = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly TimeSpan TunnelFailureCooldown = TimeSpan.FromMinutes(10);
+        private DateTime lastFailoverUtc = DateTime.MinValue;
+
         public event Action? NodesUpdated;
         public event Action<string>? StatusMessage;
         public event Action<GoidaProbeProgress>? ProbeProgress;
@@ -320,6 +326,12 @@ namespace InvisibleGorillaXRay.Services.Goida
                         targets.Take(MaxBackgroundProbeBatch).ToList(),
                         cancellationToken).ConfigureAwait(false);
 
+                // A TCP connect only proves the endpoint is reachable, not that VLESS
+                // actually works. Verify the fastest candidates with a real xray test
+                // so dead "3 ms OK" nodes don't end up at the top and get auto-picked.
+                if (manual && !result.Cancelled && result.Ok > 0 && isVpnSessionActive?.Invoke() != true)
+                    await VerifyTopNodesAsync(cancellationToken).ConfigureAwait(false);
+
                 if (!result.Cancelled && result.Ok > 0 && settings.AutoSwitchOnFly)
                     await EvaluateAutoSwitchAsync(settings).ConfigureAwait(false);
 
@@ -333,6 +345,101 @@ namespace InvisibleGorillaXRay.Services.Goida
             {
                 DiagnosticLog.WriteException("Goida.ProbeAsync", ex);
                 return new GoidaProbeResult();
+            }
+        }
+
+        /// <summary>
+        /// Called when the running tunnel is detected dead (exit IP check failed or
+        /// shows the real IP). Marks the active node as failed and switches to the
+        /// next best candidate. Returns true if a switch was initiated.
+        /// </summary>
+        public bool ReportTunnelFailure()
+        {
+            GoidaProfileSettings settings = getSettings().Clone();
+
+            if (!settings.AutoSwitchOnFly
+                || settings.SelectionMode == GoidaSelectionMode.ManualFixed)
+            {
+                return false;
+            }
+
+            // Debounce: a rerun takes a few seconds; don't stack switches.
+            if (DateTime.UtcNow - lastFailoverUtc < TimeSpan.FromSeconds(15))
+                return false;
+
+            string activeId = settings.ActiveNodeId ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(activeId))
+            {
+                store.UpdateNodeStatus(activeId, Values.Availability.ERROR, GoidaNodeStatus.Error);
+                lock (recentTunnelFailures)
+                    recentTunnelFailures[activeId] = DateTime.UtcNow;
+            }
+
+            GoidaNode? next = GoidaActiveSelector.SelectBestNode(
+                settings,
+                GetFailoverCandidates(),
+                activeId);
+
+            if (next == null || string.Equals(next.Id, activeId, StringComparison.OrdinalIgnoreCase))
+            {
+                NodesUpdated?.Invoke();
+                return false;
+            }
+
+            lastFailoverUtc = DateTime.UtcNow;
+            DiagnosticLog.Write("Goida.ReportTunnelFailure", $"Switching {activeId} -> {next.Id} ({next.DisplayName})");
+            SetActiveNode(next.Id, notifyExternal: true);
+            return true;
+        }
+
+        private List<GoidaNode> GetFailoverCandidates()
+        {
+            DateTime cutoff = DateTime.UtcNow - TunnelFailureCooldown;
+            HashSet<string> failed;
+            lock (recentTunnelFailures)
+            {
+                List<string> expired = recentTunnelFailures
+                    .Where(pair => pair.Value < cutoff)
+                    .Select(pair => pair.Key)
+                    .ToList();
+                foreach (string id in expired)
+                    recentTunnelFailures.Remove(id);
+
+                failed = recentTunnelFailures.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            }
+
+            return store.GetNodes()
+                .Where(node => !failed.Contains(node.Id))
+                .ToList();
+        }
+
+        private const int VerifyTopCount = 5;
+
+        private async Task VerifyTopNodesAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                GoidaProfileSettings settings = getSettings().Clone();
+                List<GoidaNode> top = FilterProbeTargets(settings, store.GetNodes(), manual: true)
+                    .Where(node => node.Status == GoidaNodeStatus.Ok && node.LatencyMs >= 0)
+                    .OrderBy(node => node.LatencyMs)
+                    .Take(VerifyTopCount)
+                    .ToList();
+
+                if (top.Count == 0)
+                    return;
+
+                StatusMessage?.Invoke("verify-start");
+                await monitor.ProbeNodesAsync(top, cancellationToken).ConfigureAwait(false);
+                StatusMessage?.Invoke("verify-complete");
+                NodesUpdated?.Invoke();
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("Goida.VerifyTopNodes", ex);
             }
         }
 

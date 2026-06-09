@@ -192,6 +192,7 @@
     <system:String x:Key="Lang.Goida.FilterListHint">Фильтр по номеру списка (1-26)</system:String>
     <system:String x:Key="Lang.Goida.Refresh">Обновить списки</system:String>
     <system:String x:Key="Lang.Goida.ProbeAll">Проверить все</system:String>
+    <system:String x:Key="Lang.Goida.VerifyingTop">Проверка лучших узлов реальным подключением…</system:String>
     <system:String x:Key="Lang.Goida.UseBest">Лучший узел</system:String>
     <system:String x:Key="Lang.Goida.UseBestHint">Выбрать самый быстрый доступный узел (по результатам проверки)</system:String>
     <system:String x:Key="Lang.Goida.SetActive">Сделать активным</system:String>

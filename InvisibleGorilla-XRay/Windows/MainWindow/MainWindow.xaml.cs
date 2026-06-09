@@ -30,6 +30,7 @@ namespace InvisibleGorillaXRay
 
         // null = not checked yet / VPN idle, true = tunnel passes traffic, false = tunnel dead.
         private bool? lastTunnelCheckOk;
+        private int consecutiveTunnelFailures;
 
         private Func<bool> isNeedToShowPolicyWindow;
         private Func<bool> shouldStartHidden;
@@ -55,6 +56,7 @@ namespace InvisibleGorillaXRay
         private Action onGitHubClick;
         private Action onBugReportingClick;
         private Action<string> onCustomLinkClick;
+        private Action onTunnelBroken;
 
         private BackgroundWorker runWorker;
         private BackgroundWorker updateWorker;
@@ -285,7 +287,8 @@ namespace InvisibleGorillaXRay
             Action onGitHubClick,
             Action onBugReportingClick,
             Action<string> onCustomLinkClick,
-            Func<GoidaMainPresentation> getGoidaPresentation = null)
+            Func<GoidaMainPresentation> getGoidaPresentation = null,
+            Action onTunnelBroken = null)
         {
             this.isNeedToShowPolicyWindow = isNeedToShowPolicyWindow;
             this.shouldStartHidden = shouldStartHidden;
@@ -311,6 +314,7 @@ namespace InvisibleGorillaXRay
             this.onGitHubClick = onGitHubClick;
             this.onBugReportingClick = onBugReportingClick;
             this.onCustomLinkClick = onCustomLinkClick;
+            this.onTunnelBroken = onTunnelBroken;
 
             UpdateUI();
         }
@@ -512,8 +516,20 @@ namespace InvisibleGorillaXRay
 
         private void OnRunButtonClick(object sender, RoutedEventArgs e)
         {
+            // After Stop the UI shows RUN immediately, but the worker stays busy until
+            // the native server actually shuts down. A silent return here made the
+            // button feel dead — queue a restart instead so the click always works.
             if (runWorker.IsBusy)
+            {
+                isRerunRequest = true;
+                ShowWaitForRunStatus();
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    try { onStopServer.Invoke(); }
+                    catch (Exception ex) { DiagnosticLog.WriteException("MainWindow.OnRunButtonClick", ex); }
+                });
                 return;
+            }
 
             runWorker.RunWorkerAsync();
             AnalyticsService.SendEvent(new RunButtonClickedEvent());
@@ -651,6 +667,7 @@ namespace InvisibleGorillaXRay
             buttonRun.Visibility = Visibility.Hidden;
 
             isConnected = true;
+            consecutiveTunnelFailures = 0;
             // Give the tunnel/proxy a moment to take over routing before probing the exit IP.
             ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(2));
         }
@@ -666,6 +683,7 @@ namespace InvisibleGorillaXRay
             buttonStop.Visibility = Visibility.Hidden;
 
             isConnected = false;
+            consecutiveTunnelFailures = 0;
             ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(1));
         }
 
@@ -745,6 +763,8 @@ namespace InvisibleGorillaXRay
                 infoStatusDot.Fill = Brushes.Gray;
                 lastTunnelCheckOk = connected ? false : (bool?)null;
                 ApplyGoidaSummary();
+                if (connected)
+                    RegisterTunnelFailure();
                 return;
             }
 
@@ -753,6 +773,41 @@ namespace InvisibleGorillaXRay
 
             ApplyVerdict(connected, info.Ip);
             ApplyGoidaSummary();
+
+            if (isConnected && lastTunnelCheckOk == false)
+                RegisterTunnelFailure();
+            else
+                consecutiveTunnelFailures = 0;
+        }
+
+        private void RegisterTunnelFailure()
+        {
+            consecutiveTunnelFailures++;
+
+            // A single failed lookup can be a transient hiccup of the IP service.
+            // Confirm quickly, then hand the failure to Goida for an auto-switch.
+            if (consecutiveTunnelFailures < 2)
+            {
+                ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(4));
+                return;
+            }
+
+            consecutiveTunnelFailures = 0;
+
+            if (onTunnelBroken == null)
+                return;
+
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    onTunnelBroken.Invoke();
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("MainWindow.OnTunnelBroken", ex);
+                }
+            });
         }
 
         private void ClearConnectionInfoDetails()

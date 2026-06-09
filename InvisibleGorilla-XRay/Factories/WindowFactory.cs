@@ -59,10 +59,19 @@ namespace InvisibleGorillaXRay.Factories
                 onGitHubClick: linkHandler.OpenGitHubRepositoryLink,
                 onBugReportingClick: linkHandler.OpenBugReportingLink,
                 onCustomLinkClick: linkHandler.OpenCustomLink,
-                getGoidaPresentation: BuildGoidaPresentation
+                getGoidaPresentation: BuildGoidaPresentation,
+                onTunnelBroken: OnTunnelBroken
             );
             
             return mainWindow;
+
+            void OnTunnelBroken()
+            {
+                if (!GoidaProfilePaths.IsMarker(settingsHandler.UserSettings.GetCurrentConfigPath()))
+                    return;
+
+                goidaHandler.Manager.ReportTunnelFailure();
+            }
 
             bool IsNeedToShowPolicyWindow() => settingsHandler.UserSettings.GetClientId() == "";
 

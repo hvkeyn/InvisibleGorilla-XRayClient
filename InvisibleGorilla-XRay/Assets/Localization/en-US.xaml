@@ -192,6 +192,7 @@
     <system:String x:Key="Lang.Goida.FilterListHint">Filter by list number (1-26)</system:String>
     <system:String x:Key="Lang.Goida.Refresh">Refresh lists</system:String>
     <system:String x:Key="Lang.Goida.ProbeAll">Probe all</system:String>
+    <system:String x:Key="Lang.Goida.VerifyingTop">Verifying top nodes with a real connection…</system:String>
     <system:String x:Key="Lang.Goida.UseBest">Best node</system:String>
     <system:String x:Key="Lang.Goida.UseBestHint">Pick the fastest available node (based on probe results)</system:String>
     <system:String x:Key="Lang.Goida.SetActive">Set active</system:String>

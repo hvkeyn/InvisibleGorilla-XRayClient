@@ -76,10 +76,22 @@ namespace InvisibleGorillaXRay
             this.onUpdateUserSettings = onUpdateUserSettings;
             this.onActiveNodeChanged = onActiveNodeChanged;
 
-            PopulateSelectionModes();
-            PopulateSortModes();
-            BuildListCheckboxes();
-            InitializeListSelectionTimer();
+            // Guard the whole init: populating combo boxes fires SelectionChanged ->
+            // OnSettingsChanged synchronously, which would otherwise save default
+            // control values (auto-switch off, mode AutoBest) over the user's settings.
+            isApplyingSettings = true;
+            try
+            {
+                PopulateSelectionModes();
+                PopulateSortModes();
+                BuildListCheckboxes();
+                InitializeListSelectionTimer();
+            }
+            finally
+            {
+                isApplyingSettings = false;
+            }
+
             ApplySettingsToControls();
             ApplyListSelectionToControls();
             // Pending selection starts empty: it is only set when the user explicitly
@@ -199,6 +211,13 @@ namespace InvisibleGorillaXRay
                     SetStatusText(Localize("Lang.Goida.RefreshFailed"));
                 else if (string.Equals(message, "refresh-no-vpn-lists", StringComparison.OrdinalIgnoreCase))
                     SetStatusText(Localize("Lang.Goida.NoListsSelected"));
+                else if (string.Equals(message, "verify-start", StringComparison.OrdinalIgnoreCase))
+                    SetStatusText(Localize("Lang.Goida.VerifyingTop"));
+                else if (string.Equals(message, "verify-complete", StringComparison.OrdinalIgnoreCase))
+                {
+                    RefreshGrid(forceLatencySort: true);
+                    UpdateStatusSummary();
+                }
                 else if (string.Equals(message, "refresh-complete", StringComparison.OrdinalIgnoreCase))
                 {
                     RefreshGrid();
