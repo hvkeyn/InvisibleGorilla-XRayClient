@@ -907,7 +907,7 @@ namespace InvisibleGorillaXRay
             List<GoidaNode> top = goidaHandler.Manager.GetVisibleNodes()
                 .Where(node => node.Status == GoidaNodeStatus.Ok && node.LatencyMs >= 0)
                 .OrderBy(node => node.LatencyMs)
-                .Take(10)
+                .Take(GoidaProfileSettings.DefaultAutoPoolSize)
                 .ToList();
 
             if (top.Count == 0)

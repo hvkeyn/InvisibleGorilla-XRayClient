@@ -787,15 +787,21 @@ namespace InvisibleGorillaXRay
                 consecutiveTunnelFailures = 0;
         }
 
+        private bool IsGoidaProfileActive()
+        {
+            GoidaMainPresentation presentation = getGoidaPresentation?.Invoke();
+            return presentation != null && !string.IsNullOrWhiteSpace(presentation.Summary);
+        }
+
         private void RegisterTunnelFailure()
         {
             consecutiveTunnelFailures++;
 
-            // A single failed lookup can be a transient hiccup of the IP service.
-            // Confirm quickly, then hand the failure to Goida for an auto-switch.
-            if (consecutiveTunnelFailures < 2)
+            // Confirm once more for Goida (keys die fast — cycle the pool quickly).
+            int requiredFailures = IsGoidaProfileActive() ? 1 : 2;
+            if (consecutiveTunnelFailures < requiredFailures)
             {
-                ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(4));
+                ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(2));
                 return;
             }
 

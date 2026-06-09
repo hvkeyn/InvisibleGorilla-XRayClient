@@ -53,7 +53,8 @@ namespace InvisibleGorillaXRay.Services.Goida
         // Nodes that recently failed a real tunnel check; excluded from failover
         // for a cooldown so a flapping node isn't re-picked immediately.
         private readonly Dictionary<string, DateTime> recentTunnelFailures = new(StringComparer.OrdinalIgnoreCase);
-        private static readonly TimeSpan TunnelFailureCooldown = TimeSpan.FromMinutes(10);
+        private static readonly TimeSpan TunnelFailureCooldown = TimeSpan.FromSeconds(90);
+        private static readonly TimeSpan FailoverDebounce = TimeSpan.FromSeconds(3);
         private DateTime lastFailoverUtc = DateTime.MinValue;
 
         public event Action? NodesUpdated;
@@ -364,10 +365,11 @@ namespace InvisibleGorillaXRay.Services.Goida
             }
 
             // Debounce: a rerun takes a few seconds; don't stack switches.
-            if (DateTime.UtcNow - lastFailoverUtc < TimeSpan.FromSeconds(15))
+            if (DateTime.UtcNow - lastFailoverUtc < FailoverDebounce)
                 return false;
 
             string activeId = settings.ActiveNodeId ?? string.Empty;
+            HashSet<string> failedIds;
             if (!string.IsNullOrWhiteSpace(activeId))
             {
                 store.UpdateNodeStatus(activeId, Values.Availability.ERROR, GoidaNodeStatus.Error);
@@ -375,15 +377,35 @@ namespace InvisibleGorillaXRay.Services.Goida
                     recentTunnelFailures[activeId] = DateTime.UtcNow;
             }
 
-            GoidaNode? next = GoidaActiveSelector.SelectBestNode(
+            failedIds = GetRecentFailedNodeIds();
+
+            GoidaNode? next = GoidaActiveSelector.SelectNextFailoverNode(
                 settings,
-                GetFailoverCandidates(),
-                activeId);
+                store.GetNodes(),
+                activeId,
+                failedIds);
 
             if (next == null || string.Equals(next.Id, activeId, StringComparison.OrdinalIgnoreCase))
             {
-                NodesUpdated?.Invoke();
-                return false;
+                // Every node in the pool was tried — clear the short cooldown and
+                // walk the list again from the top.
+                if (settings.SelectionMode == GoidaSelectionMode.ManualPool)
+                {
+                    lock (recentTunnelFailures)
+                        recentTunnelFailures.Clear();
+
+                    next = GoidaActiveSelector.SelectNextFailoverNode(
+                        settings,
+                        store.GetNodes(),
+                        activeId,
+                        new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                }
+
+                if (next == null || string.Equals(next.Id, activeId, StringComparison.OrdinalIgnoreCase))
+                {
+                    NodesUpdated?.Invoke();
+                    return false;
+                }
             }
 
             lastFailoverUtc = DateTime.UtcNow;
@@ -392,10 +414,9 @@ namespace InvisibleGorillaXRay.Services.Goida
             return true;
         }
 
-        private List<GoidaNode> GetFailoverCandidates()
+        private HashSet<string> GetRecentFailedNodeIds()
         {
             DateTime cutoff = DateTime.UtcNow - TunnelFailureCooldown;
-            HashSet<string> failed;
             lock (recentTunnelFailures)
             {
                 List<string> expired = recentTunnelFailures
@@ -405,15 +426,9 @@ namespace InvisibleGorillaXRay.Services.Goida
                 foreach (string id in expired)
                     recentTunnelFailures.Remove(id);
 
-                failed = recentTunnelFailures.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                return recentTunnelFailures.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
             }
-
-            return store.GetNodes()
-                .Where(node => !failed.Contains(node.Id))
-                .ToList();
         }
-
-        private const int VerifyTopCount = 5;
 
         private async Task VerifyTopNodesAsync(CancellationToken cancellationToken)
         {
@@ -423,7 +438,7 @@ namespace InvisibleGorillaXRay.Services.Goida
                 List<GoidaNode> top = FilterProbeTargets(settings, store.GetNodes(), manual: true)
                     .Where(node => node.Status == GoidaNodeStatus.Ok && node.LatencyMs >= 0)
                     .OrderBy(node => node.LatencyMs)
-                    .Take(VerifyTopCount)
+                    .Take(GoidaProfileSettings.MaxVerifiedNodes)
                     .ToList();
 
                 if (top.Count == 0)
@@ -655,7 +670,8 @@ namespace InvisibleGorillaXRay.Services.Goida
                 if (latency >= 0)
                 {
                     activeNodeFailStreak = 0;
-                    store.UpdateNodeStatus(active.Id, latency, GoidaNodeStatus.Ok);
+                    // TCP reachability does not mean VLESS works; promoting back to
+                    // Ok here was undoing tunnel-failure marks and blocking failover.
                     return;
                 }
 

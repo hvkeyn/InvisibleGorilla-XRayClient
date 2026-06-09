@@ -30,6 +30,26 @@ namespace InvisibleGorillaXRay.Services.Goida
             };
         }
 
+        public static GoidaNode? SelectNextFailoverNode(
+            GoidaProfileSettings settings,
+            IReadOnlyList<GoidaNode> nodes,
+            string? currentActiveNodeId,
+            ISet<string> excludeIds)
+        {
+            if (settings.SelectionMode == GoidaSelectionMode.ManualPool
+                && settings.ManualPoolNodeIds?.Count > 0)
+            {
+                return SelectNextInOrderedPool(settings, nodes, currentActiveNodeId, excludeIds);
+            }
+
+            return FilterCandidates(settings, nodes)
+                .Where(node => !excludeIds.Contains(node.Id))
+                .Where(node => !string.Equals(node.Id, currentActiveNodeId, StringComparison.OrdinalIgnoreCase))
+                .Where(node => node.Status == GoidaNodeStatus.Ok && node.LatencyMs >= 0)
+                .OrderBy(node => node.LatencyMs)
+                .FirstOrDefault();
+        }
+
         public static bool ShouldAutoSwitch(
             GoidaProfileSettings settings,
             GoidaNode? currentNode,
@@ -93,15 +113,76 @@ namespace InvisibleGorillaXRay.Services.Goida
             if (healthy.Count == 0)
                 return null;
 
-            if (string.IsNullOrWhiteSpace(currentActiveNodeId))
-                return healthy[0];
+            if (!string.IsNullOrWhiteSpace(currentActiveNodeId))
+            {
+                GoidaNode? current = healthy.FirstOrDefault(node =>
+                    string.Equals(node.Id, currentActiveNodeId, StringComparison.OrdinalIgnoreCase));
+                if (current != null)
+                    return current;
+            }
 
-            GoidaNode? current = healthy.FirstOrDefault(node =>
-                string.Equals(node.Id, currentActiveNodeId, StringComparison.OrdinalIgnoreCase));
-            if (current != null && current.Status == GoidaNodeStatus.Ok)
-                return current;
+            if (settings.ManualPoolNodeIds?.Count > 0)
+            {
+                Dictionary<string, GoidaNode> healthyById = healthy
+                    .ToDictionary(node => node.Id, StringComparer.OrdinalIgnoreCase);
+                foreach (string id in settings.ManualPoolNodeIds)
+                {
+                    if (healthyById.TryGetValue(id, out GoidaNode? node))
+                        return node;
+                }
+            }
 
             return healthy[0];
+        }
+
+        private static GoidaNode? SelectNextInOrderedPool(
+            GoidaProfileSettings settings,
+            IReadOnlyList<GoidaNode> nodes,
+            string? currentActiveNodeId,
+            ISet<string> excludeIds)
+        {
+            List<string> pool = settings.ManualPoolNodeIds!
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .ToList();
+            if (pool.Count == 0)
+                return null;
+
+            Dictionary<string, GoidaNode> byId = nodes
+                .ToDictionary(node => node.Id, StringComparer.OrdinalIgnoreCase);
+
+            int startIndex = 0;
+            if (!string.IsNullOrWhiteSpace(currentActiveNodeId))
+            {
+                int currentIndex = pool.FindIndex(id =>
+                    string.Equals(id, currentActiveNodeId, StringComparison.OrdinalIgnoreCase));
+                if (currentIndex >= 0)
+                    startIndex = currentIndex + 1;
+            }
+
+            for (int pass = 0; pass < 2; pass++)
+            {
+                bool allowUnknown = pass == 1;
+                for (int offset = 0; offset < pool.Count; offset++)
+                {
+                    string id = pool[(startIndex + offset) % pool.Count];
+                    if (excludeIds.Contains(id))
+                        continue;
+
+                    if (!byId.TryGetValue(id, out GoidaNode? node))
+                        continue;
+
+                    if (node.Status is GoidaNodeStatus.Error or GoidaNodeStatus.Timeout)
+                        continue;
+
+                    if (node.Status == GoidaNodeStatus.Ok)
+                        return node;
+
+                    if (allowUnknown && node.Status == GoidaNodeStatus.Unknown)
+                        return node;
+                }
+            }
+
+            return null;
         }
     }
 }

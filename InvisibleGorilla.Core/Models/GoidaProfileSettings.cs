@@ -10,6 +10,8 @@ namespace InvisibleGorillaXRay.Models
         public const int DefaultRefreshMinutes = 9;
         public const int DefaultProbeSeconds = 60;
         public const int DefaultAutoSwitchLatencyMs = 3000;
+        public const int DefaultAutoPoolSize = 100;
+        public const int MaxVerifiedNodes = 100;
 
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
         public bool Enabled { get; set; }
