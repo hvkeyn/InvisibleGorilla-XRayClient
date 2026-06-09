@@ -29,6 +29,8 @@ namespace InvisibleGorillaXRay
             public string StatusText { get; init; } = string.Empty;
             public string LastCheckedText { get; init; } = string.Empty;
             public bool IsActive { get; init; }
+            public string ActiveMark => IsActive ? "✓" : string.Empty;
+            public bool InPool { get; init; }
         }
 
         private enum SortMode
@@ -80,9 +82,12 @@ namespace InvisibleGorillaXRay
             InitializeListSelectionTimer();
             ApplySettingsToControls();
             ApplyListSelectionToControls();
-            pendingActiveNodeId = getUserSettings()?.GetGoidaSettings().ActiveNodeId;
+            // Pending selection starts empty: it is only set when the user explicitly
+            // picks a node, otherwise CONFIRM must not touch the active node or mode.
+            pendingActiveNodeId = null;
             RefreshGrid();
             UpdateStatusSummary();
+            UpdatePoolInfo();
 
             goidaHandler.Manager.NodesUpdated += OnNodesUpdated;
             goidaHandler.Manager.ProbeProgress += OnProbeProgress;
@@ -634,8 +639,10 @@ namespace InvisibleGorillaXRay
             List<GoidaNode> filtered = BuildDisplayNodes(visible, sortMode);
 
             bool truncated = visible.Count > MaxDisplayRows;
+            HashSet<string> pool = settings.ManualPoolNodeIds?
+                .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             List<NodeRow> rows = filtered
-                .Select(node => ToNodeRow(node, settings))
+                .Select(node => ToNodeRow(node, settings, pool))
                 .ToList();
 
             gridNodes.ItemsSource = rows;
@@ -696,7 +703,7 @@ namespace InvisibleGorillaXRay
             };
         }
 
-        private NodeRow ToNodeRow(GoidaNode node, GoidaProfileSettings settings)
+        private NodeRow ToNodeRow(GoidaNode node, GoidaProfileSettings settings, HashSet<string> pool)
         {
             string activeId = !string.IsNullOrWhiteSpace(pendingActiveNodeId)
                 ? pendingActiveNodeId
@@ -713,7 +720,8 @@ namespace InvisibleGorillaXRay
                 LatencyText = FormatLatency(node.LatencyMs),
                 StatusText = FormatStatus(node.Status),
                 LastCheckedText = GoidaNodeDisplay.FormatLastChecked(node.LastCheckedUtc),
-                IsActive = string.Equals(node.Id, activeId, StringComparison.OrdinalIgnoreCase)
+                IsActive = string.Equals(node.Id, activeId, StringComparison.OrdinalIgnoreCase),
+                InPool = pool.Contains(node.Id)
             };
         }
 
@@ -758,6 +766,7 @@ namespace InvisibleGorillaXRay
         private void OnSettingsChanged(object sender, RoutedEventArgs e)
         {
             CaptureSettingsFromControls();
+            UpdatePoolInfo();
         }
 
         private void OnFilterChanged(object sender, TextChangedEventArgs e)
@@ -804,6 +813,38 @@ namespace InvisibleGorillaXRay
             return gridNodes.SelectedItem as NodeRow;
         }
 
+        private List<NodeRow> GetSelectedRows()
+        {
+            return gridNodes.SelectedItems.OfType<NodeRow>().ToList();
+        }
+
+        private void OnUseBestClick(object sender, RoutedEventArgs e)
+        {
+            if (goidaHandler == null || getUserSettings == null)
+                return;
+
+            GoidaProfileSettings settings = getUserSettings().GetGoidaSettings().Clone();
+            // In fixed mode "best" would always return the pinned node, which makes
+            // the button useless — evaluate as auto-best instead.
+            if (settings.SelectionMode == GoidaSelectionMode.ManualFixed)
+                settings.SelectionMode = GoidaSelectionMode.AutoBest;
+
+            GoidaNode? best = GoidaActiveSelector.SelectBestNode(
+                settings,
+                goidaHandler.Manager.GetVisibleNodes(),
+                settings.ActiveNodeId);
+
+            if (best == null)
+            {
+                SetStatusText(Localize("Lang.Goida.NoWorkingNode"));
+                return;
+            }
+
+            pendingActiveNodeId = best.Id;
+            RefreshGrid();
+            SetStatusText(string.Format(Localize("Lang.Goida.PendingActive"), best.DisplayName));
+        }
+
         private void OnSetActiveClick(object sender, RoutedEventArgs e)
         {
             NodeRow? row = GetSelectedRow();
@@ -815,23 +856,75 @@ namespace InvisibleGorillaXRay
             SetStatusText(string.Format(Localize("Lang.Goida.PendingActive"), row.DisplayName));
         }
 
+        private void OnPoolCheckBoxClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not CheckBox box || box.Tag is not string nodeId || string.IsNullOrWhiteSpace(nodeId))
+                return;
+
+            ModifyPool(pool =>
+            {
+                if (box.IsChecked == true)
+                {
+                    if (!pool.Contains(nodeId, StringComparer.OrdinalIgnoreCase))
+                        pool.Add(nodeId);
+                }
+                else
+                {
+                    pool.RemoveAll(id => string.Equals(id, nodeId, StringComparison.OrdinalIgnoreCase));
+                }
+            });
+        }
+
         private void OnAddToPoolClick(object sender, RoutedEventArgs e)
         {
-            NodeRow? row = GetSelectedRow();
-            if (row == null || getUserSettings == null || onUpdateUserSettings == null)
+            List<NodeRow> rows = GetSelectedRows();
+            if (rows.Count == 0)
+                return;
+
+            ModifyPool(pool =>
+            {
+                foreach (NodeRow row in rows)
+                {
+                    if (!pool.Contains(row.Id, StringComparer.OrdinalIgnoreCase))
+                        pool.Add(row.Id);
+                }
+            });
+        }
+
+        private void OnClearPoolClick(object sender, RoutedEventArgs e)
+        {
+            ModifyPool(pool => pool.Clear());
+        }
+
+        private void ModifyPool(Action<List<string>> mutate)
+        {
+            if (getUserSettings == null || onUpdateUserSettings == null)
                 return;
 
             UserSettings current = getUserSettings();
             GoidaProfileSettings settings = current.GetGoidaSettings().Clone();
             settings.ManualPoolNodeIds ??= new List<string>();
-            if (!settings.ManualPoolNodeIds.Contains(row.Id, StringComparer.OrdinalIgnoreCase))
-                settings.ManualPoolNodeIds.Add(row.Id);
-            settings.SelectionMode = GoidaSelectionMode.ManualPool;
+            mutate(settings.ManualPoolNodeIds);
             current.Goida = settings;
             onUpdateUserSettings(current);
             goidaHandler?.Manager.UpdateSettings(settings);
-            ApplySettingsToControls();
             RefreshGrid();
+            UpdatePoolInfo();
+        }
+
+        private void UpdatePoolInfo()
+        {
+            if (getUserSettings == null)
+                return;
+
+            GoidaProfileSettings settings = getUserSettings().GetGoidaSettings();
+            int count = settings.ManualPoolNodeIds?.Count ?? 0;
+            string text = string.Format(Localize("Lang.Goida.PoolCount"), count);
+
+            if (count > 0 && settings.SelectionMode != GoidaSelectionMode.ManualPool)
+                text += " · " + Localize("Lang.Goida.PoolModeHint");
+
+            textBlockPoolInfo.Text = text;
         }
 
         private void OnCloseClick(object sender, RoutedEventArgs e)
@@ -841,13 +934,24 @@ namespace InvisibleGorillaXRay
 
             CaptureSettingsFromControls();
 
-            if (!string.IsNullOrWhiteSpace(pendingActiveNodeId) && goidaHandler != null && getUserSettings != null && onUpdateUserSettings != null)
+            bool hasNewActive = !string.IsNullOrWhiteSpace(pendingActiveNodeId)
+                && goidaHandler != null
+                && getUserSettings != null
+                && onUpdateUserSettings != null
+                && !string.Equals(
+                    pendingActiveNodeId,
+                    getUserSettings().GetGoidaSettings().ActiveNodeId,
+                    StringComparison.OrdinalIgnoreCase);
+
+            if (hasNewActive)
             {
                 UserSettings current = getUserSettings();
                 GoidaProfileSettings settings = current.GetGoidaSettings().Clone();
                 settings.ActiveNodeId = pendingActiveNodeId;
-                settings.PinnedNodeId = pendingActiveNodeId;
-                settings.SelectionMode = GoidaSelectionMode.ManualFixed;
+                // Pin only in fixed mode; auto/pool modes keep their own selection logic
+                // and the user's mode choice must never be silently overwritten.
+                if (settings.SelectionMode == GoidaSelectionMode.ManualFixed)
+                    settings.PinnedNodeId = pendingActiveNodeId;
                 current.Goida = settings;
                 onUpdateUserSettings(current);
                 goidaHandler.Manager.UpdateSettings(settings);

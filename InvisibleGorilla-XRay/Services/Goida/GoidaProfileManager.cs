@@ -521,8 +521,13 @@ namespace InvisibleGorillaXRay.Services.Goida
                 || store.GetNodes().Count > 0;
         }
 
-        private Task EvaluateAutoSwitchAsync(GoidaProfileSettings settings)
+        private Task EvaluateAutoSwitchAsync(GoidaProfileSettings staleSnapshot)
         {
+            // Always operate on the freshest settings: the snapshot was taken before
+            // the probe ran and saving it back would clobber any list/mode/checkbox
+            // changes the user made through the UI in the meantime.
+            GoidaProfileSettings settings = getSettings().Clone();
+
             GoidaNode? current = string.IsNullOrWhiteSpace(settings.ActiveNodeId)
                 ? null
                 : store.FindById(settings.ActiveNodeId);

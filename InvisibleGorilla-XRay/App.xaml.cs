@@ -12,6 +12,7 @@ namespace InvisibleGorillaXRay
     {
         private AppManager appManager;
         private WindowFactory windowFactory;
+        private int cleanupDone;
 
         private EventHandler processExitHandler;
         private SessionEndedEventHandler sessionEndedHandler;
@@ -86,6 +87,12 @@ namespace InvisibleGorillaXRay
 
         private void CleanupBeforeExit()
         {
+            // Run at most once: this is reachable from OnExit, ProcessExit,
+            // SessionEnded and UnhandledException, and a second Core.Stop()
+            // can block forever on a native lock held by the first call.
+            if (System.Threading.Interlocked.CompareExchange(ref cleanupDone, 1, 0) != 0)
+                return;
+
             try
             {
                 appManager?.HandlersManager?.GetHandler<GoidaProfileHandler>()?.StopBackground();
@@ -94,13 +101,13 @@ namespace InvisibleGorillaXRay
 
             try
             {
-                appManager?.Core?.Stop();
-            }
-            catch { }
-
-            try
-            {
-                appManager?.Core?.DisableMode();
+                // Never block shutdown on the native stop call.
+                System.Threading.Tasks.Task stopTask = System.Threading.Tasks.Task.Run(() =>
+                {
+                    try { appManager?.Core?.Stop(); } catch { }
+                    try { appManager?.Core?.DisableMode(); } catch { }
+                });
+                stopTask.Wait(TimeSpan.FromSeconds(5));
             }
             catch { }
         }

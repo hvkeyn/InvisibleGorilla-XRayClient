@@ -192,11 +192,18 @@
     <system:String x:Key="Lang.Goida.FilterListHint">Filter by list number (1-26)</system:String>
     <system:String x:Key="Lang.Goida.Refresh">Refresh lists</system:String>
     <system:String x:Key="Lang.Goida.ProbeAll">Probe all</system:String>
+    <system:String x:Key="Lang.Goida.UseBest">Best node</system:String>
+    <system:String x:Key="Lang.Goida.UseBestHint">Pick the fastest available node (based on probe results)</system:String>
     <system:String x:Key="Lang.Goida.SetActive">Set active</system:String>
     <system:String x:Key="Lang.Goida.AddToPool">Add to pool</system:String>
+    <system:String x:Key="Lang.Goida.AddToPoolHint">Adds all selected rows to the pool (use Ctrl/Shift for multi-select)</system:String>
+    <system:String x:Key="Lang.Goida.ClearPool">Clear pool</system:String>
+    <system:String x:Key="Lang.Goida.Column.Pool">Pool</system:String>
+    <system:String x:Key="Lang.Goida.PoolCount">Pool: {0} nodes</system:String>
+    <system:String x:Key="Lang.Goida.PoolModeHint">pool is used in "Rotation pool" mode</system:String>
     <system:String x:Key="Lang.Goida.Mode.AutoBest">Auto best</system:String>
     <system:String x:Key="Lang.Goida.Mode.ManualFixed">Manual (single node)</system:String>
-    <system:String x:Key="Lang.Goida.Mode.ManualPool">Manual pool</system:String>
+    <system:String x:Key="Lang.Goida.Mode.ManualPool">Rotation pool (best of pool)</system:String>
     <system:String x:Key="Lang.Goida.Column.List">List</system:String>
     <system:String x:Key="Lang.Goida.Column.Name">Name</system:String>
     <system:String x:Key="Lang.Goida.Column.Endpoint">Endpoint</system:String>
@@ -245,6 +252,7 @@
     <system:String x:Key="Lang.Goida.Signal.Slow">Slow</system:String>
     <system:String x:Key="Lang.Goida.Signal.Unknown">Not checked</system:String>
     <system:String x:Key="Lang.Goida.Signal.Offline">Offline</system:String>
+    <system:String x:Key="Lang.Goida.Signal.NoTunnel">No connection</system:String>
     <system:String x:Key="Lang.Goida.ProbingProgress">Checking {0}/{1}: {2} → {3} ({4})</system:String>
     <system:String x:Key="Lang.Goida.ProbeComplete">Check done: {0} tested · OK {1} · Timeout {2} · Error {3} · {4}</system:String>
     <system:String x:Key="Lang.Goida.ProbeCancelled">Check cancelled after {0}/{1}</system:String>

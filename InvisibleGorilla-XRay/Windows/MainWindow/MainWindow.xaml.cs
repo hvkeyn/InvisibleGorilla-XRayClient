@@ -28,6 +28,9 @@ namespace InvisibleGorillaXRay
         private bool isConnected;
         private string baselineIp;
 
+        // null = not checked yet / VPN idle, true = tunnel passes traffic, false = tunnel dead.
+        private bool? lastTunnelCheckOk;
+
         private Func<bool> isNeedToShowPolicyWindow;
         private Func<bool> shouldStartHidden;
         private Func<bool> isNeedToAutoConnect;
@@ -354,13 +357,28 @@ namespace InvisibleGorillaXRay
                 return;
             }
 
-            Brush statusBrush = (Brush)new BrushConverter().ConvertFromString(presentation.ColorHex)!;
+            string qualityLabel = presentation.QualityLabel;
+            string colorHex = presentation.ColorHex;
+            int signalLevel = presentation.SignalLevel;
+            string latencyText = presentation.LatencyText;
+
+            // The probe latency only proves the endpoint accepts TCP. If the VPN is up
+            // but the tunnel check says traffic doesn't flow, show the real state.
+            if (isConnected && lastTunnelCheckOk == false)
+            {
+                qualityLabel = "Lang.Goida.Signal.NoTunnel";
+                colorHex = "#E85D5D";
+                signalLevel = 0;
+                latencyText = string.Empty;
+            }
+
+            Brush statusBrush = (Brush)new BrushConverter().ConvertFromString(colorHex)!;
 
             textGoidaSummary.Text = presentation.Summary;
-            textGoidaSignalLabel.Text = Loc(presentation.QualityLabel);
+            textGoidaSignalLabel.Text = Loc(qualityLabel);
             textGoidaSignalLabel.Foreground = statusBrush;
-            textGoidaLatency.Text = presentation.LatencyText;
-            wifiGoidaSignal.SetSignal(presentation.SignalLevel, statusBrush);
+            textGoidaLatency.Text = latencyText;
+            wifiGoidaSignal.SetSignal(signalLevel, statusBrush);
             panelGoidaDetails.Visibility = Visibility.Visible;
         }
 
@@ -375,12 +393,15 @@ namespace InvisibleGorillaXRay
             ShowStopStatus();
 
             // Hard watchdog: if anything below hangs (native StopServer, dispatcher),
-            // force-kill the process so the app never appears frozen on exit.
+            // kill the process so the app never appears frozen in the tray.
+            // Process.Kill (unlike Environment.Exit) skips ProcessExit handlers
+            // which could block on the same hung native call.
             Thread watchdog = new Thread(() =>
             {
                 Thread.Sleep(TimeSpan.FromSeconds(15));
-                DiagnosticLog.Write("MainWindow.RequestGracefulShutdown", "Watchdog fired: forcing process exit");
-                Environment.Exit(0);
+                DiagnosticLog.Write("MainWindow.RequestGracefulShutdown", "Watchdog fired: killing process");
+                try { System.Diagnostics.Process.GetCurrentProcess().Kill(); }
+                catch { Environment.Exit(0); }
             });
             watchdog.IsBackground = true;
             watchdog.Start();
@@ -722,6 +743,8 @@ namespace InvisibleGorillaXRay
                 textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Error");
                 textInfoVerdict.Foreground = Brushes.Gray;
                 infoStatusDot.Fill = Brushes.Gray;
+                lastTunnelCheckOk = connected ? false : (bool?)null;
+                ApplyGoidaSummary();
                 return;
             }
 
@@ -729,6 +752,7 @@ namespace InvisibleGorillaXRay
             ApplyConnectionInfoDetails(info);
 
             ApplyVerdict(connected, info.Ip);
+            ApplyGoidaSummary();
         }
 
         private void ClearConnectionInfoDetails()
@@ -808,11 +832,13 @@ namespace InvisibleGorillaXRay
                 textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Idle");
                 textInfoVerdict.Foreground = Brushes.Gray;
                 infoStatusDot.Fill = Brushes.Gray;
+                lastTunnelCheckOk = null;
                 return;
             }
 
             bool exposed = !string.IsNullOrEmpty(baselineIp) &&
                 string.Equals(baselineIp, currentIp, StringComparison.OrdinalIgnoreCase);
+            lastTunnelCheckOk = !exposed;
 
             if (exposed)
             {

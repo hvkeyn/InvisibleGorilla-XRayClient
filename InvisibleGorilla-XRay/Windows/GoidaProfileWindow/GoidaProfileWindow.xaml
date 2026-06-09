@@ -148,7 +148,7 @@
                   CanUserAddRows="False"
                   CanUserDeleteRows="False"
                   HeadersVisibility="Column"
-                  SelectionMode="Single"
+                  SelectionMode="Extended"
                   SelectionChanged="OnNodeSelectionChanged"
                   EnableRowVirtualization="True"
                   VirtualizingPanel.IsVirtualizing="True"
@@ -180,26 +180,65 @@
                 <DataGridTextColumn Header="{DynamicResource Lang.Goida.Column.Latency}" Binding="{Binding LatencyText}" Width="75"/>
                 <DataGridTextColumn Header="{DynamicResource Lang.Goida.Column.Status}" Binding="{Binding StatusText}" Width="80"/>
                 <DataGridTextColumn Header="{DynamicResource Lang.Goida.Column.LastChecked}" Binding="{Binding LastCheckedText}" Width="90"/>
-                <DataGridCheckBoxColumn Header="{DynamicResource Lang.Goida.Column.Active}" Binding="{Binding IsActive}" Width="65"/>
+                <DataGridTextColumn Header="{DynamicResource Lang.Goida.Column.Active}" Binding="{Binding ActiveMark}" Width="50">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="#5FD38D"/>
+                            <Setter Property="FontWeight" Value="Bold"/>
+                            <Setter Property="HorizontalAlignment" Value="Center"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                <DataGridTemplateColumn Header="{DynamicResource Lang.Goida.Column.Pool}" Width="50">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <CheckBox IsChecked="{Binding InPool, Mode=OneWay}"
+                                      Tag="{Binding Id}"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"
+                                      Click="OnPoolCheckBoxClick"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
             </DataGrid.Columns>
         </DataGrid>
 
-        <StackPanel Grid.Row="4" Margin="0 12 0 0" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Width="140" Height="30"
-                    Content="{DynamicResource Lang.Goida.SetActive}"
-                    Style="{StaticResource Button.Rectangle.Green}"
-                    Foreground="{StaticResource Color.Gray}"
-                    Click="OnSetActiveClick"/>
-            <Button Width="140" Height="30" Margin="10 0 0 0"
-                    Content="{DynamicResource Lang.Goida.AddToPool}"
-                    Style="{StaticResource Button.Rectangle.Gray}"
-                    Foreground="White"
-                    Click="OnAddToPoolClick"/>
-            <Button Width="120" Height="30" Margin="10 0 0 0"
-                    Content="{DynamicResource Lang.Button.Confirm}"
-                    Style="{StaticResource Button.Rectangle.Green}"
-                    Foreground="{StaticResource Color.Gray}"
-                    Click="OnCloseClick"/>
-        </StackPanel>
+        <Grid Grid.Row="4" Margin="0 12 0 0">
+            <TextBlock x:Name="textBlockPoolInfo"
+                       HorizontalAlignment="Left"
+                       VerticalAlignment="Center"
+                       Foreground="#9A9A9A"
+                       FontFamily="{StaticResource SegoeUI}"
+                       FontSize="12"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Width="120" Height="30" Margin="0 0 10 0"
+                        Content="{DynamicResource Lang.Goida.UseBest}"
+                        Style="{StaticResource Button.Rectangle.Gray}"
+                        Foreground="White"
+                        ToolTip="{DynamicResource Lang.Goida.UseBestHint}"
+                        Click="OnUseBestClick"/>
+                <Button Width="140" Height="30"
+                        Content="{DynamicResource Lang.Goida.SetActive}"
+                        Style="{StaticResource Button.Rectangle.Green}"
+                        Foreground="{StaticResource Color.Gray}"
+                        Click="OnSetActiveClick"/>
+                <Button Width="140" Height="30" Margin="10 0 0 0"
+                        Content="{DynamicResource Lang.Goida.AddToPool}"
+                        Style="{StaticResource Button.Rectangle.Gray}"
+                        Foreground="White"
+                        ToolTip="{DynamicResource Lang.Goida.AddToPoolHint}"
+                        Click="OnAddToPoolClick"/>
+                <Button Width="110" Height="30" Margin="10 0 0 0"
+                        Content="{DynamicResource Lang.Goida.ClearPool}"
+                        Style="{StaticResource Button.Rectangle.Gray}"
+                        Foreground="White"
+                        Click="OnClearPoolClick"/>
+                <Button Width="120" Height="30" Margin="10 0 0 0"
+                        Content="{DynamicResource Lang.Button.Confirm}"
+                        Style="{StaticResource Button.Rectangle.Green}"
+                        Foreground="{StaticResource Color.Gray}"
+                        Click="OnCloseClick"/>
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>

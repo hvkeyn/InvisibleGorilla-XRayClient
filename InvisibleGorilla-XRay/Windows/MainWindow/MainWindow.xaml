@@ -7,7 +7,7 @@
         xmlns:Controls="clr-namespace:InvisibleGorillaXRay.Components"
         mc:Ignorable="d"
         Title="Invisible Gorilla XRay"
-        Height="720" MinHeight="700"
+        Height="688" MinHeight="668"
         Width="400" 
         WindowStartupLocation="CenterScreen" 
         ResizeMode="CanMinimize">
@@ -197,7 +197,7 @@
 
                 </Button>
 
-                <Border Grid.Row="7" VerticalAlignment="Bottom" Margin="15 8 15 4"
+                <Border Grid.Row="7" VerticalAlignment="Bottom" Margin="15 6 15 4"
                     CornerRadius="8" BorderBrush="#3A3A3A" BorderThickness="1"
                     Background="{StaticResource Color.LightGray}">
                     <Border.Effect>
