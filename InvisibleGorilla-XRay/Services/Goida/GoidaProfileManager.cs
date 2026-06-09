@@ -582,6 +582,15 @@ namespace InvisibleGorillaXRay.Services.Goida
                         continue;
                     }
 
+                    // While the VPN session is live, switch to a lightweight watchdog:
+                    // ping the active endpoint every 5s and fail over quickly when it dies.
+                    if (isVpnSessionActive?.Invoke() == true)
+                    {
+                        WatchActiveNode(settings);
+                        await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
+                        continue;
+                    }
+
                     TimeSpan refreshInterval = TimeSpan.FromMinutes(
                         Math.Max(1, settings.RefreshIntervalMinutes));
                     TimeSpan probeInterval = TimeSpan.FromSeconds(
@@ -617,6 +626,51 @@ namespace InvisibleGorillaXRay.Services.Goida
                         break;
                     }
                 }
+            }
+        }
+
+        private int activeNodeFailStreak;
+
+        /// <summary>
+        /// Cheap liveness check of the active node while the VPN session is running.
+        /// Two consecutive TCP failures trigger a failover to the next best node.
+        /// </summary>
+        private void WatchActiveNode(GoidaProfileSettings settings)
+        {
+            try
+            {
+                if (!settings.AutoSwitchOnFly
+                    || settings.SelectionMode == GoidaSelectionMode.ManualFixed
+                    || string.IsNullOrWhiteSpace(settings.ActiveNodeId))
+                {
+                    activeNodeFailStreak = 0;
+                    return;
+                }
+
+                GoidaNode? active = store.FindById(settings.ActiveNodeId);
+                if (active == null)
+                    return;
+
+                int latency = GoidaEndpointProbe.ProbeTcp(active.Endpoint, 1500);
+                if (latency >= 0)
+                {
+                    activeNodeFailStreak = 0;
+                    store.UpdateNodeStatus(active.Id, latency, GoidaNodeStatus.Ok);
+                    return;
+                }
+
+                activeNodeFailStreak++;
+                if (activeNodeFailStreak < 2)
+                    return;
+
+                activeNodeFailStreak = 0;
+                DiagnosticLog.Write("Goida.WatchActiveNode",
+                    $"Active node {active.Id} unreachable twice in a row, failing over");
+                ReportTunnelFailure();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("Goida.WatchActiveNode", ex);
             }
         }
 

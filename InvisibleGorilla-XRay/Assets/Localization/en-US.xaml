@@ -196,9 +196,14 @@
     <system:String x:Key="Lang.Goida.UseBest">Best node</system:String>
     <system:String x:Key="Lang.Goida.UseBestHint">Pick the fastest available node (based on probe results)</system:String>
     <system:String x:Key="Lang.Goida.SetActive">Set active</system:String>
-    <system:String x:Key="Lang.Goida.AddToPool">Add to pool</system:String>
-    <system:String x:Key="Lang.Goida.AddToPoolHint">Adds all selected rows to the pool (use Ctrl/Shift for multi-select)</system:String>
+    <system:String x:Key="Lang.Goida.SetActiveHint">Mark the selected row as the active node (applied with CONFIRM)</system:String>
+    <system:String x:Key="Lang.Goida.AutoPool">Auto pool (top-10)</system:String>
+    <system:String x:Key="Lang.Goida.AutoPoolHint">Build a pool from the 10 fastest working nodes and enable rotation with auto-failover — one click does everything</system:String>
+    <system:String x:Key="Lang.Goida.AutoPoolBuilt">Pool built: {0} nodes. Rotation mode and auto-failover enabled — press CONFIRM.</system:String>
     <system:String x:Key="Lang.Goida.ClearPool">Clear pool</system:String>
+    <system:String x:Key="Lang.Goida.ClearPoolHint">Remove all nodes from the rotation pool</system:String>
+    <system:String x:Key="Lang.Goida.ConfirmHint">Apply changes and close the window</system:String>
+    <system:String x:Key="Lang.Goida.Workflow.Hint">How it works: "Auto pool" picks the 10 fastest nodes and keeps switching to the best one when the current node fails. "Best node" switches once to the fastest node. To pick manually: select a row, press "Set active", then CONFIRM. Pool checkboxes in the grid edit the rotation pool.</system:String>
     <system:String x:Key="Lang.Goida.Column.Pool">Pool</system:String>
     <system:String x:Key="Lang.Goida.PoolCount">Pool: {0} nodes</system:String>
     <system:String x:Key="Lang.Goida.PoolModeHint">pool is used in "Rotation pool" mode</system:String>

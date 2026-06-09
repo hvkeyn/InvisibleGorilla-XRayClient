@@ -894,20 +894,51 @@ namespace InvisibleGorillaXRay
             });
         }
 
-        private void OnAddToPoolClick(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// One-click setup of the user's main scenario: take the 10 fastest working
+        /// nodes (plus any rows currently multi-selected), put them into the pool and
+        /// switch to pool-rotation mode with auto-failover enabled.
+        /// </summary>
+        private void OnAutoPoolClick(object sender, RoutedEventArgs e)
         {
-            List<NodeRow> rows = GetSelectedRows();
-            if (rows.Count == 0)
+            if (goidaHandler == null || getUserSettings == null || onUpdateUserSettings == null)
                 return;
 
-            ModifyPool(pool =>
+            List<GoidaNode> top = goidaHandler.Manager.GetVisibleNodes()
+                .Where(node => node.Status == GoidaNodeStatus.Ok && node.LatencyMs >= 0)
+                .OrderBy(node => node.LatencyMs)
+                .Take(10)
+                .ToList();
+
+            if (top.Count == 0)
             {
-                foreach (NodeRow row in rows)
-                {
-                    if (!pool.Contains(row.Id, StringComparer.OrdinalIgnoreCase))
-                        pool.Add(row.Id);
-                }
-            });
+                SetStatusText(Localize("Lang.Goida.NoWorkingNode"));
+                return;
+            }
+
+            UserSettings current = getUserSettings();
+            GoidaProfileSettings settings = current.GetGoidaSettings().Clone();
+            settings.ManualPoolNodeIds = top.Select(node => node.Id).ToList();
+
+            foreach (NodeRow row in GetSelectedRows())
+            {
+                if (!string.IsNullOrWhiteSpace(row.Id)
+                    && !settings.ManualPoolNodeIds.Contains(row.Id, StringComparer.OrdinalIgnoreCase))
+                    settings.ManualPoolNodeIds.Add(row.Id);
+            }
+
+            settings.SelectionMode = GoidaSelectionMode.ManualPool;
+            settings.AutoSwitchOnFly = true;
+            current.Goida = settings;
+            onUpdateUserSettings(current);
+            goidaHandler.Manager.UpdateSettings(settings);
+
+            ApplySettingsToControls();
+            RefreshGrid();
+            UpdatePoolInfo();
+            SetStatusText(string.Format(
+                Localize("Lang.Goida.AutoPoolBuilt"),
+                settings.ManualPoolNodeIds.Count));
         }
 
         private void OnClearPoolClick(object sender, RoutedEventArgs e)

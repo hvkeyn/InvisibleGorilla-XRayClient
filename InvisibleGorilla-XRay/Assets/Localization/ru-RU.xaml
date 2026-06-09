@@ -196,9 +196,14 @@
     <system:String x:Key="Lang.Goida.UseBest">Лучший узел</system:String>
     <system:String x:Key="Lang.Goida.UseBestHint">Выбрать самый быстрый доступный узел (по результатам проверки)</system:String>
     <system:String x:Key="Lang.Goida.SetActive">Сделать активным</system:String>
-    <system:String x:Key="Lang.Goida.AddToPool">Добавить в пул</system:String>
-    <system:String x:Key="Lang.Goida.AddToPoolHint">Добавляет все выделенные строки в пул (Ctrl/Shift — выделение нескольких)</system:String>
+    <system:String x:Key="Lang.Goida.SetActiveHint">Сделать выделенную строку активным узлом (применяется по CONFIRM)</system:String>
+    <system:String x:Key="Lang.Goida.AutoPool">Автопул (топ-10)</system:String>
+    <system:String x:Key="Lang.Goida.AutoPoolHint">Собрать пул из 10 самых быстрых рабочих узлов и включить ротацию с автопереключением — всё одной кнопкой</system:String>
+    <system:String x:Key="Lang.Goida.AutoPoolBuilt">Пул собран: {0} узлов. Режим ротации и автосмена включены — нажмите CONFIRM.</system:String>
     <system:String x:Key="Lang.Goida.ClearPool">Очистить пул</system:String>
+    <system:String x:Key="Lang.Goida.ClearPoolHint">Убрать все узлы из пула ротации</system:String>
+    <system:String x:Key="Lang.Goida.ConfirmHint">Применить изменения и закрыть окно</system:String>
+    <system:String x:Key="Lang.Goida.Workflow.Hint">Как пользоваться: «Автопул» — собирает 10 самых быстрых узлов и дальше сам переключается на лучший при сбое текущего. «Лучший узел» — разово переключиться на самый быстрый. Вручную: выделите строку → «Сделать активным» → CONFIRM. Галочки «Пул» в таблице редактируют пул ротации.</system:String>
     <system:String x:Key="Lang.Goida.Column.Pool">Пул</system:String>
     <system:String x:Key="Lang.Goida.PoolCount">Пул: {0} узлов</system:String>
     <system:String x:Key="Lang.Goida.PoolModeHint">пул работает в режиме «Пул ротации»</system:String>

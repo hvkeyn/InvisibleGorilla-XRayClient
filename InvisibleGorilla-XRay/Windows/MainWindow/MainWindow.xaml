@@ -7,7 +7,7 @@
         xmlns:Controls="clr-namespace:InvisibleGorillaXRay.Components"
         mc:Ignorable="d"
         Title="Invisible Gorilla XRay"
-        Height="688" MinHeight="668"
+        Height="656" MinHeight="640"
         Width="400" 
         WindowStartupLocation="CenterScreen" 
         ResizeMode="CanMinimize">

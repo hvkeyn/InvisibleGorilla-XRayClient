@@ -9,8 +9,6 @@ namespace InvisibleGorillaXRay.Core
 
     internal class XRayCoreWrapper
     {
-        private static readonly object NativeLock = new();
-
         public static string GetConfigFormat(string path)
         {
             IntPtr pathPtr = StringToUtf8Ptr(path);
@@ -79,19 +77,20 @@ namespace InvisibleGorillaXRay.Core
             IntPtr passwordPtr = StringToUtf8Ptr(credentials.Password);
             try
             {
-                lock (NativeLock)
+                // No lock here: the native StartServer blocks for the entire session
+                // (it returns only when the server stops). Serializing it with
+                // StopServer would deadlock — stop must run concurrently to signal
+                // the blocked start call.
+                try
                 {
-                    try
-                    {
-                        DiagnosticLog.Write("XRayWrapper", "Calling native StartServer...");
-                        StartServerNative(config, port, logLevel.ToString(), logPathPtr, isSocks, isUdpEnabled, usernamePtr, passwordPtr);
-                        DiagnosticLog.Write("XRayWrapper", "Native StartServer returned normally");
-                    }
-                    catch (Exception ex)
-                    {
-                        DiagnosticLog.WriteException("XRayWrapper.StartServer", ex);
-                        throw;
-                    }
+                    DiagnosticLog.Write("XRayWrapper", "Calling native StartServer...");
+                    StartServerNative(config, port, logLevel.ToString(), logPathPtr, isSocks, isUdpEnabled, usernamePtr, passwordPtr);
+                    DiagnosticLog.Write("XRayWrapper", "Native StartServer returned normally");
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("XRayWrapper.StartServer", ex);
+                    throw;
                 }
             }
             finally
@@ -107,25 +106,26 @@ namespace InvisibleGorillaXRay.Core
 
         public static void StopServer()
         {
-            lock (NativeLock)
+            try
             {
-                try
-                {
-                    StopServerNative();
-                }
-                catch (Exception ex)
-                {
-                    DiagnosticLog.WriteException("XRayWrapper.StopServer", ex);
-                }
+                StopServerNative();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("XRayWrapper.StopServer", ex);
             }
 
             [DllImport(Path.XRAY_CORE_DLL, EntryPoint = "StopServer")]
             static extern void StopServerNative();
         }
 
+        private static readonly object TestLock = new();
+
         public static int TestConnection(string config, int port)
         {
-            lock (NativeLock)
+            // Serialize tests against each other only (they share the test port);
+            // never against StartServer/StopServer.
+            lock (TestLock)
             {
                 try
                 {

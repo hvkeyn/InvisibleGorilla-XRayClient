@@ -203,42 +203,52 @@
             </DataGrid.Columns>
         </DataGrid>
 
-        <Grid Grid.Row="4" Margin="0 12 0 0">
-            <TextBlock x:Name="textBlockPoolInfo"
-                       HorizontalAlignment="Left"
-                       VerticalAlignment="Center"
-                       Foreground="#9A9A9A"
+        <StackPanel Grid.Row="4" Margin="0 8 0 0">
+            <TextBlock Foreground="#8A8A8A"
                        FontFamily="{StaticResource SegoeUI}"
-                       FontSize="12"/>
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Width="120" Height="30" Margin="0 0 10 0"
-                        Content="{DynamicResource Lang.Goida.UseBest}"
-                        Style="{StaticResource Button.Rectangle.Gray}"
-                        Foreground="White"
-                        ToolTip="{DynamicResource Lang.Goida.UseBestHint}"
-                        Click="OnUseBestClick"/>
-                <Button Width="140" Height="30"
-                        Content="{DynamicResource Lang.Goida.SetActive}"
-                        Style="{StaticResource Button.Rectangle.Green}"
-                        Foreground="{StaticResource Color.Gray}"
-                        Click="OnSetActiveClick"/>
-                <Button Width="140" Height="30" Margin="10 0 0 0"
-                        Content="{DynamicResource Lang.Goida.AddToPool}"
-                        Style="{StaticResource Button.Rectangle.Gray}"
-                        Foreground="White"
-                        ToolTip="{DynamicResource Lang.Goida.AddToPoolHint}"
-                        Click="OnAddToPoolClick"/>
-                <Button Width="110" Height="30" Margin="10 0 0 0"
-                        Content="{DynamicResource Lang.Goida.ClearPool}"
-                        Style="{StaticResource Button.Rectangle.Gray}"
-                        Foreground="White"
-                        Click="OnClearPoolClick"/>
-                <Button Width="120" Height="30" Margin="10 0 0 0"
-                        Content="{DynamicResource Lang.Button.Confirm}"
-                        Style="{StaticResource Button.Rectangle.Green}"
-                        Foreground="{StaticResource Color.Gray}"
-                        Click="OnCloseClick"/>
-            </StackPanel>
-        </Grid>
+                       FontSize="11"
+                       TextWrapping="Wrap"
+                       Text="{DynamicResource Lang.Goida.Workflow.Hint}"/>
+            <Grid Margin="0 8 0 0">
+                <TextBlock x:Name="textBlockPoolInfo"
+                           HorizontalAlignment="Left"
+                           VerticalAlignment="Center"
+                           Foreground="#9A9A9A"
+                           FontFamily="{StaticResource SegoeUI}"
+                           FontSize="12"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Width="130" Height="30" Margin="0 0 10 0"
+                            Content="{DynamicResource Lang.Goida.AutoPool}"
+                            Style="{StaticResource Button.Rectangle.Green}"
+                            Foreground="{StaticResource Color.Gray}"
+                            ToolTip="{DynamicResource Lang.Goida.AutoPoolHint}"
+                            Click="OnAutoPoolClick"/>
+                    <Button Width="115" Height="30" Margin="0 0 10 0"
+                            Content="{DynamicResource Lang.Goida.UseBest}"
+                            Style="{StaticResource Button.Rectangle.Gray}"
+                            Foreground="White"
+                            ToolTip="{DynamicResource Lang.Goida.UseBestHint}"
+                            Click="OnUseBestClick"/>
+                    <Button Width="135" Height="30" Margin="0 0 10 0"
+                            Content="{DynamicResource Lang.Goida.SetActive}"
+                            Style="{StaticResource Button.Rectangle.Gray}"
+                            Foreground="White"
+                            ToolTip="{DynamicResource Lang.Goida.SetActiveHint}"
+                            Click="OnSetActiveClick"/>
+                    <Button Width="105" Height="30" Margin="0 0 10 0"
+                            Content="{DynamicResource Lang.Goida.ClearPool}"
+                            Style="{StaticResource Button.Rectangle.Gray}"
+                            Foreground="White"
+                            ToolTip="{DynamicResource Lang.Goida.ClearPoolHint}"
+                            Click="OnClearPoolClick"/>
+                    <Button Width="115" Height="30"
+                            Content="{DynamicResource Lang.Button.Confirm}"
+                            Style="{StaticResource Button.Rectangle.Green}"
+                            Foreground="{StaticResource Color.Gray}"
+                            ToolTip="{DynamicResource Lang.Goida.ConfirmHint}"
+                            Click="OnCloseClick"/>
+                </StackPanel>
+            </Grid>
+        </StackPanel>
     </Grid>
 </Window>

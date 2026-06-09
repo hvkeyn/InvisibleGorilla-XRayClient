@@ -558,8 +558,15 @@ namespace InvisibleGorillaXRay
 
         private void OnCancelButtonClick(object sender, RoutedEventArgs e)
         {
+            // Also drops a queued restart (RUN pressed while the previous session
+            // was still stopping), otherwise CANCEL appears to do nothing.
+            isRerunRequest = false;
+
             if (!runWorker.IsBusy)
+            {
+                ShowStopStatus();
                 return;
+            }
 
             onCancelServer.Invoke();
         }
