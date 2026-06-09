@@ -1,0 +1,28 @@
+using System;
+using System.IO;
+using InvisibleGorillaXRay.Core;
+using InvisibleGorillaXRay.Models;
+using InvisibleGorillaXRay.Values;
+
+namespace InvisibleGorillaXRay.Services.Goida
+{
+    public static class GoidaConnectionTest
+    {
+        public static Func<string, int> CreateFromConfigPath(
+            Func<string, Status> loadConfig,
+            Func<string, int> testJson)
+        {
+            return configPath =>
+            {
+                if (string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath))
+                    return Availability.ERROR;
+
+                Status status = loadConfig(configPath);
+                if (status.Code != Code.SUCCESS)
+                    return Availability.ERROR;
+
+                return testJson(status.Content.ToString());
+            };
+        }
+    }
+}

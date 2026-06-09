@@ -27,6 +27,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="40"/>
                 <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
         
             <Grid Grid.Row="0" Margin="0 0 0 2">
@@ -59,7 +60,7 @@
 
             <Grid Grid.Row="1" Visibility="Visible" x:Name="panelConfig">
                 <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                    <StackPanel Orientation="Vertical" Margin="0 0 0 70" x:Name="listConfigs"></StackPanel>
+                    <StackPanel Orientation="Vertical" Margin="0 0 0 8" x:Name="listConfigs"></StackPanel>
                 </ScrollViewer>
 
                 <TextBlock x:Name="textNoConfig"
@@ -73,16 +74,6 @@
                     <LineBreak/>
                     <Run Text="{DynamicResource Lang.Message.ConfigHint}" /> 
                 </TextBlock>
-
-                <Button Width="40" Height="40" Margin="0 0 15 15" 
-                    Style="{StaticResource Button.Circle}" ToolTip="{DynamicResource Lang.ToolTip.AddNewConfiguration}" 
-                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                    Click="OnAddConfigButtonClick">
-
-                    <Rectangle Fill="{StaticResource Icon.Plus}" Grid.Column="0" 
-                        Width="15" Height="15" Margin="0" 
-                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                </Button>
             </Grid>
 
             <Grid Grid.Row="1" Visibility="Hidden" x:Name="panelSubscription">
@@ -94,7 +85,7 @@
 
                     <ScrollViewer Grid.Row="1"
                         HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Orientation="Vertical" Margin="0 0 0 70" x:Name="listSubscriptions"></StackPanel>
+                        <StackPanel Orientation="Vertical" Margin="0 0 0 8" x:Name="listSubscriptions"></StackPanel>
                     </ScrollViewer>
 
                     <Grid Grid.Row="0" Background="{StaticResource Color.DarkGray}"
@@ -168,50 +159,84 @@
                     <Run Text="{DynamicResource Lang.Message.ConfigHint}" /> 
                 </TextBlock>
 
-                <Button Width="40" Height="40" Margin="0 0 15 15" 
-                    Style="{StaticResource Button.Circle}" ToolTip="{DynamicResource Lang.ToolTip.AddNewSubscription}" 
-                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                    Click="OnAddSubscriptionButtonClick">
+            </Grid>
 
-                    <Rectangle Fill="{StaticResource Icon.Plus}" Grid.Column="0" 
-                        Width="15" Height="15" Margin="0" 
+            <Grid Grid.Row="2" Margin="15 8 15 15">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Border x:Name="borderAppRulesSummary"
+                        Grid.Column="0"
+                        MaxWidth="210"
+                        Padding="10"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        BorderBrush="{StaticResource Color.LightGray}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Background="#66000000">
+                    <StackPanel>
+                        <TextBlock x:Name="textBlockAppRulesSummary"
+                                   Foreground="White"
+                                   TextWrapping="Wrap"
+                                   FontFamily="{StaticResource SegoeUI}"
+                                   FontWeight="SemiBold"
+                                   FontSize="12"/>
+
+                        <Button x:Name="buttonManageAppRules"
+                                Width="150"
+                                Height="28"
+                                Margin="0 8 0 0"
+                                HorizontalAlignment="Left"
+                                Content="{DynamicResource Lang.AppRules.Manage}"
+                                Style="{StaticResource Button.Rectangle.Gray}"
+                                FontFamily="{StaticResource SegoeUI}"
+                                FontWeight="Normal"
+                                FontSize="12"
+                                Foreground="White"
+                                Click="OnManageAppRulesClick"/>
+                    </StackPanel>
+                </Border>
+
+                <StackPanel x:Name="panelConfigFabButtons"
+                            Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="8 0 0 0">
+                    <Button Width="40" Height="40"
+                            Style="{StaticResource Button.Circle}"
+                            ToolTip="{DynamicResource Lang.Goida.OpenWindow}"
+                            Click="OnOpenGoidaProfileClick">
+                        <TextBlock Text="G" Foreground="White" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Button>
+
+                    <Button Width="40" Height="40" Margin="8 0 0 0"
+                            Style="{StaticResource Button.Circle}"
+                            ToolTip="{DynamicResource Lang.ToolTip.AddNewConfiguration}"
+                            Click="OnAddConfigButtonClick">
+                        <Rectangle Fill="{StaticResource Icon.Plus}"
+                            Width="15" Height="15" Margin="0"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Button>
+                </StackPanel>
+
+                <Button x:Name="panelSubscriptionFabButton"
+                        Grid.Column="1"
+                        Width="40" Height="40"
+                        Visibility="Collapsed"
+                        VerticalAlignment="Center"
+                        Margin="8 0 0 0"
+                        Style="{StaticResource Button.Circle}"
+                        ToolTip="{DynamicResource Lang.ToolTip.AddNewSubscription}"
+                        Click="OnAddSubscriptionButtonClick">
+                    <Rectangle Fill="{StaticResource Icon.Plus}"
+                        Width="15" Height="15" Margin="0"
                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Button>
             </Grid>
-
-            <Border x:Name="borderAppRulesSummary"
-                    Grid.Row="1"
-                    Margin="15 0 70 15"
-                    Padding="10"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Bottom"
-                    BorderBrush="{StaticResource Color.LightGray}"
-                    BorderThickness="1"
-                    CornerRadius="8"
-                    Background="#66000000">
-                <StackPanel>
-                    <TextBlock x:Name="textBlockAppRulesSummary"
-                               Width="210"
-                               Foreground="White"
-                               TextWrapping="Wrap"
-                               FontFamily="{StaticResource SegoeUI}"
-                               FontWeight="SemiBold"
-                               FontSize="12"/>
-
-                    <Button x:Name="buttonManageAppRules"
-                            Width="150"
-                            Height="28"
-                            Margin="0 8 0 0"
-                            HorizontalAlignment="Left"
-                            Content="{DynamicResource Lang.AppRules.Manage}"
-                            Style="{StaticResource Button.Rectangle.Gray}"
-                            FontFamily="{StaticResource SegoeUI}"
-                            FontWeight="Normal"
-                            FontSize="12"
-                            Foreground="White"
-                            Click="OnManageAppRulesClick"/>
-                </StackPanel>
-            </Border>
         </Grid>
 
         <Grid Grid.Row="1" Visibility="Hidden" x:Name="panelAddConfigs">

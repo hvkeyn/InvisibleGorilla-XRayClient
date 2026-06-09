@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 
 namespace InvisibleGorillaXRay.Handlers
 {
     using Configs;
     using Models;
+    using Services.Goida;
     using Values;
     using Utilities;
 
@@ -14,6 +16,8 @@ namespace InvisibleGorillaXRay.Handlers
         private SubscriptionConfig subscriptionConfig;
 
         private Func<string> getCurrentConfigPath;
+        private Func<Config?> getGoidaListConfig;
+        private Func<Config?> getGoidaRuntimeConfig;
 
         public ConfigHandler()
         {
@@ -21,9 +25,14 @@ namespace InvisibleGorillaXRay.Handlers
             this.subscriptionConfig = new SubscriptionConfig();
         }
 
-        public void Setup(Func<string> getCurrentConfigPath)
+        public void Setup(
+            Func<string> getCurrentConfigPath,
+            Func<Config?> getGoidaListConfig = null,
+            Func<Config?> getGoidaRuntimeConfig = null)
         {
             this.getCurrentConfigPath = getCurrentConfigPath;
+            this.getGoidaListConfig = getGoidaListConfig;
+            this.getGoidaRuntimeConfig = getGoidaRuntimeConfig;
             subscriptionConfig.Setup(getCurrentConfigPath);
         }
 
@@ -41,14 +50,31 @@ namespace InvisibleGorillaXRay.Handlers
 
         public void CopyConfig(string path) => generalConfig.CopyConfig(path);
 
-        public Config GetCurrentConfig() => CreateConfigModel(getCurrentConfigPath.Invoke());
+        public Config GetCurrentConfig()
+        {
+            string path = getCurrentConfigPath.Invoke();
+            if (GoidaProfilePaths.IsMarker(path))
+            {
+                Config? runtimeConfig = getGoidaRuntimeConfig?.Invoke();
+                if (runtimeConfig != null)
+                    return runtimeConfig;
+            }
+
+            return CreateConfigModel(path);
+        }
 
         public void RemoveConfigFromList(string path) => GetCurrentBaseConfig().RemoveConfigFromList(path);
 
         public List<Config> GetAllGeneralConfigs() 
         {
             generalConfig.LoadFiles();
-            return generalConfig.GetAllConfigs();
+            List<Config> configs = generalConfig.GetAllConfigs();
+
+            Config? goidaConfig = getGoidaListConfig?.Invoke();
+            if (goidaConfig != null)
+                configs.Insert(0, goidaConfig);
+
+            return configs;
         }
 
         public List<Config> GetAllSubscriptionConfigs(string path) 
@@ -65,6 +91,9 @@ namespace InvisibleGorillaXRay.Handlers
 
         public Config CreateConfigModel(string path)
         {
+            if (GoidaProfilePaths.IsMarker(path))
+                return getGoidaListConfig?.Invoke();
+
             if (string.IsNullOrEmpty(path) || !FileUtility.IsFileExists(path))
                 return null;
 

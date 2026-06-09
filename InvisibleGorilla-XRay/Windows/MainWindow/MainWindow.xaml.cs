@@ -9,15 +9,18 @@ using System.ComponentModel;
 
 namespace InvisibleGorillaXRay
 {
+    using Core;
     using Models;
     using Values;
     using Services;
+    using Services.Goida;
     using Services.Analytics.General;
     using Services.Analytics.MainWindow;
 
     public partial class MainWindow : Window
     {
         private bool isRerunRequest;
+        private bool shutdownRequested;
 
         private readonly ConnectionInfoService connectionInfoService = new ConnectionInfoService();
         private DispatcherTimer connectionInfoTimer;
@@ -39,6 +42,8 @@ namespace InvisibleGorillaXRay
         private Func<UpdateWindow> openUpdateWindow;
         private Func<AboutWindow> openAboutWindow;
         private Func<PolicyWindow> openPolicyWindow;
+        private Func<string> getServerDisplayText;
+        private Func<GoidaMainPresentation> getGoidaPresentation;
         private Action<string> onRunServer;
         private Action onCancelServer;
         private Action onStopServer;
@@ -268,6 +273,7 @@ namespace InvisibleGorillaXRay
             Func<UpdateWindow> openUpdateWindow,
             Func<AboutWindow> openAboutWindow,
             Func<PolicyWindow> openPolicyWindow,
+            Func<string> getServerDisplayText,
             Action<string> onRunServer,
             Action onStopServer,
             Action onCancelServer,
@@ -275,7 +281,8 @@ namespace InvisibleGorillaXRay
             Action onGenerateClientId,
             Action onGitHubClick,
             Action onBugReportingClick,
-            Action<string> onCustomLinkClick)
+            Action<string> onCustomLinkClick,
+            Func<GoidaMainPresentation> getGoidaPresentation = null)
         {
             this.isNeedToShowPolicyWindow = isNeedToShowPolicyWindow;
             this.shouldStartHidden = shouldStartHidden;
@@ -290,6 +297,8 @@ namespace InvisibleGorillaXRay
             this.openUpdateWindow = openUpdateWindow;
             this.openAboutWindow = openAboutWindow;
             this.openPolicyWindow = openPolicyWindow;
+            this.getServerDisplayText = getServerDisplayText;
+            this.getGoidaPresentation = getGoidaPresentation;
             this.onRunServer = onRunServer;
             this.onCancelServer = onCancelServer;
             this.onStopServer = onStopServer;
@@ -317,24 +326,115 @@ namespace InvisibleGorillaXRay
 
         public void UpdateUI()
         {
-            Config config = getConfig.Invoke();
-
-            if (config == null)
+            if (getServerDisplayText != null)
+                textServerConfig.Text = getServerDisplayText.Invoke();
+            else
             {
-                textServerConfig.Text = LocalizationService.GetTerm(Localization.NO_SERVER_CONFIGURATION);
+                Config config = getConfig.Invoke();
+                textServerConfig.Text = config == null
+                    ? LocalizationService.GetTerm(Localization.NO_SERVER_CONFIGURATION)
+                    : config.Name;
+            }
+
+            ApplyGoidaSummary();
+        }
+
+        private void ApplyGoidaSummary()
+        {
+            if (textGoidaSummary == null || panelGoidaDetails == null)
+                return;
+
+            GoidaMainPresentation presentation = getGoidaPresentation?.Invoke() ?? new GoidaMainPresentation();
+            if (string.IsNullOrWhiteSpace(presentation.Summary))
+            {
+                textGoidaSummary.Text = string.Empty;
+                textGoidaSignalLabel.Text = string.Empty;
+                textGoidaLatency.Text = string.Empty;
+                panelGoidaDetails.Visibility = Visibility.Collapsed;
                 return;
             }
-            
-            textServerConfig.Text = config.Name;
+
+            Brush statusBrush = (Brush)new BrushConverter().ConvertFromString(presentation.ColorHex)!;
+
+            textGoidaSummary.Text = presentation.Summary;
+            textGoidaSignalLabel.Text = Loc(presentation.QualityLabel);
+            textGoidaSignalLabel.Foreground = statusBrush;
+            textGoidaLatency.Text = presentation.LatencyText;
+            wifiGoidaSignal.SetSignal(presentation.SignalLevel, statusBrush);
+            panelGoidaDetails.Visibility = Visibility.Visible;
+        }
+
+        public void RequestGracefulShutdown()
+        {
+            if (shutdownRequested)
+                return;
+
+            shutdownRequested = true;
+            isRerunRequest = false;
+            connectionInfoCts?.Cancel();
+            ShowStopStatus();
+
+            // Hard watchdog: if anything below hangs (native StopServer, dispatcher),
+            // force-kill the process so the app never appears frozen on exit.
+            Thread watchdog = new Thread(() =>
+            {
+                Thread.Sleep(TimeSpan.FromSeconds(15));
+                DiagnosticLog.Write("MainWindow.RequestGracefulShutdown", "Watchdog fired: forcing process exit");
+                Environment.Exit(0);
+            });
+            watchdog.IsBackground = true;
+            watchdog.Start();
+
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    System.Threading.Tasks.Task stopTask = System.Threading.Tasks.Task.Run(() =>
+                    {
+                        onStopServer.Invoke();
+                        onDisableMode.Invoke();
+                    });
+
+                    if (!stopTask.Wait(TimeSpan.FromSeconds(10)))
+                        DiagnosticLog.Write("MainWindow.RequestGracefulShutdown", "Stop timed out after 10s");
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("MainWindow.RequestGracefulShutdown", ex);
+                }
+                finally
+                {
+                    Dispatcher.BeginInvoke(new Action(() => Application.Current.Shutdown()));
+                }
+            });
+        }
+
+        protected override void OnClosing(CancelEventArgs e)
+        {
+            if (!shutdownRequested && runWorker.IsBusy)
+            {
+                e.Cancel = true;
+                RequestGracefulShutdown();
+                return;
+            }
+
+            if (!shutdownRequested)
+            {
+                e.Cancel = true;
+                Hide();
+                return;
+            }
+
+            base.OnClosing(e);
         }
 
         public void TryRerun()
         {
             if (!runWorker.IsBusy)
                 return;
-            
-            onStopServer.Invoke();
+
             isRerunRequest = true;
+            System.Threading.Tasks.Task.Run(() => onStopServer.Invoke());
         }
 
         public void TryDisableModeAndRerun()
@@ -342,9 +442,45 @@ namespace InvisibleGorillaXRay
             if (!runWorker.IsBusy)
                 return;
 
-            System.Threading.Tasks.Task.Run(() => onDisableMode.Invoke());
-            onStopServer.Invoke();
             isRerunRequest = true;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                onStopServer.Invoke();
+                onDisableMode.Invoke();
+            });
+        }
+
+        public bool IsServerRunning => runWorker.IsBusy;
+
+        private bool resumeServerAfterNativeTest;
+
+        public bool TryPauseForNativeTest()
+        {
+            if (!runWorker.IsBusy)
+                return false;
+
+            resumeServerAfterNativeTest = true;
+            onStopServer.Invoke();
+
+            for (int attempt = 0; attempt < 60 && runWorker.IsBusy; attempt++)
+                Thread.Sleep(50);
+
+            if (runWorker.IsBusy)
+            {
+                resumeServerAfterNativeTest = false;
+                return false;
+            }
+
+            return true;
+        }
+
+        public void TryResumeAfterNativeTest()
+        {
+            if (!resumeServerAfterNativeTest || runWorker.IsBusy)
+                return;
+
+            resumeServerAfterNativeTest = false;
+            runWorker.RunWorkerAsync();
         }
 
         private void OnManageServersClick(object sender, RoutedEventArgs e)
@@ -364,12 +500,23 @@ namespace InvisibleGorillaXRay
 
         private void OnStopButtonClick(object sender, RoutedEventArgs e)
         {
-            onStopServer.Invoke();
-            // DisableMode is handled by Run() after server thread completes,
-            // so we don't block the UI thread here.
-            System.Threading.Tasks.Task.Run(() => onDisableMode.Invoke());
             isRerunRequest = false;
+            connectionInfoCts?.Cancel();
+            ShowStopStatus();
             AnalyticsService.SendEvent(new StopButtonClickedEvent());
+
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    onStopServer.Invoke();
+                    onDisableMode.Invoke();
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("MainWindow.OnStopButtonClick", ex);
+                }
+            });
         }
 
         private void OnCancelButtonClick(object sender, RoutedEventArgs e)
@@ -685,12 +832,6 @@ namespace InvisibleGorillaXRay
         private string Loc(string key)
         {
             return TryFindResource(key) as string ?? key;
-        }
-
-        protected override void OnClosing(CancelEventArgs e)
-        {
-            e.Cancel = true;
-            this.Hide();
         }
     }
 }

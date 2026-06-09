@@ -3,8 +3,8 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net7.0</TargetFramework>
-    <Version>3.5.12.0</Version>
-    <AssemblyVersion>3.5.12.0</AssemblyVersion>
+    <Version>3.6.0.0</Version>
+    <AssemblyVersion>3.6.0.0</AssemblyVersion>
     <RootNamespace>InvisibleGorillaXRay.Linux</RootNamespace>
     <AssemblyName>InvisibleGorilla-XRay.Linux</AssemblyName>
     <Nullable>enable</Nullable>
@@ -32,6 +32,7 @@
     <Compile Include="..\InvisibleGorilla-XRay.Mac\Views\ServerWindow.axaml.cs" Link="Views\ServerWindow.axaml.cs" />
     <Compile Include="..\InvisibleGorilla-XRay.Mac\Views\SettingsWindow.axaml.cs" Link="Views\SettingsWindow.axaml.cs" />
     <Compile Include="..\InvisibleGorilla-XRay.Mac\Views\AppRulesWindow.axaml.cs" Link="Views\AppRulesWindow.axaml.cs" />
+    <Compile Include="..\InvisibleGorilla-XRay.Mac\Views\GoidaProfileWindow.axaml.cs" Link="Views\GoidaProfileWindow.axaml.cs" />
     <Compile Include="..\InvisibleGorilla-XRay.Mac\Views\AboutWindow.axaml.cs" Link="Views\AboutWindow.axaml.cs" />
     <Compile Include="..\InvisibleGorilla-XRay.Mac\Views\UpdateWindow.axaml.cs" Link="Views\UpdateWindow.axaml.cs" />
     <Compile Include="..\InvisibleGorilla-XRay.Mac\Views\PolicyWindow.axaml.cs" Link="Views\PolicyWindow.axaml.cs" />
@@ -42,6 +43,7 @@
     <AvaloniaResource Include="..\InvisibleGorilla-XRay.Mac\Views\ServerWindow.axaml" Link="Views\ServerWindow.axaml" />
     <AvaloniaResource Include="..\InvisibleGorilla-XRay.Mac\Views\SettingsWindow.axaml" Link="Views\SettingsWindow.axaml" />
     <AvaloniaResource Include="..\InvisibleGorilla-XRay.Mac\Views\AppRulesWindow.axaml" Link="Views\AppRulesWindow.axaml" />
+    <AvaloniaResource Include="..\InvisibleGorilla-XRay.Mac\Views\GoidaProfileWindow.axaml" Link="Views\GoidaProfileWindow.axaml" />
     <AvaloniaResource Include="..\InvisibleGorilla-XRay.Mac\Views\AboutWindow.axaml" Link="Views\AboutWindow.axaml" />
     <AvaloniaResource Include="..\InvisibleGorilla-XRay.Mac\Views\UpdateWindow.axaml" Link="Views\UpdateWindow.axaml" />
     <AvaloniaResource Include="..\InvisibleGorilla-XRay.Mac\Views\PolicyWindow.axaml" Link="Views\PolicyWindow.axaml" />
@@ -76,6 +78,9 @@
       <SourceItemGroup>AvaloniaXaml</SourceItemGroup>
     </AdditionalFiles>
     <AdditionalFiles Include="..\InvisibleGorilla-XRay.Mac\Views\AppRulesWindow.axaml" Link="Views\AppRulesWindow.axaml">
+      <SourceItemGroup>AvaloniaXaml</SourceItemGroup>
+    </AdditionalFiles>
+    <AdditionalFiles Include="..\InvisibleGorilla-XRay.Mac\Views\GoidaProfileWindow.axaml" Link="Views\GoidaProfileWindow.axaml">
       <SourceItemGroup>AvaloniaXaml</SourceItemGroup>
     </AdditionalFiles>
     <AdditionalFiles Include="..\InvisibleGorilla-XRay.Mac\Views\AboutWindow.axaml" Link="Views\AboutWindow.axaml">

@@ -380,7 +380,11 @@ namespace InvisibleGorillaXRay
             bool IsConfigExists() => lastConfig != null;
         }
 
-        private void SetActiveSubscriptionPanel(bool isActive) => SetActivePanel(panelSubscription, isActive);
+        private void SetActiveSubscriptionPanel(bool isActive)
+        {
+            SetActivePanel(panelSubscription, isActive);
+            panelSubscriptionFabButton.Visibility = isActive ? Visibility.Visible : Visibility.Collapsed;
+        }
 
         private void SetEnableSubscriptionTabButton(bool isEnabled) => SetEnableButton(buttonSubscriptionTab, isEnabled);
     }

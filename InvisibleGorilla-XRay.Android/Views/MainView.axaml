@@ -641,6 +641,110 @@
                                    FontSize="14" />
                     </Border>
 
+                    <Border x:Name="GoidaProfilePanel"
+                            Padding="16,14"
+                            CornerRadius="12"
+                            BorderBrush="{StaticResource SurfaceBright}"
+                            BorderThickness="1"
+                            Background="{StaticResource SurfaceLight}">
+                        <StackPanel Spacing="10">
+                            <TextBlock x:Name="GoidaTitleTextBlock"
+                                       Text="Goida profile"
+                                       FontSize="18"
+                                       FontWeight="SemiBold" />
+                            <TextBlock x:Name="GoidaDescriptionTextBlock"
+                                       TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextMuted}" />
+                            <Border x:Name="GoidaSignalBanner"
+                                    Padding="12,8" CornerRadius="8"
+                                    BorderBrush="#3A3A3A" BorderThickness="1" Background="#232323"
+                                    IsVisible="False">
+                                <Grid ColumnDefinitions="Auto,*">
+                                    <Grid Grid.Column="0" Width="26" Height="20"
+                                          VerticalAlignment="Center" Margin="0,0,12,0">
+                                        <Path x:Name="GoidaWifiArcOuter"
+                                              Stroke="#4A4A4A" StrokeThickness="2.4"
+                                              StrokeLineCap="Round"
+                                              Data="M 3.8,8.8 A 13,13 0 0 1 22.2,8.8"/>
+                                        <Path x:Name="GoidaWifiArcMiddle"
+                                              Stroke="#4A4A4A" StrokeThickness="2.4"
+                                              StrokeLineCap="Round"
+                                              Data="M 6.6,11.6 A 9,9 0 0 1 19.4,11.6"/>
+                                        <Path x:Name="GoidaWifiArcInner"
+                                              Stroke="#4A4A4A" StrokeThickness="2.4"
+                                              StrokeLineCap="Round"
+                                              Data="M 9.5,14.5 A 5,5 0 0 1 16.5,14.5"/>
+                                        <Ellipse x:Name="GoidaWifiDot"
+                                                 Width="4.4" Height="4.4"
+                                                 HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                 Margin="10.8,15.6,0,0"
+                                                 Fill="#4A4A4A"/>
+                                    </Grid>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock x:Name="GoidaSignalLabelTextBlock"
+                                                       FontSize="13" FontWeight="SemiBold"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="GoidaSignalLatencyTextBlock"
+                                                       FontSize="12"
+                                                       Foreground="#9A9A9A"
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                        <TextBlock x:Name="GoidaActiveSummaryTextBlock"
+                                                   TextWrapping="Wrap"
+                                                   FontSize="11"
+                                                   Foreground="{StaticResource TextMuted}" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                            <CheckBox x:Name="GoidaEnabledCheckBox"
+                                      Checked="OnGoidaSettingsChanged"
+                                      Unchecked="OnGoidaSettingsChanged" />
+                            <CheckBox x:Name="GoidaAutoSwitchCheckBox"
+                                      Checked="OnGoidaSettingsChanged"
+                                      Unchecked="OnGoidaSettingsChanged" />
+                            <ComboBox x:Name="GoidaSelectionModeComboBox"
+                                      SelectionChanged="OnGoidaSelectionModeChanged" />
+                            <TextBox x:Name="GoidaFilterListTextBox"
+                                     TextChanged="OnGoidaFilterChanged" />
+                            <Grid ColumnDefinitions="*,*">
+                                <Button x:Name="GoidaRefreshButton"
+                                        Grid.Column="0"
+                                        Margin="0,0,5,0"
+                                        Click="OnGoidaRefreshClick" />
+                                <Button x:Name="GoidaProbeButton"
+                                        Grid.Column="1"
+                                        Margin="5,0,0,0"
+                                        Click="OnGoidaProbeClick" />
+                            </Grid>
+                            <ListBox x:Name="GoidaNodesListBox"
+                                     MinHeight="180"
+                                     MaxHeight="260"
+                                     SelectionChanged="OnGoidaNodeSelectionChanged">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid ColumnDefinitions="36,*,72,56" Margin="0,4">
+                                            <TextBlock Grid.Column="0" Text="{Binding ListId}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="2" Text="{Binding LatencyText}" Foreground="{StaticResource TextMuted}" FontSize="11" />
+                                            <TextBlock Grid.Column="3" Text="{Binding ActiveMark}" Foreground="#7CFC98" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <Grid ColumnDefinitions="*,*">
+                                <Button x:Name="GoidaSetActiveButton"
+                                        Grid.Column="0"
+                                        Margin="0,0,5,0"
+                                        Click="OnGoidaSetActiveClick" />
+                                <Button x:Name="GoidaAddToPoolButton"
+                                        Grid.Column="1"
+                                        Margin="5,0,0,0"
+                                        Click="OnGoidaAddToPoolClick" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
                     <StackPanel x:Name="ServersBrowsePanel"
                                 Spacing="14">
                         <Grid ColumnDefinitions="*,*">

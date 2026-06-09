@@ -17,6 +17,7 @@ using InvisibleGorillaXRay.Linux.Handlers;
 // are linked from the Mac project; we keep the using here so this factory can
 // instantiate the same MainWindow / SettingsWindow / etc.
 using InvisibleGorillaXRay.Mac.Views;
+using InvisibleGorillaXRay.Services.Goida;
 
 namespace InvisibleGorillaXRay.Linux.Factories
 {
@@ -74,6 +75,7 @@ namespace InvisibleGorillaXRay.Linux.Factories
             UpdateHandler updateHandler = handlersManager.GetHandler<UpdateHandler>();
             SettingsHandler settingsHandler = handlersManager.GetHandler<SettingsHandler>();
             LinkHandler linkHandler = handlersManager.GetHandler<LinkHandler>();
+            GoidaProfileHandler goidaHandler = handlersManager.GetHandler<GoidaProfileHandler>();
 
             MainWindow mainWindow = new MainWindow();
             var icon = GetAppIcon();
@@ -93,6 +95,7 @@ namespace InvisibleGorillaXRay.Linux.Factories
                 openUpdateWindow: CreateUpdateWindow,
                 openAboutWindow: CreateAboutWindow,
                 openPolicyWindow: CreatePolicyWindow,
+                getServerDisplayText: BuildServerDisplayText,
                 onRunServer: core.Run,
                 onStopServer: core.Stop,
                 onCancelServer: core.Cancel,
@@ -100,10 +103,40 @@ namespace InvisibleGorillaXRay.Linux.Factories
                 onGenerateClientId: settingsHandler.GenerateClientId,
                 onGitHubClick: linkHandler.OpenGitHubRepositoryLink,
                 onBugReportingClick: linkHandler.OpenBugReportingLink,
-                onCustomLinkClick: linkHandler.OpenCustomLink
+                onCustomLinkClick: linkHandler.OpenCustomLink,
+                getGoidaPresentation: BuildGoidaPresentation
             );
 
             return mainWindow;
+
+            GoidaMainPresentation BuildGoidaPresentation()
+            {
+                string currentPath = settingsHandler.UserSettings.GetCurrentConfigPath();
+                if (!GoidaProfilePaths.IsMarker(currentPath))
+                    return new GoidaMainPresentation();
+
+                GoidaNode? activeNode = goidaHandler.Manager.GetActiveNode();
+                return GoidaNodeDisplay.BuildMainPresentation(activeNode);
+            }
+
+            string BuildServerDisplayText()
+            {
+                Config config = configHandler.GetCurrentConfig();
+                if (config == null)
+                    return LocalizationService.GetTerm(Localization.NO_SERVER_CONFIGURATION);
+
+                if (!settingsHandler.UserSettings.GetGoidaSettings().Enabled)
+                    return config.Name;
+
+                GoidaNode? activeNode = goidaHandler.Manager.GetActiveNode();
+                if (activeNode == null)
+                    return config.Name;
+
+                string latency = activeNode.LatencyMs >= 0
+                    ? $"{activeNode.LatencyMs} ms"
+                    : "-";
+                return $"{activeNode.DisplayName} · {latency}";
+            }
         }
 
         public ServerWindow CreateServerWindow()
@@ -118,6 +151,7 @@ namespace InvisibleGorillaXRay.Linux.Factories
                 getCurrentConfigPath: settingsHandler.UserSettings.GetCurrentConfigPath,
                 getUserSettings: () => settingsHandler.UserSettings,
                 openAppRulesWindow: CreateAppRulesWindow,
+                openGoidaProfileWindow: OpenGoidaProfileWindow,
                 isCurrentPathEqualRootConfigPath: configHandler.IsCurrentPathEqualRootConfigPath,
                 getAllGeneralConfigs: configHandler.GetAllGeneralConfigs,
                 getAllSubscriptionConfigs: configHandler.GetAllSubscriptionConfigs,
@@ -138,6 +172,12 @@ namespace InvisibleGorillaXRay.Linux.Factories
 
             SetupLocalizedWindowTitle(serverWindow, Localization.WINDOW_TITLE_SERVER);
             return serverWindow;
+
+            void OpenGoidaProfileWindow()
+            {
+                GoidaProfileWindow goidaWindow = CreateGoidaProfileWindow();
+                goidaWindow.ShowDialog(serverWindow);
+            }
 
             void UpdateConfig(string path)
             {
@@ -267,6 +307,34 @@ namespace InvisibleGorillaXRay.Linux.Factories
                 AppVersion appVersion = versionHandler.GetApplicationVersion();
                 return $"{appVersion.Major}.{appVersion.Feature}.{appVersion.BugFix}";
             }
+        }
+
+        public GoidaProfileWindow CreateGoidaProfileWindow()
+        {
+            SettingsHandler settingsHandler = handlersManager.GetHandler<SettingsHandler>();
+            GoidaProfileHandler goidaHandler = handlersManager.GetHandler<GoidaProfileHandler>();
+            MainWindow? mainWindow = GetMainWindow();
+
+            GoidaProfileWindow goidaWindow = new GoidaProfileWindow();
+            var icon = GetAppIcon();
+            if (icon != null) goidaWindow.Icon = icon;
+
+            goidaWindow.Setup(
+                goidaHandler: goidaHandler,
+                getUserSettings: () => settingsHandler.UserSettings,
+                onUpdateUserSettings: settingsHandler.UpdateUserSettings,
+                onActiveNodeChanged: node =>
+                {
+                    if (node == null || string.IsNullOrWhiteSpace(node.ConfigPath))
+                        return;
+
+                    settingsHandler.UpdateCurrentConfigPath(node.ConfigPath);
+                    mainWindow?.UpdateUI();
+                    mainWindow?.TryRerun();
+                });
+
+            SetupLocalizedWindowTitle(goidaWindow, "Lang.Goida.WindowTitle");
+            return goidaWindow;
         }
 
         public PolicyWindow CreatePolicyWindow()

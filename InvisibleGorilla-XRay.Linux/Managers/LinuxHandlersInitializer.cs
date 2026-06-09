@@ -15,6 +15,7 @@ using InvisibleGorillaXRay.Linux.Handlers.Settings;
 using InvisibleGorillaXRay.Linux.Handlers.Tunnels;
 using InvisibleGorillaXRay.Managers;
 using InvisibleGorillaXRay.Models;
+using InvisibleGorillaXRay.Services.Goida;
 
 namespace InvisibleGorillaXRay.Linux.Managers
 {
@@ -39,6 +40,7 @@ namespace InvisibleGorillaXRay.Linux.Managers
             HandlersManager.AddHandler(new DeepLinkHandler(() => new LinuxDeepLink()));
             HandlersManager.AddHandler(new LinkHandler());
             HandlersManager.AddHandler(new LinuxLocalizationHandler());
+            HandlersManager.AddHandler(new GoidaProfileHandler());
         }
 
         public void Setup(
@@ -52,6 +54,9 @@ namespace InvisibleGorillaXRay.Linux.Managers
             SetupNotifyHandler();
             SetupDeepLinkHandler();
             SetupLocalizationHandler();
+            SetupGoidaProfileHandler();
+
+            handlersManager.GetHandler<GoidaProfileHandler>().StartBackground();
 
             void SetupProcessHandler()
             {
@@ -125,6 +130,35 @@ namespace InvisibleGorillaXRay.Linux.Managers
                 var settingsHandler = handlersManager.GetHandler<SettingsHandler>();
                 var locHandler = handlersManager.GetHandler<LinuxLocalizationHandler>();
                 locHandler.Setup(getCurrentLanguage: settingsHandler.UserSettings.GetLanguage);
+            }
+
+            void SetupGoidaProfileHandler()
+            {
+                var settingsHandler = handlersManager.GetHandler<SettingsHandler>();
+                var templateHandler = handlersManager.GetHandler<TemplateHandler>();
+                var goidaHandler = handlersManager.GetHandler<GoidaProfileHandler>();
+
+                goidaHandler.Setup(
+                    convertConfigLinkToV2Ray: templateHandler.ConverLinkToConfig,
+                    testConnection: GoidaConnectionTest.CreateFromConfigPath(core.LoadConfig, core.Test),
+                    getUserSettings: () => settingsHandler.UserSettings,
+                    updateUserSettings: settingsHandler.UpdateUserSettings,
+                    onActiveNodeChanged: node =>
+                    {
+                        if (node == null || string.IsNullOrWhiteSpace(node.ConfigPath))
+                            return;
+
+                        if (!settingsHandler.UserSettings.GetGoidaSettings().Enabled)
+                            return;
+
+                        settingsHandler.UpdateCurrentConfigPath(node.ConfigPath);
+
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        {
+                            windowFactory.GetMainWindow()?.UpdateUI();
+                            windowFactory.GetMainWindow()?.TryRerun();
+                        });
+                    });
             }
         }
 

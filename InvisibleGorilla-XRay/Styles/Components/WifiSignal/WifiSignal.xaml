@@ -1,0 +1,25 @@
+<UserControl x:Class="InvisibleGorillaXRay.Components.WifiSignal"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Width="26" Height="20">
+    <Grid>
+        <!-- Outer arc (level 4) -->
+        <Path x:Name="arcOuter"
+              Stroke="#4A4A4A" StrokeThickness="2.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+              Data="M 3.8,8.8 A 13,13 0 0 1 22.2,8.8"/>
+        <!-- Middle arc (level 3) -->
+        <Path x:Name="arcMiddle"
+              Stroke="#4A4A4A" StrokeThickness="2.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+              Data="M 6.6,11.6 A 9,9 0 0 1 19.4,11.6"/>
+        <!-- Inner arc (level 2) -->
+        <Path x:Name="arcInner"
+              Stroke="#4A4A4A" StrokeThickness="2.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+              Data="M 9.5,14.5 A 5,5 0 0 1 16.5,14.5"/>
+        <!-- Dot (level 1) -->
+        <Ellipse x:Name="dot"
+                 Width="4.4" Height="4.4"
+                 HorizontalAlignment="Left" VerticalAlignment="Top"
+                 Margin="10.8,15.6,0,0"
+                 Fill="#4A4A4A"/>
+    </Grid>
+</UserControl>

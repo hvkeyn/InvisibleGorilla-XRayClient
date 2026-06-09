@@ -333,6 +333,13 @@ namespace InvisibleGorillaXRay
                 AddConfigHintAtTheEndOfList(listConfigs);
         }
 
+        public void ReloadGeneralConfigsList()
+        {
+            LoadGeneralConfigsList();
+            SelectConfig(getCurrentConfigPath.Invoke());
+            RefreshAppRulesSummary();
+        }
+
         private string GetLastGeneralConfigPath()
         {
             Config lastConfig = getAllGeneralConfigs.Invoke().LastOrDefault();
@@ -348,7 +355,11 @@ namespace InvisibleGorillaXRay
             bool IsConfigExists() => lastConfig != null;
         }
 
-        private void SetActiveConfigPanel(bool isActive) => SetActivePanel(panelConfig, isActive);
+        private void SetActiveConfigPanel(bool isActive)
+        {
+            SetActivePanel(panelConfig, isActive);
+            panelConfigFabButtons.Visibility = isActive ? Visibility.Visible : Visibility.Collapsed;
+        }
 
         private void SetEnableConfigTabButton(bool isEnabled) => SetEnableButton(buttonConfigTab, isEnabled);
     }

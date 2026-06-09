@@ -7,6 +7,7 @@ using Avalonia.Markup.Xaml;
 namespace InvisibleGorillaXRay.Mac
 {
     using Core;
+    using InvisibleGorillaXRay.Handlers;
     using Managers;
     using Views;
 
@@ -53,6 +54,17 @@ namespace InvisibleGorillaXRay.Mac
             if (_cleanedUp) return;
             _cleanedUp = true;
 
+            // Hard watchdog: never let exit hang on the native StopServer call.
+            var watchdog = new System.Threading.Thread(() =>
+            {
+                System.Threading.Thread.Sleep(TimeSpan.FromSeconds(10));
+                Environment.Exit(0);
+            });
+            watchdog.IsBackground = true;
+            watchdog.Start();
+
+            try { appManager?.HandlersManager?.GetHandler<GoidaProfileHandler>()?.StopBackground(); } catch { }
+            try { appManager?.Core?.Stop(); } catch { }
             try { appManager?.Core?.DisableMode(); } catch { }
         }
     }

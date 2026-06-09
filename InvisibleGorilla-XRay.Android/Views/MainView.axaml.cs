@@ -33,7 +33,9 @@ namespace InvisibleGorillaXRay.Android.Views
     using InvisibleGorillaXRay.Handlers.Tor;
     using InvisibleGorillaXRay.Models;
     using InvisibleGorillaXRay.Services;
+    using InvisibleGorillaXRay.Services.Goida;
     using InvisibleGorillaXRay.Utilities;
+    using InvisibleGorillaXRay.Values;
 
     public partial class MainView : UserControl
     {
@@ -49,6 +51,15 @@ namespace InvisibleGorillaXRay.Android.Views
             public string Name { get; init; } = string.Empty;
 
             public override string ToString() => Name;
+        }
+
+        private sealed class GoidaNodeRow
+        {
+            public int ListId { get; init; }
+            public string Id { get; init; } = string.Empty;
+            public string DisplayName { get; init; } = string.Empty;
+            public string LatencyText { get; init; } = string.Empty;
+            public string ActiveMark { get; init; } = string.Empty;
         }
 
         private static readonly IBrush StoppedBrush = new SolidColorBrush(Color.Parse("#D66A75"));
@@ -70,6 +81,8 @@ namespace InvisibleGorillaXRay.Android.Views
         private UpdateHandler updateHandler = null!;
         private BroadcastHandler broadcastHandler = null!;
         private Android.Handlers.AndroidLocalizationHandler localizationHandler = null!;
+        private GoidaProfileHandler goidaHandler = null!;
+        private bool isApplyingGoidaSettings;
 
         private List<Config> generalConfigs = new();
         private List<Config> subscriptionConfigs = new();
@@ -139,7 +152,12 @@ namespace InvisibleGorillaXRay.Android.Views
             updateHandler = appManager.HandlersManager.GetHandler<UpdateHandler>();
             broadcastHandler = appManager.HandlersManager.GetHandler<BroadcastHandler>();
             localizationHandler = appManager.HandlersManager.GetHandler<Android.Handlers.AndroidLocalizationHandler>();
+            goidaHandler = appManager.HandlersManager.GetHandler<GoidaProfileHandler>();
             DiagnosticLog.Write("MainView", "Handlers resolved");
+
+            GoidaActiveNodeBridge.OnActiveNodeChanged = HandleGoidaActiveNodeChanged;
+            goidaHandler.Manager.NodesUpdated += OnGoidaNodesUpdated;
+            InitializeGoidaControls();
 
             InitializeControls();
             ApplyLocalizedText();
@@ -407,6 +425,15 @@ namespace InvisibleGorillaXRay.Android.Views
             NoGeneralConfigsText.Text = Localize("Lang.Message.NoServerConfiguration");
             SubscriptionGroupsTitleText.Text = Localize("Lang.Android.Server.SubscriptionGroups");
             NoSubscriptionConfigsText.Text = Localize("Lang.Android.Server.NoSubscriptions");
+            GoidaTitleText.Text = Localize("Lang.Goida.Title");
+            GoidaDescriptionText.Text = Localize("Lang.Goida.Description");
+            GoidaEnabledToggle.Content = Localize("Lang.Goida.Enabled");
+            GoidaAutoSwitchToggle.Content = Localize("Lang.Goida.AutoSwitch");
+            GoidaFilterListInput.Watermark = Localize("Lang.Goida.FilterListHint");
+            GoidaRefreshActionButton.Content = Localize("Lang.Goida.Refresh");
+            GoidaProbeActionButton.Content = Localize("Lang.Goida.ProbeAll");
+            GoidaSetActiveActionButton.Content = Localize("Lang.Goida.SetActive");
+            GoidaAddToPoolActionButton.Content = Localize("Lang.Goida.AddToPool");
             AddConfigTitleText.Text = Localize("Lang.Android.Server.AddConfigTitle");
             AddConfigDescriptionText.Text = Localize("Lang.Android.Server.AddConfigDescription");
             ConfigImportFileModeActionButton.Content = Localize("Lang.Window.Server.Import.File");
@@ -2120,13 +2147,36 @@ namespace InvisibleGorillaXRay.Android.Views
         private void UpdateCurrentConfigSummary()
         {
             Config? currentConfig = configHandler.GetCurrentConfig();
-            string currentConfigText = currentConfig == null
-                ? Localize("Lang.Message.NoServerConfiguration")
-                : currentConfig.Group == GroupType.SUBSCRIPTION
+            GoidaProfileSettings goidaSettings = settingsHandler.UserSettings.GetGoidaSettings();
+            GoidaNode? activeGoidaNode = goidaSettings.Enabled
+                ? goidaHandler.Manager.GetActiveNode()
+                : null;
+
+            string currentConfigText;
+            if (activeGoidaNode != null)
+            {
+                string latency = activeGoidaNode.LatencyMs >= 0
+                    ? $"{activeGoidaNode.LatencyMs} ms"
+                    : "-";
+                currentConfigText = string.Format(
+                    Localize("Lang.Goida.ActiveSummary"),
+                    activeGoidaNode.DisplayName,
+                    latency);
+            }
+            else if (currentConfig == null)
+            {
+                currentConfigText = Localize("Lang.Message.NoServerConfiguration");
+            }
+            else
+            {
+                currentConfigText = currentConfig.Group == GroupType.SUBSCRIPTION
                     ? $"{Localize("Lang.Window.Server.Subscriptions")} / {currentConfig.Name}"
                     : currentConfig.Name;
+            }
+
             CurrentConfigNameText.Text = currentConfigText;
             AppRulesEditorCurrentConfigText.Text = currentConfigText;
+            RefreshGoidaSummary();
             RefreshAppRulesSummary();
         }
 
@@ -4184,6 +4234,261 @@ namespace InvisibleGorillaXRay.Android.Views
             catch
             {
             }
+        }
+
+        private TextBlock GoidaTitleText => GetRequiredControl<TextBlock>("GoidaTitleTextBlock");
+        private TextBlock GoidaDescriptionText => GetRequiredControl<TextBlock>("GoidaDescriptionTextBlock");
+        private Button GoidaRefreshActionButton => GetRequiredControl<Button>("GoidaRefreshButton");
+        private Button GoidaProbeActionButton => GetRequiredControl<Button>("GoidaProbeButton");
+        private Button GoidaSetActiveActionButton => GetRequiredControl<Button>("GoidaSetActiveButton");
+        private Button GoidaAddToPoolActionButton => GetRequiredControl<Button>("GoidaAddToPoolButton");
+        private CheckBox GoidaEnabledToggle => GetRequiredControl<CheckBox>("GoidaEnabledCheckBox");
+        private CheckBox GoidaAutoSwitchToggle => GetRequiredControl<CheckBox>("GoidaAutoSwitchCheckBox");
+        private ComboBox GoidaSelectionModeSelector => GetRequiredControl<ComboBox>("GoidaSelectionModeComboBox");
+        private TextBox GoidaFilterListInput => GetRequiredControl<TextBox>("GoidaFilterListTextBox");
+        private ListBox GoidaNodesList => GetRequiredControl<ListBox>("GoidaNodesListBox");
+        private TextBlock GoidaActiveSummaryText => GetRequiredControl<TextBlock>("GoidaActiveSummaryTextBlock");
+
+        private void InitializeGoidaControls()
+        {
+            GoidaSelectionModeSelector.ItemsSource = new[]
+            {
+                Localize("Lang.Goida.Mode.AutoBest"),
+                Localize("Lang.Goida.Mode.ManualFixed"),
+                Localize("Lang.Goida.Mode.ManualPool")
+            };
+            GoidaSelectionModeSelector.SelectedIndex = 0;
+            ApplyGoidaSettingsToControls();
+            RefreshGoidaNodesList();
+        }
+
+        private void ApplyGoidaSettingsToControls()
+        {
+            isApplyingGoidaSettings = true;
+            try
+            {
+                GoidaProfileSettings settings = settingsHandler.UserSettings.GetGoidaSettings();
+                GoidaEnabledToggle.IsChecked = settings.Enabled;
+                GoidaAutoSwitchToggle.IsChecked = settings.AutoSwitchOnFly;
+                GoidaSelectionModeSelector.SelectedIndex = settings.SelectionMode switch
+                {
+                    GoidaSelectionMode.ManualFixed => 1,
+                    GoidaSelectionMode.ManualPool => 2,
+                    _ => 0
+                };
+            }
+            finally
+            {
+                isApplyingGoidaSettings = false;
+            }
+        }
+
+        private void CaptureGoidaSettingsFromControls()
+        {
+            if (isApplyingGoidaSettings)
+                return;
+
+            UserSettings current = settingsHandler.UserSettings;
+            GoidaProfileSettings settings = current.GetGoidaSettings().Clone();
+            settings.Enabled = GoidaEnabledToggle.IsChecked == true;
+            settings.AutoSwitchOnFly = GoidaAutoSwitchToggle.IsChecked == true;
+            settings.SelectionMode = GoidaSelectionModeSelector.SelectedIndex switch
+            {
+                1 => GoidaSelectionMode.ManualFixed,
+                2 => GoidaSelectionMode.ManualPool,
+                _ => GoidaSelectionMode.AutoBest
+            };
+
+            current.Goida = settings;
+            settingsHandler.UpdateUserSettings(current);
+            goidaHandler.Manager.UpdateSettings(settings);
+            RefreshGoidaSummary();
+        }
+
+        private void RefreshGoidaSummary()
+        {
+            GoidaNode? activeNode = goidaHandler.Manager.GetActiveNode();
+            Border banner = GetRequiredControl<Border>("GoidaSignalBanner");
+
+            if (activeNode == null)
+            {
+                GoidaActiveSummaryText.Text = string.Empty;
+                banner.IsVisible = false;
+                return;
+            }
+
+            string latency = activeNode.LatencyMs >= 0
+                ? $"{activeNode.LatencyMs} ms"
+                : "-";
+            GoidaActiveSummaryText.Text = string.Format(
+                Localize("Lang.Goida.ActiveSummary"),
+                activeNode.DisplayName,
+                latency);
+
+            InvisibleGorillaXRay.Services.Goida.GoidaMainPresentation presentation =
+                InvisibleGorillaXRay.Services.Goida.GoidaNodeDisplay.BuildMainPresentation(activeNode);
+
+            var statusBrush = new Avalonia.Media.SolidColorBrush(
+                Avalonia.Media.Color.Parse(presentation.ColorHex));
+            var inactiveBrush = new Avalonia.Media.SolidColorBrush(
+                Avalonia.Media.Color.Parse("#4A4A4A"));
+            int level = presentation.SignalLevel;
+
+            GetRequiredControl<Avalonia.Controls.Shapes.Ellipse>("GoidaWifiDot").Fill = statusBrush;
+            GetRequiredControl<Avalonia.Controls.Shapes.Path>("GoidaWifiArcInner").Stroke =
+                level >= 2 ? statusBrush : inactiveBrush;
+            GetRequiredControl<Avalonia.Controls.Shapes.Path>("GoidaWifiArcMiddle").Stroke =
+                level >= 3 ? statusBrush : inactiveBrush;
+            GetRequiredControl<Avalonia.Controls.Shapes.Path>("GoidaWifiArcOuter").Stroke =
+                level >= 4 ? statusBrush : inactiveBrush;
+
+            TextBlock signalLabel = GetRequiredControl<TextBlock>("GoidaSignalLabelTextBlock");
+            signalLabel.Text = Localize(presentation.QualityLabel);
+            signalLabel.Foreground = statusBrush;
+            GetRequiredControl<TextBlock>("GoidaSignalLatencyTextBlock").Text = presentation.LatencyText;
+            banner.IsVisible = true;
+        }
+
+        private void RefreshGoidaNodesList()
+        {
+            GoidaProfileSettings settings = settingsHandler.UserSettings.GetGoidaSettings();
+            string filter = GoidaFilterListInput.Text?.Trim() ?? string.Empty;
+            int? listFilter = int.TryParse(filter, out int listId) ? listId : null;
+
+            List<GoidaNodeRow> rows = goidaHandler.Manager.GetNodesSorted()
+                .Where(node => listFilter == null || node.ListId == listFilter)
+                .Select(node => new GoidaNodeRow
+                {
+                    ListId = node.ListId,
+                    Id = node.Id,
+                    DisplayName = node.DisplayName,
+                    LatencyText = FormatGoidaLatency(node.LatencyMs),
+                    ActiveMark = string.Equals(node.Id, settings.ActiveNodeId, StringComparison.OrdinalIgnoreCase)
+                        ? "*"
+                        : string.Empty
+                })
+                .ToList();
+
+            GoidaNodesList.ItemsSource = rows;
+        }
+
+        private static string FormatGoidaLatency(int latencyMs)
+        {
+            return latencyMs switch
+            {
+                Availability.NOT_CHECKED => "-",
+                Availability.TIMEOUT => "timeout",
+                Availability.ERROR => "error",
+                _ when latencyMs >= 0 => $"{latencyMs} ms",
+                _ => "-"
+            };
+        }
+
+        private GoidaNodeRow? GetSelectedGoidaRow()
+        {
+            return GoidaNodesList.SelectedItem as GoidaNodeRow;
+        }
+
+        private void HandleGoidaActiveNodeChanged(GoidaNode node)
+        {
+            if (node == null || string.IsNullOrWhiteSpace(node.ConfigPath))
+                return;
+
+            if (!settingsHandler.UserSettings.GetGoidaSettings().Enabled)
+                return;
+
+            settingsHandler.UpdateCurrentConfigPath(node.ConfigPath);
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                UpdateCurrentConfigSummary();
+                if (IsConnectionActive())
+                    _ = RestartConnectionAfterSettingsChangeAsync();
+            });
+        }
+
+        private void OnGoidaNodesUpdated()
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                RefreshGoidaNodesList();
+                RefreshGoidaSummary();
+                UpdateCurrentConfigSummary();
+            });
+        }
+
+        private void OnGoidaSettingsChanged(object? sender, RoutedEventArgs e)
+        {
+            CaptureGoidaSettingsFromControls();
+        }
+
+        private void OnGoidaSelectionModeChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            CaptureGoidaSettingsFromControls();
+        }
+
+        private void OnGoidaFilterChanged(object? sender, TextChangedEventArgs e)
+        {
+            RefreshGoidaNodesList();
+        }
+
+        private async void OnGoidaRefreshClick(object? sender, RoutedEventArgs e)
+        {
+            await goidaHandler.Manager.RefreshListsAsync();
+            RefreshGoidaNodesList();
+        }
+
+        private async void OnGoidaProbeClick(object? sender, RoutedEventArgs e)
+        {
+            await goidaHandler.Manager.ProbeAsync();
+            RefreshGoidaNodesList();
+        }
+
+        private void OnGoidaNodeSelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+        }
+
+        private void OnGoidaSetActiveClick(object? sender, RoutedEventArgs e)
+        {
+            GoidaNodeRow? row = GetSelectedGoidaRow();
+            if (row == null)
+                return;
+
+            UserSettings current = settingsHandler.UserSettings;
+            GoidaProfileSettings settings = current.GetGoidaSettings().Clone();
+            settings.Enabled = true;
+            settings.ActiveNodeId = row.Id;
+            settings.PinnedNodeId = row.Id;
+            settings.SelectionMode = GoidaSelectionMode.ManualFixed;
+            current.Goida = settings;
+            settingsHandler.UpdateUserSettings(current);
+
+            GoidaNode? node = goidaHandler.Manager.GetNodesSorted()
+                .FirstOrDefault(candidate => string.Equals(candidate.Id, row.Id, StringComparison.OrdinalIgnoreCase));
+            if (node != null)
+                HandleGoidaActiveNodeChanged(node);
+
+            ApplyGoidaSettingsToControls();
+            RefreshGoidaNodesList();
+        }
+
+        private void OnGoidaAddToPoolClick(object? sender, RoutedEventArgs e)
+        {
+            GoidaNodeRow? row = GetSelectedGoidaRow();
+            if (row == null)
+                return;
+
+            UserSettings current = settingsHandler.UserSettings;
+            GoidaProfileSettings settings = current.GetGoidaSettings().Clone();
+            settings.ManualPoolNodeIds ??= new List<string>();
+            if (!settings.ManualPoolNodeIds.Contains(row.Id, StringComparer.OrdinalIgnoreCase))
+                settings.ManualPoolNodeIds.Add(row.Id);
+            settings.SelectionMode = GoidaSelectionMode.ManualPool;
+            current.Goida = settings;
+            settingsHandler.UpdateUserSettings(current);
+            goidaHandler.Manager.UpdateSettings(settings);
+            ApplyGoidaSettingsToControls();
+            RefreshGoidaNodesList();
         }
 
     }

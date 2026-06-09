@@ -22,6 +22,7 @@ namespace InvisibleGorillaXRay
         private Func<string> getCurrentConfigPath;
         private Func<UserSettings> getUserSettings;
         private Func<AppRulesWindow> openAppRulesWindow;
+        private Action openGoidaProfileWindow;
         private Func<bool> isCurrentPathEqualRootConfigPath;
         private Func<string, int> testConnection;
         private Func<string> getLogPath;
@@ -43,6 +44,7 @@ namespace InvisibleGorillaXRay
             Func<string> getCurrentConfigPath,
             Func<UserSettings> getUserSettings,
             Func<AppRulesWindow> openAppRulesWindow,
+            Action openGoidaProfileWindow,
             Func<bool> isCurrentPathEqualRootConfigPath,
             Func<List<Config>> getAllGeneralConfigs, 
             Func<string, List<Config>> getAllSubscriptionConfigs,
@@ -64,6 +66,7 @@ namespace InvisibleGorillaXRay
             this.getCurrentConfigPath = getCurrentConfigPath;
             this.getUserSettings = getUserSettings;
             this.openAppRulesWindow = openAppRulesWindow;
+            this.openGoidaProfileWindow = openGoidaProfileWindow;
             this.isCurrentPathEqualRootConfigPath = isCurrentPathEqualRootConfigPath;
             this.getAllGeneralConfigs = getAllGeneralConfigs;
             this.getAllSubscriptionConfigs = getAllSubscriptionConfigs;
@@ -440,6 +443,8 @@ namespace InvisibleGorillaXRay
         {
             SetActiveConfigPanel(false);
             SetActiveSubscriptionPanel(false);
+            panelConfigFabButtons.Visibility = Visibility.Collapsed;
+            panelSubscriptionFabButton.Visibility = Visibility.Collapsed;
         }
 
         private void SetEnableButton(Button button, bool isEnabled)
@@ -459,6 +464,11 @@ namespace InvisibleGorillaXRay
             appRulesWindow.Owner = this;
             appRulesWindow.ShowDialog();
             RefreshAppRulesSummary();
+        }
+
+        private void OnOpenGoidaProfileClick(object sender, RoutedEventArgs e)
+        {
+            openGoidaProfileWindow?.Invoke();
         }
 
         private void RefreshAppRulesSummary()

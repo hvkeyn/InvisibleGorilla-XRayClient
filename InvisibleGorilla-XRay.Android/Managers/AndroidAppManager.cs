@@ -29,7 +29,7 @@ namespace InvisibleGorillaXRay.Android.Managers
             handlersInitializer.Register();
             servicesInitializer.Register();
 
-            handlersInitializer.Setup();
+            handlersInitializer.Setup(coreInitializer.Core);
             servicesInitializer.Setup(
                 handlersManager: handlersInitializer.HandlersManager,
                 getLocalizedTerm: handlersInitializer.LocalizationHandler.GetTerm

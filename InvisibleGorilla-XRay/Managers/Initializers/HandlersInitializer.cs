@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using System;
+using System.Windows;
 
 namespace InvisibleGorillaXRay.Managers.Initializers
 {
@@ -7,6 +8,9 @@ namespace InvisibleGorillaXRay.Managers.Initializers
     using Managers;
     using Handlers;
     using Factories;
+    using Services;
+    using Services.Goida;
+    using Values;
 
     public class HandlersInitializer
     {
@@ -29,6 +33,7 @@ namespace InvisibleGorillaXRay.Managers.Initializers
             HandlersManager.AddHandler(new DeepLinkHandler());
             HandlersManager.AddHandler(new LinkHandler());
             HandlersManager.AddHandler(new LocalizationHandler());
+            HandlersManager.AddHandler(new GoidaProfileHandler());
         }
 
         public void Setup(
@@ -44,6 +49,9 @@ namespace InvisibleGorillaXRay.Managers.Initializers
             SetupNotifyHandler();
             SetupDeepLinkHandler();
             SetupLocalizationHandler();
+            SetupGoidaProfileHandler();
+
+            handlersManager.GetHandler<GoidaProfileHandler>().StartBackground();
 
             void SetupProcessHandler()
             {
@@ -69,10 +77,94 @@ namespace InvisibleGorillaXRay.Managers.Initializers
             void SetupConfigHandler()
             {
                 SettingsHandler settingsHandler = handlersManager.GetHandler<SettingsHandler>();
+                GoidaProfileHandler goidaHandler = handlersManager.GetHandler<GoidaProfileHandler>();
 
                 handlersManager.GetHandler<ConfigHandler>().Setup(
-                    getCurrentConfigPath: settingsHandler.UserSettings.GetCurrentConfigPath
-                );
+                    getCurrentConfigPath: settingsHandler.UserSettings.GetCurrentConfigPath,
+                    getGoidaListConfig: BuildGoidaListConfig,
+                    getGoidaRuntimeConfig: BuildGoidaRuntimeConfig);
+
+                Config? BuildGoidaListConfig()
+                {
+                    GoidaProfileSettings settings = settingsHandler.UserSettings.GetGoidaSettings();
+                    if (!settings.ShouldShowInServerList())
+                        return null;
+
+                    GoidaNode? activeNode = goidaHandler.Manager.GetActiveNode();
+                    string updateTime = settings.LastRefreshUtc == default
+                        ? "-"
+                        : settings.LastRefreshUtc.ToLocalTime().ToString("dd.MM.yyyy");
+
+                    string name = activeNode == null
+                        ? LocalizeGoida("Lang.Goida.ServerListName", "Goida profile")
+                        : string.Format(
+                            LocalizeGoida("Lang.Goida.ServerListNameWithNode", "Goida · {0}"),
+                            activeNode.DisplayName);
+
+                    Config config = new Config(
+                        path: GoidaProfilePaths.MarkerPath,
+                        name: name,
+                        type: ConfigType.FILE,
+                        group: GroupType.GENERAL,
+                        updateTime: updateTime);
+                    ApplyGoidaAvailability(config, activeNode);
+                    return config;
+                }
+
+                static void ApplyGoidaAvailability(Config config, GoidaNode? activeNode)
+                {
+                    if (activeNode == null)
+                        return;
+
+                    config.SetAvailability(MapNodeLatency(activeNode.LatencyMs, activeNode.Status));
+                }
+
+                static int MapNodeLatency(int latencyMs, GoidaNodeStatus status)
+                {
+                    if (latencyMs >= 0)
+                        return latencyMs;
+
+                    return status switch
+                    {
+                        GoidaNodeStatus.Timeout => Availability.TIMEOUT,
+                        GoidaNodeStatus.Error => Availability.ERROR,
+                        _ => Availability.NOT_CHECKED
+                    };
+                }
+
+                Config? BuildGoidaRuntimeConfig()
+                {
+                    if (!goidaHandler.Manager.TryEnsureActiveNode())
+                        return BuildGoidaListConfig();
+
+                    GoidaNode? activeNode = goidaHandler.Manager.GetActiveNode();
+                    if (activeNode == null || !System.IO.File.Exists(activeNode.ConfigPath))
+                        return BuildGoidaListConfig();
+
+                    return new Config(
+                        path: activeNode.ConfigPath,
+                        name: string.Format(
+                            LocalizeGoida("Lang.Goida.ServerListNameWithNode", "Goida · {0}"),
+                            activeNode.DisplayName),
+                        type: ConfigType.FILE,
+                        group: GroupType.GENERAL,
+                        updateTime: activeNode.LastCheckedUtc == default
+                            ? "-"
+                            : activeNode.LastCheckedUtc.ToLocalTime().ToString("dd.MM.yyyy"));
+                }
+
+                static string LocalizeGoida(string key, string fallback)
+                {
+                    try
+                    {
+                        string? term = ServiceLocator.Get<LocalizationService>().GetTerm(key);
+                        return string.IsNullOrWhiteSpace(term) ? fallback : term;
+                    }
+                    catch
+                    {
+                        return fallback;
+                    }
+                }
             }
 
             void SetupUpdateHandler()
@@ -101,7 +193,37 @@ namespace InvisibleGorillaXRay.Managers.Initializers
 
                 void CloseApplication()
                 {
-                    Application.Current.Shutdown();
+                    Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                    {
+                        try
+                        {
+                            handlersManager.GetHandler<GoidaProfileHandler>().StopBackground();
+                        }
+                        catch
+                        {
+                        }
+
+                        MainWindow? mainWindow = windowFactory.GetMainWindow();
+                        if (mainWindow != null)
+                            mainWindow.RequestGracefulShutdown();
+                        else
+                            ShutdownCoreAndExit();
+                    }));
+                }
+
+                void ShutdownCoreAndExit()
+                {
+                    try
+                    {
+                        core.Stop();
+                        core.DisableMode();
+                        handlersManager.GetHandler<GoidaProfileHandler>().StopBackground();
+                    }
+                    catch
+                    {
+                    }
+
+                    Application.Current?.Shutdown();
                 }
                 
                 void OpenUpdateWindow() 
@@ -179,6 +301,71 @@ namespace InvisibleGorillaXRay.Managers.Initializers
                 HandlersManager.GetHandler<LocalizationHandler>().Setup(
                     getCurrentLanguage: settingsHandler.UserSettings.GetLanguage
                 );
+            }
+
+            void SetupGoidaProfileHandler()
+            {
+                SettingsHandler settingsHandler = handlersManager.GetHandler<SettingsHandler>();
+                TemplateHandler templateHandler = handlersManager.GetHandler<TemplateHandler>();
+                GoidaProfileHandler goidaHandler = handlersManager.GetHandler<GoidaProfileHandler>();
+
+                goidaHandler.Setup(
+                    convertConfigLinkToV2Ray: templateHandler.ConverLinkToConfig,
+                    testConnection: GoidaConnectionTest.CreateFromConfigPath(core.LoadConfig, core.Test),
+                    getUserSettings: () => settingsHandler.UserSettings,
+                    updateUserSettings: settingsHandler.UpdateUserSettings,
+                    onActiveNodeChanged: OnGoidaActiveNodeChanged,
+                    pauseNativeForTest: PauseNativeForGoidaProbe,
+                    resumeNativeAfterTest: ResumeNativeAfterGoidaProbe,
+                    isVpnSessionActive: IsVpnSessionActive);
+
+                bool IsVpnSessionActive()
+                {
+                    return windowFactory.GetMainWindow()?.IsServerRunning ?? false;
+                }
+
+                bool PauseNativeForGoidaProbe()
+                {
+                    MainWindow? mainWindow = windowFactory.GetMainWindow();
+                    return mainWindow?.TryPauseForNativeTest() ?? false;
+                }
+
+                void ResumeNativeAfterGoidaProbe()
+                {
+                    windowFactory.GetMainWindow()?.TryResumeAfterNativeTest();
+                }
+
+                void OnGoidaActiveNodeChanged(GoidaNode node)
+                {
+                    if (node == null || string.IsNullOrWhiteSpace(node.ConfigPath))
+                        return;
+
+                    if (!GoidaProfilePaths.IsMarker(settingsHandler.UserSettings.GetCurrentConfigPath()))
+                        return;
+
+                    settingsHandler.UpdateCurrentConfigPath(GoidaProfilePaths.MarkerPath);
+
+                    Application.Current?.Dispatcher?.BeginInvoke(new System.Action(() =>
+                    {
+                        MainWindow? mainWindow = windowFactory.GetMainWindow();
+                        mainWindow?.UpdateUI();
+                        if (mainWindow?.IsServerRunning == true)
+                            mainWindow.TryRerun();
+                    }), System.Windows.Threading.DispatcherPriority.Background);
+                }
+
+                DateTime lastGoidaMainUiUpdateUtc = DateTime.MinValue;
+                goidaHandler.Manager.NodesUpdated += () =>
+                {
+                    Application.Current?.Dispatcher?.BeginInvoke(new System.Action(() =>
+                    {
+                        if ((DateTime.UtcNow - lastGoidaMainUiUpdateUtc).TotalMilliseconds < 400)
+                            return;
+
+                        lastGoidaMainUiUpdateUtc = DateTime.UtcNow;
+                        windowFactory.GetMainWindow()?.UpdateUI();
+                    }), System.Windows.Threading.DispatcherPriority.Background);
+                };
             }
         }
         

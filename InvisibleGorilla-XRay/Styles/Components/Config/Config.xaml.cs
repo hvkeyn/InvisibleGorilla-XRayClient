@@ -9,6 +9,7 @@ namespace InvisibleGorillaXRay.Components
 {
     using Values;
     using Services;
+    using Services.Goida;
     using Services.Analytics.Configuration;
 
     public partial class Config : UserControl
@@ -68,6 +69,15 @@ namespace InvisibleGorillaXRay.Components
             this.getLogPath = getLogPath;
 
             UpdateUI();
+            ApplyVirtualProfileMode(GoidaProfilePaths.IsMarker(config.Path));
+        }
+
+        private void ApplyVirtualProfileMode(bool isVirtualProfile)
+        {
+            if (!isVirtualProfile)
+                return;
+
+            buttonLog.Visibility = Visibility.Collapsed;
         }
 
         public void SetSelection(bool isSelect)
@@ -99,6 +109,9 @@ namespace InvisibleGorillaXRay.Components
         {
             AnalyticsService.SendEvent(new EditButtonClickedEvent());
 
+            if (GoidaProfilePaths.IsMarker(config.Path))
+                return;
+
             if (!File.Exists(config.Path))
             {
                 MessageBox.Show(
@@ -125,6 +138,9 @@ namespace InvisibleGorillaXRay.Components
         private void OnDeleteButtonClick(object sender, RoutedEventArgs e)
         {
             AnalyticsService.SendEvent(new DeleteButtonClickedEvent());
+
+            if (GoidaProfilePaths.IsMarker(config.Path))
+                return;
 
             MessageBoxResult result = MessageBox.Show(
                 getServerWindow.Invoke(),
@@ -157,6 +173,9 @@ namespace InvisibleGorillaXRay.Components
         private void OnShareButtonClick(object sender, RoutedEventArgs e)
         {
             AnalyticsService.SendEvent(new ShareButtonClickedEvent());
+
+            if (GoidaProfilePaths.IsMarker(config.Path))
+                return;
 
             if (!File.Exists(config.Path))
             {

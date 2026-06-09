@@ -34,6 +34,7 @@ namespace InvisibleGorillaXRay.Mac.Views
         private Func<string> getCurrentConfigPath;
         private Func<UserSettings> getUserSettings;
         private Func<AppRulesWindow> openAppRulesWindow;
+        private Action openGoidaProfileWindow;
         private Func<bool> isCurrentPathEqualRootConfigPath;
         private Func<List<Config>> getAllGeneralConfigs;
         private Func<string, List<Config>> getAllSubscriptionConfigs;
@@ -68,6 +69,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             Func<string> getCurrentConfigPath,
             Func<UserSettings> getUserSettings,
             Func<AppRulesWindow> openAppRulesWindow,
+            Action openGoidaProfileWindow,
             Func<bool> isCurrentPathEqualRootConfigPath,
             Func<List<Config>> getAllGeneralConfigs,
             Func<string, List<Config>> getAllSubscriptionConfigs,
@@ -89,6 +91,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             this.getCurrentConfigPath = getCurrentConfigPath;
             this.getUserSettings = getUserSettings;
             this.openAppRulesWindow = openAppRulesWindow;
+            this.openGoidaProfileWindow = openGoidaProfileWindow;
             this.isCurrentPathEqualRootConfigPath = isCurrentPathEqualRootConfigPath;
             this.getAllGeneralConfigs = getAllGeneralConfigs;
             this.getAllSubscriptionConfigs = getAllSubscriptionConfigs;
@@ -127,6 +130,8 @@ namespace InvisibleGorillaXRay.Mac.Views
             HideAllPanels();
             buttonConfigTab.IsEnabled = false;
             panelConfig.IsVisible = true;
+            panelConfigFabButtons.IsVisible = true;
+            panelSubscriptionFabButton.IsVisible = false;
         }
 
         private void OnSubscriptionTabClick(object sender, RoutedEventArgs e)
@@ -135,6 +140,8 @@ namespace InvisibleGorillaXRay.Mac.Views
             HideAllPanels();
             buttonSubscriptionTab.IsEnabled = false;
             panelSubscription.IsVisible = true;
+            panelConfigFabButtons.IsVisible = false;
+            panelSubscriptionFabButton.IsVisible = true;
         }
 
         private void OnAddConfigButtonClick(object sender, RoutedEventArgs e)
@@ -446,6 +453,12 @@ namespace InvisibleGorillaXRay.Mac.Views
             }
         }
 
+        public void ReloadGeneralConfigsList()
+        {
+            LoadGeneralConfigsList();
+            RefreshAppRulesSummary();
+        }
+
         private void LoadSubscriptionConfigsList()
         {
             List<Config> configs = getAllSubscriptionConfigs?.Invoke(groupPath);
@@ -726,6 +739,8 @@ namespace InvisibleGorillaXRay.Mac.Views
         {
             panelConfig.IsVisible = false;
             panelSubscription.IsVisible = false;
+            panelConfigFabButtons.IsVisible = false;
+            panelSubscriptionFabButton.IsVisible = false;
         }
 
         private void EnableAllTabs()
@@ -739,6 +754,11 @@ namespace InvisibleGorillaXRay.Mac.Views
             AppRulesWindow appRulesWindow = openAppRulesWindow.Invoke();
             await appRulesWindow.ShowDialog(this);
             RefreshAppRulesSummary();
+        }
+
+        private void OnOpenGoidaProfileClick(object? sender, RoutedEventArgs e)
+        {
+            openGoidaProfileWindow?.Invoke();
         }
 
         private void RefreshAppRulesSummary()

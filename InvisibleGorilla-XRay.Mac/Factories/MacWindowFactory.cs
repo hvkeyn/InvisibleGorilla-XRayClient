@@ -14,6 +14,7 @@ using InvisibleGorillaXRay.Handlers.SmartInput;
 using InvisibleGorillaXRay.Values;
 using InvisibleGorillaXRay.Mac.Handlers;
 using InvisibleGorillaXRay.Mac.Views;
+using InvisibleGorillaXRay.Services.Goida;
 
 namespace InvisibleGorillaXRay.Mac.Factories
 {
@@ -72,6 +73,7 @@ namespace InvisibleGorillaXRay.Mac.Factories
             UpdateHandler updateHandler = handlersManager.GetHandler<UpdateHandler>();
             SettingsHandler settingsHandler = handlersManager.GetHandler<SettingsHandler>();
             LinkHandler linkHandler = handlersManager.GetHandler<LinkHandler>();
+            GoidaProfileHandler goidaHandler = handlersManager.GetHandler<GoidaProfileHandler>();
 
             MainWindow mainWindow = new MainWindow();
             var icon = GetAppIcon();
@@ -90,6 +92,7 @@ namespace InvisibleGorillaXRay.Mac.Factories
                 openUpdateWindow: CreateUpdateWindow,
                 openAboutWindow: CreateAboutWindow,
                 openPolicyWindow: CreatePolicyWindow,
+                getServerDisplayText: BuildServerDisplayText,
                 onRunServer: core.Run,
                 onStopServer: core.Stop,
                 onCancelServer: core.Cancel,
@@ -97,16 +100,50 @@ namespace InvisibleGorillaXRay.Mac.Factories
                 onGenerateClientId: settingsHandler.GenerateClientId,
                 onGitHubClick: linkHandler.OpenGitHubRepositoryLink,
                 onBugReportingClick: linkHandler.OpenBugReportingLink,
-                onCustomLinkClick: linkHandler.OpenCustomLink
+                onCustomLinkClick: linkHandler.OpenCustomLink,
+                getGoidaPresentation: BuildGoidaPresentation
             );
 
             return mainWindow;
+
+            GoidaMainPresentation BuildGoidaPresentation()
+            {
+                string currentPath = settingsHandler.UserSettings.GetCurrentConfigPath();
+                if (!GoidaProfilePaths.IsMarker(currentPath))
+                    return new GoidaMainPresentation();
+
+                GoidaNode? activeNode = goidaHandler.Manager.GetActiveNode();
+                return GoidaNodeDisplay.BuildMainPresentation(activeNode);
+            }
 
             bool IsNeedToShowPolicyWindow() => settingsHandler.UserSettings.GetClientId() == "";
 
             bool ShouldStartHidden() => settingsHandler.UserSettings.GetStartHiddenEnabled();
 
             bool IsNeedToAutoConnect() => settingsHandler.UserSettings.GetAutoConnectEnabled();
+
+            string BuildServerDisplayText()
+            {
+                string currentPath = settingsHandler.UserSettings.GetCurrentConfigPath();
+                if (GoidaProfilePaths.IsMarker(currentPath))
+                {
+                    GoidaNode? activeNode = goidaHandler.Manager.GetActiveNode();
+                    if (activeNode != null)
+                    {
+                        string latency = activeNode.LatencyMs >= 0
+                            ? $"{activeNode.LatencyMs} ms"
+                            : "-";
+                        return string.Format(
+                            LocalizationService.GetTerm("Lang.Goida.ServerListNameWithNode"),
+                            activeNode.DisplayName) + $" · {latency}";
+                    }
+
+                    return LocalizationService.GetTerm("Lang.Goida.ServerListName");
+                }
+
+                Config config = configHandler.GetCurrentConfig();
+                return config?.Name ?? LocalizationService.GetTerm(Localization.NO_SERVER_CONFIGURATION);
+            }
         }
 
         public ServerWindow CreateServerWindow()
@@ -114,6 +151,7 @@ namespace InvisibleGorillaXRay.Mac.Factories
             ConfigHandler configHandler = handlersManager.GetHandler<ConfigHandler>();
             TemplateHandler templateHandler = handlersManager.GetHandler<TemplateHandler>();
             SettingsHandler settingsHandler = handlersManager.GetHandler<SettingsHandler>();
+            GoidaProfileHandler goidaHandler = handlersManager.GetHandler<GoidaProfileHandler>();
             MainWindow mainWindow = GetMainWindow();
 
             ServerWindow serverWindow = new ServerWindow();
@@ -121,13 +159,14 @@ namespace InvisibleGorillaXRay.Mac.Factories
                 getCurrentConfigPath: settingsHandler.UserSettings.GetCurrentConfigPath,
                 getUserSettings: () => settingsHandler.UserSettings,
                 openAppRulesWindow: CreateAppRulesWindow,
+                openGoidaProfileWindow: OpenGoidaProfileWindow,
                 isCurrentPathEqualRootConfigPath: configHandler.IsCurrentPathEqualRootConfigPath,
                 getAllGeneralConfigs: configHandler.GetAllGeneralConfigs,
                 getAllSubscriptionConfigs: configHandler.GetAllSubscriptionConfigs,
                 getAllGroups: configHandler.GetAllGroups,
                 convertLinkToConfig: templateHandler.ConverLinkToConfig,
                 convertLinkToSubscription: templateHandler.ConvertLinkToSubscription,
-                loadConfig: core.LoadConfig,
+                loadConfig: LoadConfigForServer,
                 testConnection: core.Test,
                 getLogPath: settingsHandler.UserSettings.GetLogPath,
                 onCopyConfig: configHandler.CopyConfig,
@@ -146,11 +185,36 @@ namespace InvisibleGorillaXRay.Mac.Factories
 
             return serverWindow;
 
+            Status LoadConfigForServer(string path)
+            {
+                if (GoidaProfilePaths.IsMarker(path))
+                {
+                    goidaHandler.Manager.TryEnsureActiveNode();
+                    GoidaNode? activeNode = goidaHandler.Manager.GetActiveNode();
+                    if (activeNode != null && System.IO.File.Exists(activeNode.ConfigPath))
+                        return core.LoadConfig(activeNode.ConfigPath);
+                }
+
+                return core.LoadConfig(path);
+            }
+
+            void OpenGoidaProfileWindow()
+            {
+                GoidaProfileWindow goidaWindow = CreateGoidaProfileWindow();
+                goidaWindow.ShowDialog(serverWindow);
+                serverWindow.ReloadGeneralConfigsList();
+            }
+
             void UpdateConfig(string path)
             {
+                if (GoidaProfilePaths.IsMarker(path))
+                    goidaHandler.Manager.TryEnsureActiveNode();
+
                 settingsHandler.UpdateCurrentConfigPath(path);
                 mainWindow?.UpdateUI();
-                mainWindow?.TryRerun();
+
+                if (mainWindow?.IsServerRunning == true)
+                    mainWindow.TryRerun();
             }
 
             bool AddBridges(List<string> bridgeLines, BridgeType bridgeType)
@@ -295,6 +359,37 @@ namespace InvisibleGorillaXRay.Mac.Factories
             {
                 return core.GetVersion();
             }
+        }
+
+        public GoidaProfileWindow CreateGoidaProfileWindow()
+        {
+            SettingsHandler settingsHandler = handlersManager.GetHandler<SettingsHandler>();
+            GoidaProfileHandler goidaHandler = handlersManager.GetHandler<GoidaProfileHandler>();
+            MainWindow mainWindow = GetMainWindow();
+
+            GoidaProfileWindow goidaWindow = new GoidaProfileWindow();
+            var icon = GetAppIcon();
+            if (icon != null) goidaWindow.Icon = icon;
+
+            goidaWindow.Setup(
+                goidaHandler: goidaHandler,
+                getUserSettings: () => settingsHandler.UserSettings,
+                onUpdateUserSettings: settingsHandler.UpdateUserSettings,
+                onActiveNodeChanged: node =>
+                {
+                    if (node == null || string.IsNullOrWhiteSpace(node.ConfigPath))
+                        return;
+
+                    settingsHandler.UpdateCurrentConfigPath(GoidaProfilePaths.MarkerPath);
+                    mainWindow?.UpdateUI();
+                    mainWindow?.TryRerun();
+                });
+
+            SetupLocalizedWindowTitle(
+                window: goidaWindow,
+                term: "Lang.Goida.WindowTitle");
+
+            return goidaWindow;
         }
 
         public PolicyWindow CreatePolicyWindow()

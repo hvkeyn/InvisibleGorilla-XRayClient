@@ -1,0 +1,130 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="InvisibleGorillaXRay.Mac.Views.GoidaProfileWindow"
+        Title="Invisible Gorilla XRay - Goida profile"
+        Width="760"
+        Height="680"
+        MinWidth="620"
+        MinHeight="520"
+        CanResize="True"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="{StaticResource Color.DarkGray}">
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Foreground="White"
+                   Text="{DynamicResource Lang.Goida.Title}"
+                   FontWeight="SemiBold"
+                   FontSize="18"/>
+
+        <TextBlock Grid.Row="0"
+                   Margin="0,28,0,0"
+                   Foreground="#C9C9C9"
+                   TextWrapping="Wrap"
+                   FontSize="12"
+                   Text="{DynamicResource Lang.Goida.Description}"/>
+
+        <Border Grid.Row="1"
+                Margin="0,14,0,0"
+                Padding="12"
+                BorderBrush="{StaticResource Color.LightGray}"
+                BorderThickness="1"
+                CornerRadius="8">
+            <StackPanel Spacing="8">
+                <CheckBox x:Name="checkBoxEnabled"
+                          Foreground="White"
+                          Content="{DynamicResource Lang.Goida.Enabled}"
+                          Checked="OnSettingsChanged"
+                          Unchecked="OnSettingsChanged"/>
+                <CheckBox x:Name="checkBoxAutoSwitch"
+                          Foreground="White"
+                          Content="{DynamicResource Lang.Goida.AutoSwitch}"
+                          Checked="OnSettingsChanged"
+                          Unchecked="OnSettingsChanged"/>
+                <Grid ColumnDefinitions="*,8,*,8,Auto">
+                    <ComboBox x:Name="comboBoxSelectionMode"
+                              Grid.Column="0"
+                              Height="28"
+                              SelectionChanged="OnSelectionModeChanged"/>
+                    <TextBox x:Name="textBoxFilterList"
+                             Grid.Column="2"
+                             Height="28"
+                             Watermark="{DynamicResource Lang.Goida.FilterListHint}"
+                             TextChanged="OnFilterChanged"/>
+                    <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="8">
+                        <Button Width="110"
+                                Height="28"
+                                Content="{DynamicResource Lang.Goida.Refresh}"
+                                Theme="{StaticResource Button.Rectangle.Gray}"
+                                Foreground="White"
+                                Click="OnRefreshClick"/>
+                        <Button Width="110"
+                                Height="28"
+                                Content="{DynamicResource Lang.Goida.ProbeAll}"
+                                Theme="{StaticResource Button.Rectangle.Gray}"
+                                Foreground="White"
+                                Click="OnProbeClick"/>
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <TextBlock x:Name="textBlockStatus"
+                   Grid.Row="2"
+                   Margin="0,8,0,0"
+                   Foreground="#9AD9B0"
+                   TextWrapping="Wrap"
+                   FontSize="12"/>
+
+        <ListBox x:Name="listNodes"
+                 Grid.Row="3"
+                 Margin="0,8,0,0"
+                 SelectionMode="Single"
+                 SelectionChanged="OnNodeSelectionChanged">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Grid ColumnDefinitions="40,*,140,70,80,60" Margin="0,4">
+                        <TextBlock Grid.Column="0" Foreground="White" Text="{Binding ListId}"/>
+                        <TextBlock Grid.Column="1" Foreground="White" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Grid.Column="2" Foreground="#C9C9C9" Text="{Binding Endpoint}" FontSize="11"/>
+                        <TextBlock Grid.Column="3" Foreground="#C9C9C9" Text="{Binding LatencyText}"/>
+                        <TextBlock Grid.Column="4" Foreground="#C9C9C9" Text="{Binding StatusText}"/>
+                        <TextBlock Grid.Column="5" Foreground="#7CFC98" Text="{Binding ActiveMark}"/>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <StackPanel Grid.Row="4"
+                    Margin="0,12,0,0"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="10">
+            <Button Width="140"
+                    Height="30"
+                    Content="{DynamicResource Lang.Goida.SetActive}"
+                    Theme="{StaticResource Button.Rectangle.Green}"
+                    Click="OnSetActiveClick"/>
+            <Button Width="140"
+                    Height="30"
+                    Content="{DynamicResource Lang.Goida.AddToPool}"
+                    Theme="{StaticResource Button.Rectangle.Gray}"
+                    Foreground="White"
+                    Click="OnAddToPoolClick"/>
+            <Button Width="120"
+                    Height="30"
+                    Content="{DynamicResource Lang.Button.Confirm}"
+                    Theme="{StaticResource Button.Rectangle.Green}"
+                    Click="OnCloseClick"/>
+        </StackPanel>
+    </Grid>
+</Window>

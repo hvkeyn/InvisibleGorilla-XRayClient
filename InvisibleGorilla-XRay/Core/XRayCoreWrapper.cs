@@ -9,6 +9,8 @@ namespace InvisibleGorillaXRay.Core
 
     internal class XRayCoreWrapper
     {
+        private static readonly object NativeLock = new();
+
         public static string GetConfigFormat(string path)
         {
             IntPtr pathPtr = StringToUtf8Ptr(path);
@@ -77,14 +79,20 @@ namespace InvisibleGorillaXRay.Core
             IntPtr passwordPtr = StringToUtf8Ptr(credentials.Password);
             try
             {
-                DiagnosticLog.Write("XRayWrapper", "Calling native StartServer...");
-                StartServerNative(config, port, logLevel.ToString(), logPathPtr, isSocks, isUdpEnabled, usernamePtr, passwordPtr);
-                DiagnosticLog.Write("XRayWrapper", "Native StartServer returned normally");
-            }
-            catch (Exception ex)
-            {
-                DiagnosticLog.WriteException("XRayWrapper.StartServer", ex);
-                throw;
+                lock (NativeLock)
+                {
+                    try
+                    {
+                        DiagnosticLog.Write("XRayWrapper", "Calling native StartServer...");
+                        StartServerNative(config, port, logLevel.ToString(), logPathPtr, isSocks, isUdpEnabled, usernamePtr, passwordPtr);
+                        DiagnosticLog.Write("XRayWrapper", "Native StartServer returned normally");
+                    }
+                    catch (Exception ex)
+                    {
+                        DiagnosticLog.WriteException("XRayWrapper.StartServer", ex);
+                        throw;
+                    }
+                }
             }
             finally
             {
@@ -99,7 +107,17 @@ namespace InvisibleGorillaXRay.Core
 
         public static void StopServer()
         {
-            StopServerNative();
+            lock (NativeLock)
+            {
+                try
+                {
+                    StopServerNative();
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("XRayWrapper.StopServer", ex);
+                }
+            }
 
             [DllImport(Path.XRAY_CORE_DLL, EntryPoint = "StopServer")]
             static extern void StopServerNative();
@@ -107,7 +125,18 @@ namespace InvisibleGorillaXRay.Core
 
         public static int TestConnection(string config, int port)
         {
-            return TestConnectionNative(config, port);
+            lock (NativeLock)
+            {
+                try
+                {
+                    return TestConnectionNative(config, port);
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("XRayWrapper.TestConnection", ex);
+                    return Values.Availability.ERROR;
+                }
+            }
 
             [DllImport(Path.XRAY_CORE_DLL, EntryPoint = "TestConnection")]
             static extern int TestConnectionNative(string config, int port);

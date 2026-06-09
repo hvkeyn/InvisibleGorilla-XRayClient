@@ -21,6 +21,8 @@ namespace InvisibleGorillaXRay.Mac.Views
     {
         private bool isRerunRequest;
         private bool isRunWorkerBusy;
+
+        public bool IsServerRunning => isRunWorkerBusy;
         private bool isDialogOpen;
         private readonly ConnectionInfoService connectionInfoService = new();
         private DispatcherTimer connectionInfoTimer;
@@ -41,6 +43,7 @@ namespace InvisibleGorillaXRay.Mac.Views
         private Func<UpdateWindow> openUpdateWindow;
         private Func<AboutWindow> openAboutWindow;
         private Func<PolicyWindow> openPolicyWindow;
+        private Func<string> getServerDisplayText;
         private Action<string> onRunServer;
         private Action onCancelServer;
         private Action onStopServer;
@@ -49,6 +52,7 @@ namespace InvisibleGorillaXRay.Mac.Views
         private Action onGitHubClick;
         private Action onBugReportingClick;
         private Action<string> onCustomLinkClick;
+        private Func<InvisibleGorillaXRay.Services.Goida.GoidaMainPresentation> getGoidaPresentation;
 
         private LocalizationService LocalizationService => ServiceLocator.Get<LocalizationService>();
         private AnalyticsService AnalyticsService => ServiceLocator.Get<AnalyticsService>();
@@ -74,6 +78,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             Func<UpdateWindow> openUpdateWindow,
             Func<AboutWindow> openAboutWindow,
             Func<PolicyWindow> openPolicyWindow,
+            Func<string> getServerDisplayText,
             Action<string> onRunServer,
             Action onStopServer,
             Action onCancelServer,
@@ -81,7 +86,8 @@ namespace InvisibleGorillaXRay.Mac.Views
             Action onGenerateClientId,
             Action onGitHubClick,
             Action onBugReportingClick,
-            Action<string> onCustomLinkClick)
+            Action<string> onCustomLinkClick,
+            Func<InvisibleGorillaXRay.Services.Goida.GoidaMainPresentation> getGoidaPresentation = null)
         {
             this.isNeedToShowPolicyWindow = isNeedToShowPolicyWindow;
             this.shouldStartHidden = shouldStartHidden;
@@ -95,6 +101,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             this.openUpdateWindow = openUpdateWindow;
             this.openAboutWindow = openAboutWindow;
             this.openPolicyWindow = openPolicyWindow;
+            this.getServerDisplayText = getServerDisplayText;
             this.onRunServer = onRunServer;
             this.onCancelServer = onCancelServer;
             this.onStopServer = onStopServer;
@@ -104,6 +111,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             this.onGitHubClick = onGitHubClick;
             this.onBugReportingClick = onBugReportingClick;
             this.onCustomLinkClick = onCustomLinkClick;
+            this.getGoidaPresentation = getGoidaPresentation;
 
             UpdateUI();
         }
@@ -128,15 +136,58 @@ namespace InvisibleGorillaXRay.Mac.Views
 
         public void UpdateUI()
         {
-            Config config = getConfig?.Invoke();
-
-            if (config == null)
+            if (getServerDisplayText != null)
+                textServerConfig.Text = getServerDisplayText.Invoke();
+            else
             {
-                textServerConfig.Text = LocalizationService.GetTerm(Localization.NO_SERVER_CONFIGURATION);
+                Config config = getConfig?.Invoke();
+                textServerConfig.Text = config == null
+                    ? LocalizationService.GetTerm(Localization.NO_SERVER_CONFIGURATION)
+                    : config.Name;
+            }
+
+            ApplyGoidaSummary();
+        }
+
+        private static readonly IBrush WifiInactiveBrush = new SolidColorBrush(Color.Parse("#4A4A4A"));
+
+        private void ApplyGoidaSummary()
+        {
+            if (panelGoidaDetails == null)
+                return;
+
+            InvisibleGorillaXRay.Services.Goida.GoidaMainPresentation presentation =
+                getGoidaPresentation?.Invoke() ?? new InvisibleGorillaXRay.Services.Goida.GoidaMainPresentation();
+
+            if (string.IsNullOrWhiteSpace(presentation.Summary))
+            {
+                panelGoidaDetails.IsVisible = false;
                 return;
             }
 
-            textServerConfig.Text = config.Name;
+            IBrush statusBrush = new SolidColorBrush(Color.Parse(presentation.ColorHex));
+            int level = presentation.SignalLevel;
+
+            wifiDot.Fill = statusBrush;
+            wifiArcInner.Stroke = level >= 2 ? statusBrush : WifiInactiveBrush;
+            wifiArcMiddle.Stroke = level >= 3 ? statusBrush : WifiInactiveBrush;
+            wifiArcOuter.Stroke = level >= 4 ? statusBrush : WifiInactiveBrush;
+
+            textGoidaSignalLabel.Text = LocalizeOrKey(presentation.QualityLabel);
+            textGoidaSignalLabel.Foreground = statusBrush;
+            textGoidaLatency.Text = presentation.LatencyText;
+            textGoidaSummary.Text = presentation.Summary;
+            panelGoidaDetails.IsVisible = true;
+        }
+
+        private string LocalizeOrKey(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+                return string.Empty;
+
+            object value = null;
+            Avalonia.Application.Current?.TryFindResource(key, out value);
+            return value as string ?? key;
         }
 
         public void TryRerun()

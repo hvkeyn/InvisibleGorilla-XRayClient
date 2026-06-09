@@ -87,6 +87,9 @@ namespace InvisibleGorillaXRay.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
         public List<TorProfile> TorProfiles;
 
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public GoidaProfileSettings Goida;
+
         public UserSettings()
         {
             this.ClientId = "";
@@ -113,6 +116,7 @@ namespace InvisibleGorillaXRay.Models
             this.AppRuleTemplateBindings = new List<AppRuleTemplateBinding>();
             this.Tor = new TorSettings();
             this.TorProfiles = new List<TorProfile>();
+            this.Goida = new GoidaProfileSettings();
         }
 
         public UserSettings(
@@ -160,9 +164,12 @@ namespace InvisibleGorillaXRay.Models
             this.AppRuleTemplateBindings = NormalizeTemplateBindings(appRuleTemplateBindings);
             this.Tor = new TorSettings();
             this.TorProfiles = new List<TorProfile>();
+            this.Goida = new GoidaProfileSettings();
         }
 
         public TorSettings GetTorSettings() => Tor ??= new TorSettings();
+
+        public GoidaProfileSettings GetGoidaSettings() => Goida ??= new GoidaProfileSettings();
 
         public List<TorProfile> GetTorProfiles() => TorProfiles ??= new List<TorProfile>();
 

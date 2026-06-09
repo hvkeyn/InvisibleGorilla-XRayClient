@@ -2,6 +2,8 @@ using InvisibleGorillaXRay.Handlers;
 using InvisibleGorillaXRay.Handlers.DeepLinks;
 using InvisibleGorillaXRay.Handlers.Settings.Startup;
 using InvisibleGorillaXRay.Managers;
+using InvisibleGorillaXRay.Models;
+using InvisibleGorillaXRay.Services.Goida;
 
 namespace InvisibleGorillaXRay.Android.Managers
 {
@@ -10,7 +12,8 @@ namespace InvisibleGorillaXRay.Android.Managers
     using InvisibleGorillaXRay.Android.Handlers.Proxies;
     using InvisibleGorillaXRay.Android.Handlers.Settings;
     using InvisibleGorillaXRay.Android.Handlers.Tunnels;
-    using InvisibleGorillaXRay.Models;
+    using InvisibleGorillaXRay.Android.Services;
+    using InvisibleGorillaXRay.Core;
 
     public sealed class AndroidHandlersInitializer
     {
@@ -32,15 +35,19 @@ namespace InvisibleGorillaXRay.Android.Managers
             HandlersManager.AddHandler(new BroadcastHandler());
             HandlersManager.AddHandler(new DeepLinkHandler(() => new AndroidDeepLink()));
             HandlersManager.AddHandler(LocalizationHandler);
+            HandlersManager.AddHandler(new GoidaProfileHandler());
         }
 
-        public void Setup()
+        public void Setup(InvisibleGorillaXRayCore core)
         {
             SetupTunnelHandler();
             SetupConfigHandler();
             SetupUpdateHandler();
             SetupDeepLinkHandler();
             SetupLocalizationHandler();
+            SetupGoidaProfileHandler(core);
+
+            HandlersManager.GetHandler<GoidaProfileHandler>().StartBackground();
 
             void SetupTunnelHandler()
             {
@@ -93,6 +100,20 @@ namespace InvisibleGorillaXRay.Android.Managers
             {
                 SettingsHandler settingsHandler = HandlersManager.GetHandler<SettingsHandler>();
                 LocalizationHandler.Setup(settingsHandler.UserSettings.GetLanguage);
+            }
+
+            void SetupGoidaProfileHandler(InvisibleGorillaXRayCore coreInstance)
+            {
+                SettingsHandler settingsHandler = HandlersManager.GetHandler<SettingsHandler>();
+                TemplateHandler templateHandler = HandlersManager.GetHandler<TemplateHandler>();
+                GoidaProfileHandler goidaHandler = HandlersManager.GetHandler<GoidaProfileHandler>();
+
+                goidaHandler.Setup(
+                    convertConfigLinkToV2Ray: templateHandler.ConverLinkToConfig,
+                    testConnection: GoidaConnectionTest.CreateFromConfigPath(coreInstance.LoadConfig, coreInstance.Test),
+                    getUserSettings: () => settingsHandler.UserSettings,
+                    updateUserSettings: settingsHandler.UpdateUserSettings,
+                    onActiveNodeChanged: node => GoidaActiveNodeBridge.OnActiveNodeChanged?.Invoke(node));
             }
         }
     }

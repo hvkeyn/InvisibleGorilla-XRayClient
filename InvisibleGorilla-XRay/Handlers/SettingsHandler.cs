@@ -43,6 +43,7 @@ namespace InvisibleGorillaXRay.Handlers
             this.userSettings.AppRuleTemplates = CloneAppRuleTemplates(userSettings.AppRuleTemplates);
             this.userSettings.AppRuleTemplateBindings = CloneAppRuleTemplateBindings(userSettings.AppRuleTemplateBindings);
             this.userSettings.Tor = (userSettings.Tor ?? this.userSettings.Tor ?? new TorSettings()).Clone();
+            this.userSettings.Goida = (userSettings.Goida ?? this.userSettings.Goida ?? new GoidaProfileSettings()).Clone();
 
             UpdateStartupSetting();
             SaveUserSettings();
@@ -96,6 +97,7 @@ namespace InvisibleGorillaXRay.Handlers
                 settings.AppRuleTemplates = CloneAppRuleTemplates(settings.AppRuleTemplates);
                 settings.AppRuleTemplateBindings = CloneAppRuleTemplateBindings(settings.AppRuleTemplateBindings);
                 settings.Tor = (settings.Tor ?? new TorSettings()).Clone();
+                settings.Goida = (settings.Goida ?? new GoidaProfileSettings()).Clone();
                 return settings;
             }
         }

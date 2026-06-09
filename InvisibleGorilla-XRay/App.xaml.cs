@@ -88,6 +88,12 @@ namespace InvisibleGorillaXRay
         {
             try
             {
+                appManager?.HandlersManager?.GetHandler<GoidaProfileHandler>()?.StopBackground();
+            }
+            catch { }
+
+            try
+            {
                 appManager?.Core?.Stop();
             }
             catch { }
