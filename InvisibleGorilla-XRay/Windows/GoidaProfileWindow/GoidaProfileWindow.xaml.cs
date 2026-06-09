@@ -183,6 +183,8 @@ namespace InvisibleGorillaXRay
             if (goidaHandler == null)
                 return;
 
+            CaptureListSelectionFromControls();
+
             if (!HasVpnListsSelected())
             {
                 SetStatusText(Localize("Lang.Goida.NoListsSelected"));
@@ -309,9 +311,14 @@ namespace InvisibleGorillaXRay
             if (goidaHandler == null || probeUiInProgress)
                 return;
 
+            CaptureListSelectionFromControls();
+
+            int visibleCount = goidaHandler.Manager.GetVisibleNodes().Count;
             if (goidaHandler.Manager.CountManualProbeTargets() == 0)
             {
-                SetStatusText(Localize("Lang.Goida.EmptyHint"));
+                SetStatusText(visibleCount > 0
+                    ? string.Format(Localize("Lang.Goida.ProbeNoTargets"), visibleCount)
+                    : Localize("Lang.Goida.EmptyHint"));
                 return;
             }
 
@@ -480,9 +487,10 @@ namespace InvisibleGorillaXRay
             if (isApplyingListSelection)
                 return;
 
-            listSelectionDirty = true;
-            listSelectionSaveTimer?.Stop();
-            listSelectionSaveTimer?.Start();
+            // Persist immediately — the 300 ms debounce left the status line
+            // and grid out of sync ("not loaded" while rows were still visible).
+            CaptureListSelectionFromControls();
+            RefreshGrid();
             UpdateStatusSummary();
 
             if (!HasVpnListsSelected())

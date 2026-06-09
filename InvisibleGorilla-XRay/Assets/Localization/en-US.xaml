@@ -227,6 +227,7 @@
     <system:String x:Key="Lang.Goida.NodesLoaded">{0} nodes loaded</system:String>
     <system:String x:Key="Lang.Goida.RefreshFailed">Failed to refresh lists. See diagnostic.log for details.</system:String>
     <system:String x:Key="Lang.Goida.ProbeFailed">Failed to probe nodes.</system:String>
+    <system:String x:Key="Lang.Goida.ProbeNoTargets">{0} nodes are visible but none match the current probe scope. Click Refresh lists, then Probe all again.</system:String>
     <system:String x:Key="Lang.Goida.ServerListName">Goida profile</system:String>
     <system:String x:Key="Lang.Goida.ServerListNameWithNode">Goida · {0}</system:String>
     <system:String x:Key="Lang.Goida.ListSelectionTitle">Lists to download (1–26):</system:String>

@@ -493,22 +493,27 @@ namespace InvisibleGorillaXRay.Services.Goida
             IEnumerable<GoidaNode> filtered = nodes
                 .Where(node => enabledLists.Contains(node.ListId));
 
-            if (settings.SelectionMode == GoidaSelectionMode.ManualFixed
-                && !string.IsNullOrWhiteSpace(settings.PinnedNodeId))
+            // Manual "Probe all" always scans every enabled list — pool/pinned
+            // filters apply only to background probes and auto-switch selection.
+            if (!manual)
             {
-                return filtered
-                    .Where(node => string.Equals(node.Id, settings.PinnedNodeId, StringComparison.OrdinalIgnoreCase))
-                    .Take(batchLimit);
-            }
+                if (settings.SelectionMode == GoidaSelectionMode.ManualFixed
+                    && !string.IsNullOrWhiteSpace(settings.PinnedNodeId))
+                {
+                    return filtered
+                        .Where(node => string.Equals(node.Id, settings.PinnedNodeId, StringComparison.OrdinalIgnoreCase))
+                        .Take(batchLimit);
+                }
 
-            if (settings.SelectionMode == GoidaSelectionMode.ManualPool
-                && settings.ManualPoolNodeIds?.Count > 0)
-            {
-                HashSet<string> pool = settings.ManualPoolNodeIds
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                return filtered
-                    .Where(node => pool.Contains(node.Id))
-                    .Take(batchLimit);
+                if (settings.SelectionMode == GoidaSelectionMode.ManualPool
+                    && settings.ManualPoolNodeIds?.Count > 0)
+                {
+                    HashSet<string> pool = settings.ManualPoolNodeIds
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    return filtered
+                        .Where(node => pool.Contains(node.Id))
+                        .Take(batchLimit);
+                }
             }
 
             List<GoidaNode> materialized = filtered.ToList();

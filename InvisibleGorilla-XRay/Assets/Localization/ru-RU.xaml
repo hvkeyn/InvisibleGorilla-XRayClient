@@ -227,6 +227,7 @@
     <system:String x:Key="Lang.Goida.NodesLoaded">Загружено узлов: {0}</system:String>
     <system:String x:Key="Lang.Goida.RefreshFailed">Не удалось обновить списки. Подробности в diagnostic.log.</system:String>
     <system:String x:Key="Lang.Goida.ProbeFailed">Не удалось проверить узлы.</system:String>
+    <system:String x:Key="Lang.Goida.ProbeNoTargets">Видно {0} узлов, но ни один не попал в область проверки. Нажмите «Обновить списки», затем снова «Проверить все».</system:String>
     <system:String x:Key="Lang.Goida.ServerListName">Профиль Goida</system:String>
     <system:String x:Key="Lang.Goida.ServerListNameWithNode">Goida · {0}</system:String>
     <system:String x:Key="Lang.Goida.ListSelectionTitle">Списки для загрузки (1–26):</system:String>
