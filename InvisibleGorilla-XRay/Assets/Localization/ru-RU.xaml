@@ -217,6 +217,10 @@
     <system:String x:Key="Lang.Goida.Column.Status">Статус</system:String>
     <system:String x:Key="Lang.Goida.Column.Active">Активный</system:String>
     <system:String x:Key="Lang.Goida.Status.Ok">OK</system:String>
+    <system:String x:Key="Lang.Goida.Status.VlessOk">VLESS OK</system:String>
+    <system:String x:Key="Lang.Goida.Status.TcpOnly">Только TCP</system:String>
+    <system:String x:Key="Lang.Goida.Signal.Unverified">Не проверен</system:String>
+    <system:String x:Key="Lang.Goida.AutoPoolNeedsVerify">Нет VLESS-проверенных узлов. Нажмите «Проверить все» и дождитесь реальной проверки подключения, затем снова «Автопул».</system:String>
     <system:String x:Key="Lang.Goida.Status.Timeout">Таймаут</system:String>
     <system:String x:Key="Lang.Goida.Status.Error">Ошибка</system:String>
     <system:String x:Key="Lang.Goida.Status.Unknown">Неизвестно</system:String>

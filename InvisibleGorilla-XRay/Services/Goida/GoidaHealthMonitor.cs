@@ -88,10 +88,10 @@ namespace InvisibleGorillaXRay.Services.Goida
                     int latency = await Task.Run(
                         () => ProbeNodeSafe(node),
                         cancellationToken).ConfigureAwait(false);
-                    ApplyProbeResult(node.Id, latency, ref ok, ref timeout, ref error, ref completed,
-                        ref bestNode, ref bestLatency);
+                    ApplyProbeResult(node.Id, latency, vlessVerified: true, ref ok, ref timeout, ref error,
+                        ref completed, ref bestNode, ref bestLatency);
 
-                    NotifyProgress(completed, targets.Count, node.Id, latency);
+                    NotifyProgress(completed, targets.Count, node.Id, latency, vlessVerified: true);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
@@ -101,10 +101,11 @@ namespace InvisibleGorillaXRay.Services.Goida
                 catch (Exception ex)
                 {
                     DiagnosticLog.WriteException($"Goida.ProbeNode.{node.Id}", ex);
-                    store.UpdateNodeStatus(node.Id, Values.Availability.ERROR, GoidaNodeStatus.Error);
+                    store.UpdateNodeStatus(node.Id, Values.Availability.ERROR, GoidaNodeStatus.Error,
+                        vlessVerified: false);
                     completed++;
                     error++;
-                    NotifyProgress(completed, targets.Count, node.Id, Values.Availability.ERROR);
+                    NotifyProgress(completed, targets.Count, node.Id, Values.Availability.ERROR, vlessVerified: false);
                 }
                 finally
                 {
@@ -112,7 +113,7 @@ namespace InvisibleGorillaXRay.Services.Goida
                 }
 
                 if (index < targets.Count - 1 && !cancellationToken.IsCancellationRequested)
-                    await Task.Delay(150, cancellationToken).ConfigureAwait(false);
+                    await Task.Delay(80, cancellationToken).ConfigureAwait(false);
             }
 
             return BuildResult(targets.Count, completed, ok, timeout, error, cancelled, bestNode);
@@ -150,9 +151,9 @@ namespace InvisibleGorillaXRay.Services.Goida
                             if (cancellationToken.IsCancellationRequested)
                                 return;
 
-                            ApplyProbeResult(node.Id, latency, ref ok, ref timeout, ref error, ref completed,
-                                ref bestNode, ref bestLatency);
-                            NotifyProgress(completed, targets.Count, node.Id, latency);
+                            ApplyProbeResult(node.Id, latency, vlessVerified: false, ref ok, ref timeout,
+                                ref error, ref completed, ref bestNode, ref bestLatency);
+                            NotifyProgress(completed, targets.Count, node.Id, latency, vlessVerified: false);
                         }
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -167,7 +168,8 @@ namespace InvisibleGorillaXRay.Services.Goida
                             store.UpdateNodeStatus(node.Id, Values.Availability.ERROR, GoidaNodeStatus.Error);
                             completed++;
                             error++;
-                            NotifyProgress(completed, targets.Count, node.Id, Values.Availability.ERROR);
+                            NotifyProgress(completed, targets.Count, node.Id, Values.Availability.ERROR,
+                                vlessVerified: false);
                         }
                     }
                     finally
@@ -192,9 +194,12 @@ namespace InvisibleGorillaXRay.Services.Goida
             }
         }
 
+        public int TestNodeNative(GoidaNode node) => ProbeNodeSafe(node);
+
         private void ApplyProbeResult(
             string nodeId,
             int latency,
+            bool vlessVerified,
             ref int ok,
             ref int timeout,
             ref int error,
@@ -202,15 +207,17 @@ namespace InvisibleGorillaXRay.Services.Goida
             ref GoidaNode? bestNode,
             ref int bestLatency)
         {
-            GoidaNodeStatus status = MapLatency(latency);
-            store.UpdateNodeStatus(nodeId, latency, status);
+            GoidaNodeStatus status = vlessVerified
+                ? MapLatency(latency)
+                : MapTcpOnlyLatency(latency);
+            store.UpdateNodeStatus(nodeId, latency, status, vlessVerified);
             completed++;
 
             switch (status)
             {
                 case GoidaNodeStatus.Ok:
                     ok++;
-                    if (latency >= 0 && latency < bestLatency)
+                    if (vlessVerified && latency >= 0 && latency < bestLatency)
                     {
                         bestLatency = latency;
                         bestNode = store.FindById(nodeId);
@@ -220,14 +227,18 @@ namespace InvisibleGorillaXRay.Services.Goida
                     timeout++;
                     break;
                 default:
+                    if (!vlessVerified && latency >= 0)
+                        break;
                     error++;
                     break;
             }
         }
 
-        private void NotifyProgress(int completed, int total, string nodeId, int latencyMs)
+        private void NotifyProgress(int completed, int total, string nodeId, int latencyMs, bool vlessVerified)
         {
-            GoidaNodeStatus status = MapLatency(latencyMs);
+            GoidaNodeStatus status = vlessVerified
+                ? MapLatency(latencyMs)
+                : MapTcpOnlyLatency(latencyMs);
             if (completed % ProgressNotifyEvery == 0 || completed == total)
                 NodesUpdated?.Invoke();
 
@@ -286,6 +297,18 @@ namespace InvisibleGorillaXRay.Services.Goida
                 Values.Availability.ERROR => GoidaNodeStatus.Error,
                 Values.Availability.NOT_CHECKED => GoidaNodeStatus.Unknown,
                 _ when latency >= 0 => GoidaNodeStatus.Ok,
+                _ => GoidaNodeStatus.Error
+            };
+        }
+
+        /// <summary>TCP port open only — not promoted to Ok until VLESS is verified.</summary>
+        private static GoidaNodeStatus MapTcpOnlyLatency(int latency)
+        {
+            return latency switch
+            {
+                Values.Availability.TIMEOUT => GoidaNodeStatus.Timeout,
+                Values.Availability.ERROR => GoidaNodeStatus.Error,
+                _ when latency >= 0 => GoidaNodeStatus.Unknown,
                 _ => GoidaNodeStatus.Error
             };
         }

@@ -330,7 +330,7 @@ namespace InvisibleGorillaXRay.Services.Goida
                 // A TCP connect only proves the endpoint is reachable, not that VLESS
                 // actually works. Verify the fastest candidates with a real xray test
                 // so dead "3 ms OK" nodes don't end up at the top and get auto-picked.
-                if (manual && !result.Cancelled && result.Ok > 0 && isVpnSessionActive?.Invoke() != true)
+                if (manual && !result.Cancelled && isVpnSessionActive?.Invoke() != true)
                     await VerifyTopNodesAsync(cancellationToken).ConfigureAwait(false);
 
                 if (!result.Cancelled && result.Ok > 0 && settings.AutoSwitchOnFly)
@@ -372,7 +372,8 @@ namespace InvisibleGorillaXRay.Services.Goida
             HashSet<string> failedIds;
             if (!string.IsNullOrWhiteSpace(activeId))
             {
-                store.UpdateNodeStatus(activeId, Values.Availability.ERROR, GoidaNodeStatus.Error);
+                store.UpdateNodeStatus(activeId, Values.Availability.ERROR, GoidaNodeStatus.Error,
+                    vlessVerified: false);
                 lock (recentTunnelFailures)
                     recentTunnelFailures[activeId] = DateTime.UtcNow;
             }
@@ -387,9 +388,6 @@ namespace InvisibleGorillaXRay.Services.Goida
 
             if (next == null || string.Equals(next.Id, activeId, StringComparison.OrdinalIgnoreCase))
             {
-                // Every node in the pool was tried — clear the short cooldown and
-                // walk the list again from the top.
-                // Every candidate was tried — reset short cooldown and walk again.
                 lock (recentTunnelFailures)
                     recentTunnelFailures.Clear();
 
@@ -398,18 +396,117 @@ namespace InvisibleGorillaXRay.Services.Goida
                     store.GetNodes(),
                     activeId,
                     new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            }
 
-                if (next == null || string.Equals(next.Id, activeId, StringComparison.OrdinalIgnoreCase))
-                {
-                    NodesUpdated?.Invoke();
-                    return false;
-                }
+            if (next == null || string.Equals(next.Id, activeId, StringComparison.OrdinalIgnoreCase))
+                next = TryLiveVlessFailover(settings, activeId, failedIds);
+
+            if (next == null || string.Equals(next.Id, activeId, StringComparison.OrdinalIgnoreCase))
+            {
+                NodesUpdated?.Invoke();
+                return false;
             }
 
             lastFailoverUtc = DateTime.UtcNow;
             DiagnosticLog.Write("Goida.ReportTunnelFailure", $"Switching {activeId} -> {next.Id} ({next.DisplayName})");
             SetActiveNode(next.Id, notifyExternal: true);
             return true;
+        }
+
+        private const int MaxLiveFailoverTests = 20;
+
+        /// <summary>
+        /// When the pre-verified pool is exhausted, pause the live session and run
+        /// real VLESS tests on the next candidates until one works.
+        /// </summary>
+        private GoidaNode? TryLiveVlessFailover(
+            GoidaProfileSettings settings,
+            string activeId,
+            HashSet<string> failedIds)
+        {
+            List<GoidaNode> candidates = BuildLiveFailoverCandidates(settings, activeId, failedIds);
+            if (candidates.Count == 0)
+                return null;
+
+            bool paused = pauseNativeForTest?.Invoke() == true;
+            try
+            {
+                int tested = 0;
+                foreach (GoidaNode node in candidates)
+                {
+                    if (tested++ >= MaxLiveFailoverTests)
+                        break;
+
+                    int latency = monitor.TestNodeNative(node);
+                    if (latency >= 0
+                        && latency != Values.Availability.ERROR
+                        && latency != Values.Availability.TIMEOUT)
+                    {
+                        store.UpdateNodeStatus(node.Id, latency, GoidaNodeStatus.Ok, vlessVerified: true);
+                        DiagnosticLog.Write("Goida.LiveFailover",
+                            $"VLESS ok on {node.Id} ({node.DisplayName}) in {latency} ms");
+                        return store.FindById(node.Id);
+                    }
+
+                    store.UpdateNodeStatus(node.Id, Values.Availability.ERROR, GoidaNodeStatus.Error,
+                        vlessVerified: false);
+                    lock (recentTunnelFailures)
+                        recentTunnelFailures[node.Id] = DateTime.UtcNow;
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("Goida.TryLiveVlessFailover", ex);
+            }
+            finally
+            {
+                if (paused)
+                    resumeNativeAfterTest?.Invoke();
+            }
+
+            return null;
+        }
+
+        private List<GoidaNode> BuildLiveFailoverCandidates(
+            GoidaProfileSettings settings,
+            string activeId,
+            HashSet<string> failedIds)
+        {
+            IReadOnlyList<GoidaNode> all = store.GetNodes();
+
+            if (settings.SelectionMode == GoidaSelectionMode.ManualPool
+                && settings.ManualPoolNodeIds?.Count > 0)
+            {
+                Dictionary<string, GoidaNode> byId = all
+                    .ToDictionary(node => node.Id, StringComparer.OrdinalIgnoreCase);
+                int start = 0;
+                int currentIndex = settings.ManualPoolNodeIds.FindIndex(id =>
+                    string.Equals(id, activeId, StringComparison.OrdinalIgnoreCase));
+                if (currentIndex >= 0)
+                    start = currentIndex + 1;
+
+                List<GoidaNode> ordered = new();
+                for (int i = 0; i < settings.ManualPoolNodeIds.Count; i++)
+                {
+                    string id = settings.ManualPoolNodeIds[(start + i) % settings.ManualPoolNodeIds.Count];
+                    if (failedIds.Contains(id))
+                        continue;
+                    if (byId.TryGetValue(id, out GoidaNode? node)
+                        && !string.Equals(node.Id, activeId, StringComparison.OrdinalIgnoreCase))
+                        ordered.Add(node);
+                }
+
+                return ordered;
+            }
+
+            return all
+                .Where(node => GetEnabledListSet(settings).Contains(node.ListId))
+                .Where(node => !failedIds.Contains(node.Id))
+                .Where(node => !string.Equals(node.Id, activeId, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(node => node.VlessVerified ? 0 : 1)
+                .ThenBy(node => node.LatencyMs < 0 ? int.MaxValue : node.LatencyMs)
+                .Take(MaxLiveFailoverTests)
+                .ToList();
         }
 
         private HashSet<string> GetRecentFailedNodeIds()
@@ -434,7 +531,7 @@ namespace InvisibleGorillaXRay.Services.Goida
             {
                 GoidaProfileSettings settings = getSettings().Clone();
                 List<GoidaNode> top = FilterProbeTargets(settings, store.GetNodes(), manual: true)
-                    .Where(node => node.Status == GoidaNodeStatus.Ok && node.LatencyMs >= 0)
+                    .Where(node => !node.VlessVerified && node.LatencyMs >= 0)
                     .OrderBy(node => node.LatencyMs)
                     .Take(GoidaProfileSettings.MaxVerifiedNodes)
                     .ToList();

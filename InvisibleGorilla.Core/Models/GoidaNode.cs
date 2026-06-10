@@ -35,6 +35,9 @@ namespace InvisibleGorillaXRay.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
         public DateTime LastCheckedUtc { get; set; }
 
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public bool VlessVerified { get; set; }
+
         public GoidaNode Clone()
         {
             return new GoidaNode
@@ -48,7 +51,8 @@ namespace InvisibleGorillaXRay.Models
                 Protocol = Protocol,
                 LatencyMs = LatencyMs,
                 Status = Status,
-                LastCheckedUtc = LastCheckedUtc
+                LastCheckedUtc = LastCheckedUtc,
+                VlessVerified = VlessVerified
             };
         }
     }

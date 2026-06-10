@@ -66,7 +66,7 @@ namespace InvisibleGorillaXRay.Services.Goida
             }
         }
 
-        public void UpdateNodeStatus(string nodeId, int latencyMs, GoidaNodeStatus status)
+        public void UpdateNodeStatus(string nodeId, int latencyMs, GoidaNodeStatus status, bool? vlessVerified = null)
         {
             lock (sync)
             {
@@ -78,6 +78,8 @@ namespace InvisibleGorillaXRay.Services.Goida
                 node.LatencyMs = latencyMs;
                 node.Status = status;
                 node.LastCheckedUtc = DateTime.UtcNow;
+                if (vlessVerified.HasValue)
+                    node.VlessVerified = vlessVerified.Value;
                 SaveLocked();
             }
         }

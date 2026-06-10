@@ -134,7 +134,9 @@ namespace InvisibleGorillaXRay
                     progress.Total,
                     nodeName,
                     FormatLatency(progress.LatencyMs),
-                    FormatStatus(progress.Status)));
+                    progress.Node != null
+                        ? FormatStatus(progress.Node)
+                        : FormatProbeStatus(progress.Status)));
 
                 RefreshGridThrottled(force: progress.Current == progress.Total);
             }));
@@ -745,7 +747,7 @@ namespace InvisibleGorillaXRay
                 Protocol = string.IsNullOrWhiteSpace(node.Protocol) ? "-" : node.Protocol,
                 Endpoint = node.Endpoint,
                 LatencyText = FormatLatency(node.LatencyMs),
-                StatusText = FormatStatus(node.Status),
+                StatusText = FormatStatus(node),
                 LastCheckedText = GoidaNodeDisplay.FormatLastChecked(node.LastCheckedUtc),
                 IsActive = string.Equals(node.Id, activeId, StringComparison.OrdinalIgnoreCase),
                 InPool = pool.Contains(node.Id)
@@ -764,7 +766,7 @@ namespace InvisibleGorillaXRay
             };
         }
 
-        private static string FormatStatus(GoidaNodeStatus status)
+        private static string FormatProbeStatus(GoidaNodeStatus status)
         {
             return status switch
             {
@@ -772,6 +774,23 @@ namespace InvisibleGorillaXRay
                 GoidaNodeStatus.Timeout => "Timeout",
                 GoidaNodeStatus.Error => "Error",
                 _ => "Unknown"
+            };
+        }
+
+        private string FormatStatus(GoidaNode node)
+        {
+            if (node.VlessVerified && node.Status == GoidaNodeStatus.Ok)
+                return Localize("Lang.Goida.Status.VlessOk");
+
+            if (node.LatencyMs >= 0 && node.Status != GoidaNodeStatus.Error
+                && node.Status != GoidaNodeStatus.Timeout)
+                return Localize("Lang.Goida.Status.TcpOnly");
+
+            return node.Status switch
+            {
+                GoidaNodeStatus.Timeout => Localize("Lang.Goida.Status.Timeout"),
+                GoidaNodeStatus.Error => Localize("Lang.Goida.Status.Error"),
+                _ => Localize("Lang.Goida.Status.Unknown")
             };
         }
 
@@ -856,10 +875,14 @@ namespace InvisibleGorillaXRay
             if (settings.SelectionMode == GoidaSelectionMode.ManualFixed)
                 settings.SelectionMode = GoidaSelectionMode.AutoBest;
 
-            GoidaNode? best = GoidaActiveSelector.SelectBestNode(
-                settings,
-                goidaHandler.Manager.GetVisibleNodes(),
-                settings.ActiveNodeId);
+            List<GoidaNode> visible = goidaHandler.Manager.GetVisibleNodes()
+                .Where(node => node.VlessVerified
+                    && node.Status == GoidaNodeStatus.Ok
+                    && node.LatencyMs >= 0)
+                .ToList();
+            GoidaNode? best = visible.Count > 0
+                ? GoidaActiveSelector.SelectBestNode(settings, visible, settings.ActiveNodeId)
+                : null;
 
             if (best == null)
             {
@@ -913,14 +936,16 @@ namespace InvisibleGorillaXRay
                 return;
 
             List<GoidaNode> top = goidaHandler.Manager.GetVisibleNodes()
-                .Where(node => node.Status == GoidaNodeStatus.Ok && node.LatencyMs >= 0)
+                .Where(node => node.VlessVerified
+                    && node.Status == GoidaNodeStatus.Ok
+                    && node.LatencyMs >= 0)
                 .OrderBy(node => node.LatencyMs)
                 .Take(GoidaProfileSettings.DefaultAutoPoolSize)
                 .ToList();
 
             if (top.Count == 0)
             {
-                SetStatusText(Localize("Lang.Goida.NoWorkingNode"));
+                SetStatusText(Localize("Lang.Goida.AutoPoolNeedsVerify"));
                 return;
             }
 

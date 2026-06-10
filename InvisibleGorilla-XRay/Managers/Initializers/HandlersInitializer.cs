@@ -116,6 +116,12 @@ namespace InvisibleGorillaXRay.Managers.Initializers
                     if (activeNode == null)
                         return;
 
+                    if (!activeNode.VlessVerified || activeNode.Status != GoidaNodeStatus.Ok)
+                    {
+                        config.SetAvailability(Values.Availability.NOT_CHECKED);
+                        return;
+                    }
+
                     config.SetAvailability(MapNodeLatency(activeNode.LatencyMs, activeNode.Status));
                 }
 

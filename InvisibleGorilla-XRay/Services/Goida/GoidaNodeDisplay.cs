@@ -163,7 +163,8 @@ namespace InvisibleGorillaXRay.Services.Goida
             if (node == null)
                 return new GoidaMainPresentation();
 
-            (int level, string label, string color) = DescribeSignal(node.LatencyMs, node.Status);
+            (int level, string label, string color) = DescribeSignal(
+                node.LatencyMs, node.Status, node.VlessVerified);
             return new GoidaMainPresentation
             {
                 Summary = BuildMainSummary(node),
@@ -174,10 +175,14 @@ namespace InvisibleGorillaXRay.Services.Goida
             };
         }
 
-        public static (int Level, string Label, string ColorHex) DescribeSignal(int latencyMs, GoidaNodeStatus status)
+        public static (int Level, string Label, string ColorHex) DescribeSignal(
+            int latencyMs, GoidaNodeStatus status, bool vlessVerified = false)
         {
             if (status is GoidaNodeStatus.Timeout or GoidaNodeStatus.Error)
                 return (0, "Lang.Goida.Signal.Offline", "#E85D5D");
+
+            if (!vlessVerified || status != GoidaNodeStatus.Ok)
+                return (0, "Lang.Goida.Signal.Unverified", "#9AA0A6");
 
             if (latencyMs < 0)
                 return (0, "Lang.Goida.Signal.Unknown", "#9AA0A6");

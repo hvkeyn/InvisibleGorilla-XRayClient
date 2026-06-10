@@ -217,6 +217,10 @@
     <system:String x:Key="Lang.Goida.Column.Status">Status</system:String>
     <system:String x:Key="Lang.Goida.Column.Active">Active</system:String>
     <system:String x:Key="Lang.Goida.Status.Ok">OK</system:String>
+    <system:String x:Key="Lang.Goida.Status.VlessOk">VLESS OK</system:String>
+    <system:String x:Key="Lang.Goida.Status.TcpOnly">TCP only</system:String>
+    <system:String x:Key="Lang.Goida.Signal.Unverified">Not verified</system:String>
+    <system:String x:Key="Lang.Goida.AutoPoolNeedsVerify">No VLESS-verified nodes yet. Click Probe all and wait for real connection tests to finish, then try Auto pool again.</system:String>
     <system:String x:Key="Lang.Goida.Status.Timeout">Timeout</system:String>
     <system:String x:Key="Lang.Goida.Status.Error">Error</system:String>
     <system:String x:Key="Lang.Goida.Status.Unknown">Unknown</system:String>

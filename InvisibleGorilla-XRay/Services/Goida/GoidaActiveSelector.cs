@@ -14,7 +14,9 @@ namespace InvisibleGorillaXRay.Services.Goida
         {
             IEnumerable<GoidaNode> candidates = FilterCandidates(settings, nodes);
             List<GoidaNode> healthy = candidates
-                .Where(node => node.Status == GoidaNodeStatus.Ok && node.LatencyMs >= 0)
+                .Where(node => node.VlessVerified
+                    && node.Status == GoidaNodeStatus.Ok
+                    && node.LatencyMs >= 0)
                 .OrderBy(node => node.LatencyMs)
                 .ToList();
 
@@ -148,9 +150,10 @@ namespace InvisibleGorillaXRay.Services.Goida
         {
             List<GoidaNode> sorted = FilterCandidates(settings, nodes)
                 .Where(node => !excludeIds.Contains(node.Id))
-                .Where(node => node.Status is not GoidaNodeStatus.Error and not GoidaNodeStatus.Timeout)
-                .OrderBy(node => node.Status == GoidaNodeStatus.Ok ? 0 : 1)
-                .ThenBy(node => node.LatencyMs < 0 ? int.MaxValue : node.LatencyMs)
+                .Where(node => node.VlessVerified
+                    && node.Status == GoidaNodeStatus.Ok
+                    && node.LatencyMs >= 0)
+                .OrderBy(node => node.LatencyMs)
                 .ThenBy(node => node.ListId)
                 .ThenBy(node => node.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ToList();
@@ -202,28 +205,21 @@ namespace InvisibleGorillaXRay.Services.Goida
                     startIndex = currentIndex + 1;
             }
 
-            // Pass 0: prefer verified-OK nodes; pass 1: fall back to unknown (not yet probed).
-            for (int pass = 0; pass < 2; pass++)
+            for (int offset = 0; offset < pool.Count; offset++)
             {
-                bool allowUnknown = pass == 1;
-                for (int offset = 0; offset < pool.Count; offset++)
-                {
-                    string id = pool[(startIndex + offset) % pool.Count];
-                    if (excludeIds.Contains(id))
-                        continue;
+                string id = pool[(startIndex + offset) % pool.Count];
+                if (excludeIds.Contains(id))
+                    continue;
 
-                    if (!byId.TryGetValue(id, out GoidaNode? node))
-                        continue;
+                if (!byId.TryGetValue(id, out GoidaNode? node))
+                    continue;
 
-                    if (node.Status is GoidaNodeStatus.Error or GoidaNodeStatus.Timeout)
-                        continue;
+                if (!node.VlessVerified
+                    || node.Status != GoidaNodeStatus.Ok
+                    || node.LatencyMs < 0)
+                    continue;
 
-                    if (node.Status == GoidaNodeStatus.Ok)
-                        return node;
-
-                    if (allowUnknown && node.Status == GoidaNodeStatus.Unknown)
-                        return node;
-                }
+                return node;
             }
 
             return null;
