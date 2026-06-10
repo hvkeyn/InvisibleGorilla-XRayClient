@@ -65,12 +65,12 @@ namespace InvisibleGorillaXRay.Factories
             
             return mainWindow;
 
-            void OnTunnelBroken()
+            bool OnTunnelBroken()
             {
                 if (!GoidaProfilePaths.IsMarker(settingsHandler.UserSettings.GetCurrentConfigPath()))
-                    return;
+                    return false;
 
-                goidaHandler.Manager.ReportTunnelFailure();
+                return goidaHandler.Manager.ReportTunnelFailure();
             }
 
             bool IsNeedToShowPolicyWindow() => settingsHandler.UserSettings.GetClientId() == "";
@@ -383,6 +383,8 @@ namespace InvisibleGorillaXRay.Factories
 
                     settingsHandler.UpdateCurrentConfigPath(GoidaProfilePaths.MarkerPath);
                     mainWindow?.UpdateUI();
+                    if (mainWindow?.IsServerRunning == true)
+                        mainWindow.TryRerun();
                 });
 
             SetupLocalizedWindowTitle(

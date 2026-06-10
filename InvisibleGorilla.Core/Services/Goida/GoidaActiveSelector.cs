@@ -42,12 +42,7 @@ namespace InvisibleGorillaXRay.Services.Goida
                 return SelectNextInOrderedPool(settings, nodes, currentActiveNodeId, excludeIds);
             }
 
-            return FilterCandidates(settings, nodes)
-                .Where(node => !excludeIds.Contains(node.Id))
-                .Where(node => !string.Equals(node.Id, currentActiveNodeId, StringComparison.OrdinalIgnoreCase))
-                .Where(node => node.Status == GoidaNodeStatus.Ok && node.LatencyMs >= 0)
-                .OrderBy(node => node.LatencyMs)
-                .FirstOrDefault();
+            return SelectNextInAutoRoundRobin(settings, nodes, currentActiveNodeId, excludeIds);
         }
 
         public static bool ShouldAutoSwitch(
@@ -133,6 +128,44 @@ namespace InvisibleGorillaXRay.Services.Goida
             }
 
             return healthy[0];
+        }
+
+        private static GoidaNode? SelectNextInAutoRoundRobin(
+            GoidaProfileSettings settings,
+            IReadOnlyList<GoidaNode> nodes,
+            string? currentActiveNodeId,
+            ISet<string> excludeIds)
+        {
+            List<GoidaNode> sorted = FilterCandidates(settings, nodes)
+                .Where(node => !excludeIds.Contains(node.Id))
+                .Where(node => node.Status is not GoidaNodeStatus.Error and not GoidaNodeStatus.Timeout)
+                .OrderBy(node => node.Status == GoidaNodeStatus.Ok ? 0 : 1)
+                .ThenBy(node => node.LatencyMs < 0 ? int.MaxValue : node.LatencyMs)
+                .ThenBy(node => node.ListId)
+                .ThenBy(node => node.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (sorted.Count == 0)
+                return null;
+
+            int startIndex = 0;
+            if (!string.IsNullOrWhiteSpace(currentActiveNodeId))
+            {
+                int currentIndex = sorted.FindIndex(node =>
+                    string.Equals(node.Id, currentActiveNodeId, StringComparison.OrdinalIgnoreCase));
+                if (currentIndex >= 0)
+                    startIndex = currentIndex + 1;
+            }
+
+            for (int offset = 0; offset < sorted.Count; offset++)
+            {
+                GoidaNode candidate = sorted[(startIndex + offset) % sorted.Count];
+                if (string.Equals(candidate.Id, currentActiveNodeId, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                return candidate;
+            }
+
+            return null;
         }
 
         private static GoidaNode? SelectNextInOrderedPool(

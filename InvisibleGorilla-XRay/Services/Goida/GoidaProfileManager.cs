@@ -54,7 +54,7 @@ namespace InvisibleGorillaXRay.Services.Goida
         // for a cooldown so a flapping node isn't re-picked immediately.
         private readonly Dictionary<string, DateTime> recentTunnelFailures = new(StringComparer.OrdinalIgnoreCase);
         private static readonly TimeSpan TunnelFailureCooldown = TimeSpan.FromSeconds(90);
-        private static readonly TimeSpan FailoverDebounce = TimeSpan.FromSeconds(3);
+        private static readonly TimeSpan FailoverDebounce = TimeSpan.FromSeconds(1);
         private DateTime lastFailoverUtc = DateTime.MinValue;
 
         public event Action? NodesUpdated;
@@ -389,17 +389,15 @@ namespace InvisibleGorillaXRay.Services.Goida
             {
                 // Every node in the pool was tried — clear the short cooldown and
                 // walk the list again from the top.
-                if (settings.SelectionMode == GoidaSelectionMode.ManualPool)
-                {
-                    lock (recentTunnelFailures)
-                        recentTunnelFailures.Clear();
+                // Every candidate was tried — reset short cooldown and walk again.
+                lock (recentTunnelFailures)
+                    recentTunnelFailures.Clear();
 
-                    next = GoidaActiveSelector.SelectNextFailoverNode(
-                        settings,
-                        store.GetNodes(),
-                        activeId,
-                        new HashSet<string>(StringComparer.OrdinalIgnoreCase));
-                }
+                next = GoidaActiveSelector.SelectNextFailoverNode(
+                    settings,
+                    store.GetNodes(),
+                    activeId,
+                    new HashSet<string>(StringComparer.OrdinalIgnoreCase));
 
                 if (next == null || string.Equals(next.Id, activeId, StringComparison.OrdinalIgnoreCase))
                 {

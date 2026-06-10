@@ -56,7 +56,7 @@ namespace InvisibleGorillaXRay
         private Action onGitHubClick;
         private Action onBugReportingClick;
         private Action<string> onCustomLinkClick;
-        private Action onTunnelBroken;
+        private Func<bool> onTunnelBroken;
 
         private BackgroundWorker runWorker;
         private BackgroundWorker updateWorker;
@@ -99,6 +99,8 @@ namespace InvisibleGorillaXRay
                 };
 
                 runWorker.DoWork += (sender, e) => {
+                    EnsureBaselineBeforeConnect();
+
                     Dispatcher.BeginInvoke(new Action(delegate {
                         ShowWaitForRunStatus();
                     }));
@@ -288,7 +290,7 @@ namespace InvisibleGorillaXRay
             Action onBugReportingClick,
             Action<string> onCustomLinkClick,
             Func<GoidaMainPresentation> getGoidaPresentation = null,
-            Action onTunnelBroken = null)
+            Func<bool> onTunnelBroken = null)
         {
             this.isNeedToShowPolicyWindow = isNeedToShowPolicyWindow;
             this.shouldStartHidden = shouldStartHidden;
@@ -366,9 +368,9 @@ namespace InvisibleGorillaXRay
             int signalLevel = presentation.SignalLevel;
             string latencyText = presentation.LatencyText;
 
-            // The probe latency only proves the endpoint accepts TCP. If the VPN is up
-            // but the tunnel check says traffic doesn't flow, show the real state.
-            if (isConnected && lastTunnelCheckOk == false)
+            // TCP probe latency ≠ working VLESS. While connected, only show "excellent"
+            // after the live tunnel check confirms traffic actually flows.
+            if (isConnected && lastTunnelCheckOk != true)
             {
                 qualityLabel = "Lang.Goida.Signal.NoTunnel";
                 colorHex = "#E85D5D";
@@ -675,8 +677,13 @@ namespace InvisibleGorillaXRay
 
             isConnected = true;
             consecutiveTunnelFailures = 0;
+            connectionInfoTimer.Interval = IsGoidaProfileActive()
+                ? TimeSpan.FromSeconds(8)
+                : TimeSpan.FromSeconds(20);
+            if (!connectionInfoTimer.IsEnabled)
+                connectionInfoTimer.Start();
             // Give the tunnel/proxy a moment to take over routing before probing the exit IP.
-            ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(2));
+            ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(3));
         }
 
         private void ShowStopStatus()
@@ -691,6 +698,7 @@ namespace InvisibleGorillaXRay
 
             isConnected = false;
             consecutiveTunnelFailures = 0;
+            connectionInfoTimer.Interval = TimeSpan.FromSeconds(20);
             ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(1));
         }
 
@@ -781,7 +789,7 @@ namespace InvisibleGorillaXRay
             ApplyVerdict(connected, info.Ip);
             ApplyGoidaSummary();
 
-            if (isConnected && lastTunnelCheckOk == false)
+            if (isConnected && lastTunnelCheckOk != true)
                 RegisterTunnelFailure();
             else
                 consecutiveTunnelFailures = 0;
@@ -793,15 +801,37 @@ namespace InvisibleGorillaXRay
             return presentation != null && !string.IsNullOrWhiteSpace(presentation.Summary);
         }
 
+        private void EnsureBaselineBeforeConnect()
+        {
+            if (!string.IsNullOrWhiteSpace(baselineIp))
+                return;
+
+            try
+            {
+                System.Threading.Tasks.Task<ConnectionInfo> lookup = connectionInfoService
+                    .LookupAsync(null, CancellationToken.None);
+                if (!lookup.Wait(TimeSpan.FromSeconds(8)))
+                    return;
+
+                ConnectionInfo info = lookup.Result;
+                if (info.Ok && !string.IsNullOrWhiteSpace(info.Ip))
+                    baselineIp = info.Ip;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainWindow.EnsureBaselineBeforeConnect", ex);
+            }
+        }
+
         private void RegisterTunnelFailure()
         {
             consecutiveTunnelFailures++;
 
-            // Confirm once more for Goida (keys die fast — cycle the pool quickly).
+            // Goida keys die fast — one failed tunnel check is enough to switch.
             int requiredFailures = IsGoidaProfileActive() ? 1 : 2;
             if (consecutiveTunnelFailures < requiredFailures)
             {
-                ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(2));
+                ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(IsGoidaProfileActive() ? 3 : 2));
                 return;
             }
 
@@ -814,7 +844,17 @@ namespace InvisibleGorillaXRay
             {
                 try
                 {
-                    onTunnelBroken.Invoke();
+                    bool switched = onTunnelBroken.Invoke();
+                    if (!switched && isConnected)
+                    {
+                        Dispatcher.BeginInvoke(new Action(() =>
+                            ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(5))));
+                    }
+                    else if (switched)
+                    {
+                        Dispatcher.BeginInvoke(new Action(() =>
+                            ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(8))));
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -906,7 +946,9 @@ namespace InvisibleGorillaXRay
 
             bool exposed = !string.IsNullOrEmpty(baselineIp) &&
                 string.Equals(baselineIp, currentIp, StringComparison.OrdinalIgnoreCase);
-            lastTunnelCheckOk = !exposed;
+            // No pre-connect baseline: a successful lookup through the tunnel path
+            // still proves egress works. With a baseline, same IP = leak.
+            lastTunnelCheckOk = string.IsNullOrEmpty(baselineIp) || !exposed;
 
             if (exposed)
             {
