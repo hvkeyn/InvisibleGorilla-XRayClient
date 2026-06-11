@@ -521,6 +521,9 @@ namespace InvisibleGorillaXRay.Android.Views
             SetConfigImportMode(currentConfigImportMode);
             UpdateSubscriptionEmptyState();
             RefreshAppRulesSummary();
+
+            if (isInitialized)
+                ApplyGoidaLocalizedText();
         }
 
         private string Localize(string key)
@@ -530,7 +533,14 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private string LocalizeFormat(string key, params object?[] args)
         {
-            return string.Format(Localize(key), args);
+            try
+            {
+                return string.Format(Localize(key), args);
+            }
+            catch (FormatException)
+            {
+                return Localize(key);
+            }
         }
 
         private AndroidConnectionNotificationText CreateConnectionNotificationText()
@@ -594,20 +604,28 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void EnsureServersSectionInitialized()
         {
-            if (!isServersSectionInitialized)
+            try
             {
-                Config? currentConfig = configHandler.GetCurrentConfig();
-                ShowServerTab(currentConfig?.Group == GroupType.SUBSCRIPTION
-                    ? ServerTab.Subscriptions
-                    : ServerTab.Configurations);
-                SetServersViewMode(ServersViewMode.Browse);
-                SetAdvancedImportVisible(false);
-                SetConfigImportMode(ConfigImportMode.Link);
-                isServersSectionInitialized = true;
-            }
+                if (!isServersSectionInitialized)
+                {
+                    Config? currentConfig = configHandler.GetCurrentConfig();
+                    ShowServerTab(currentConfig?.Group == GroupType.SUBSCRIPTION
+                        ? ServerTab.Subscriptions
+                        : ServerTab.Configurations);
+                    SetServersViewMode(ServersViewMode.Browse);
+                    SetAdvancedImportVisible(false);
+                    SetConfigImportMode(ConfigImportMode.Link);
+                    isServersSectionInitialized = true;
+                }
 
-            RefreshConfigs();
-            RefreshSubscriptions();
+                RefreshConfigs();
+                RefreshSubscriptions();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.Servers.Init", ex);
+                SetStatus(ex.Message);
+            }
         }
 
         private void EnsureSettingsSectionInitialized()
@@ -1758,11 +1776,22 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             bool isGoidaMarker = GoidaProfilePaths.IsMarker(config.Path);
             string currentPath = settingsHandler.UserSettings.GetCurrentConfigPath();
+            bool isGoidaActive = false;
+            if (isGoidaMarker && settingsHandler.UserSettings.GetGoidaSettings().Enabled)
+            {
+                try
+                {
+                    isGoidaActive = GoidaProfilePaths.IsMarker(currentPath)
+                        || goidaHandler.Manager.GetActiveNode() != null;
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("MainView.Goida.ConfigCardSelection", ex);
+                }
+            }
+
             bool isSelected = string.Equals(currentPath, config.Path, StringComparison.OrdinalIgnoreCase)
-                || (isGoidaMarker
-                    && settingsHandler.UserSettings.GetGoidaSettings().Enabled
-                    && (GoidaProfilePaths.IsMarker(currentPath)
-                        || goidaHandler.Manager.GetActiveNode() != null));
+                || isGoidaActive;
 
             TorProfile? torProfile = isGoidaMarker
                 ? null
@@ -2151,9 +2180,18 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             Config? currentConfig = configHandler.GetCurrentConfig();
             GoidaProfileSettings goidaSettings = settingsHandler.UserSettings.GetGoidaSettings();
-            GoidaNode? activeGoidaNode = goidaSettings.Enabled
-                ? goidaHandler.Manager.GetActiveNode()
-                : null;
+            GoidaNode? activeGoidaNode = null;
+            if (goidaSettings.Enabled)
+            {
+                try
+                {
+                    activeGoidaNode = goidaHandler.Manager.GetActiveNode();
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("MainView.Goida.ActiveSummary", ex);
+                }
+            }
 
             string currentConfigText;
             if (activeGoidaNode != null)
@@ -2161,8 +2199,8 @@ namespace InvisibleGorillaXRay.Android.Views
                 string latency = activeGoidaNode.LatencyMs >= 0
                     ? $"{activeGoidaNode.LatencyMs} ms"
                     : "-";
-                currentConfigText = string.Format(
-                    Localize("Lang.Goida.ActiveSummary"),
+                currentConfigText = LocalizeFormat(
+                    "Lang.Goida.ActiveSummary",
                     activeGoidaNode.DisplayName,
                     latency);
             }
@@ -3189,8 +3227,16 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void OnServersSectionClick(object? sender, RoutedEventArgs e)
         {
-            ShowSection(NavigationSection.Servers);
-            EnsureServersSectionInitialized();
+            try
+            {
+                ShowSection(NavigationSection.Servers);
+                EnsureServersSectionInitialized();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.Servers.Open", ex);
+                SetStatus(ex.Message);
+            }
         }
 
         private void OnSettingsSectionClick(object? sender, RoutedEventArgs e)
