@@ -13,6 +13,7 @@ namespace InvisibleGorillaXRay.Services.Goida
         public const int MaxBackgroundProbeBatch = 32;
         public const int MaxManualProbeBatch = 512;
         public const int MaxProbeBatch = MaxManualProbeBatch;
+        public const int MaxBackgroundVerifyBatch = 25;
 
         public static List<int> GetVpnListIds(GoidaProfileSettings settings)
         {
@@ -67,6 +68,13 @@ namespace InvisibleGorillaXRay.Services.Goida
         {
             GoidaProfileSettings settings = getSettings().Clone();
             return FilterProbeTargets(settings, store.GetNodes(), manual: true).Count();
+        }
+
+        public int CountVerifyTargets(bool manual = true)
+        {
+            GoidaProfileSettings settings = getSettings().Clone();
+            int limit = manual ? GoidaProfileSettings.MaxVerifiedNodes : MaxBackgroundVerifyBatch;
+            return BuildVerifyTargetList(settings, limit).Count;
         }
 
         public void Setup(
@@ -202,6 +210,9 @@ namespace InvisibleGorillaXRay.Services.Goida
 
         public async Task RefreshListsAsync(CancellationToken cancellationToken = default)
         {
+            if (manualProbeInProgress != 0 || backgroundProbeInProgress != 0)
+                return;
+
             if (Interlocked.CompareExchange(ref refreshInProgress, 1, 0) != 0)
                 return;
 
@@ -217,17 +228,25 @@ namespace InvisibleGorillaXRay.Services.Goida
                     return;
                 }
 
+                HashSet<int> enabledLists = GetEnabledListSet(settings);
+
                 IReadOnlyDictionary<int, string> listData = await fetcher
                     .FetchListsAsync(fetchListIds, cancellationToken)
                     .ConfigureAwait(false);
 
                 HashSet<int> refreshedListIds = fetchListIds.ToHashSet();
                 Dictionary<string, GoidaNode> mergedById = store.GetNodes()
-                    .Where(node => !refreshedListIds.Contains(node.ListId))
+                    .Where(node => enabledLists.Contains(node.ListId)
+                        && !refreshedListIds.Contains(node.ListId))
                     .ToDictionary(node => node.Id, StringComparer.OrdinalIgnoreCase);
 
                 Dictionary<string, GoidaNode> existing = store.GetNodes()
                     .ToDictionary(node => node.Id, StringComparer.OrdinalIgnoreCase);
+                Dictionary<string, GoidaNode> existingByEndpoint = store.GetNodes()
+                    .Where(node => !string.IsNullOrWhiteSpace(node.Endpoint))
+                    .GroupBy(node => BuildEndpointKey(node.ListId, node.Endpoint),
+                        StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
 
                 foreach (KeyValuePair<int, string> pair in listData.OrderBy(entry => entry.Key))
                 {
@@ -239,11 +258,12 @@ namespace InvisibleGorillaXRay.Services.Goida
                         List<GoidaNode> parsed = parser.ParseList(pair.Key, pair.Value, store.NodesDirectory);
                         foreach (GoidaNode node in parsed)
                         {
-                            if (existing.TryGetValue(node.Id, out GoidaNode? previous))
+                            GoidaNode? previous = null;
+                            if (existing.TryGetValue(node.Id, out previous)
+                                || existingByEndpoint.TryGetValue(
+                                    BuildEndpointKey(node.ListId, node.Endpoint), out previous))
                             {
-                                node.LatencyMs = previous.LatencyMs;
-                                node.Status = previous.Status;
-                                node.LastCheckedUtc = previous.LastCheckedUtc;
+                                CopyProbeState(previous, node);
                             }
 
                             mergedById[node.Id] = node;
@@ -253,6 +273,14 @@ namespace InvisibleGorillaXRay.Services.Goida
                     {
                         DiagnosticLog.WriteException($"Goida.RefreshList.{pair.Key}", ex);
                     }
+                }
+
+                if (manualProbeInProgress != 0 || backgroundProbeInProgress != 0)
+                {
+                    DiagnosticLog.Write("Goida.RefreshListsAsync",
+                        "Skipped ReplaceNodes because a probe is in progress");
+                    StatusMessage?.Invoke("refresh-deferred");
+                    return;
                 }
 
                 store.ReplaceNodes(mergedById.Values.ToList());
@@ -298,6 +326,12 @@ namespace InvisibleGorillaXRay.Services.Goida
             if (Interlocked.CompareExchange(ref backgroundProbeInProgress, 1, 0) != 0)
                 return new GoidaProbeResult();
 
+            if (manualProbeInProgress != 0)
+            {
+                Interlocked.Exchange(ref backgroundProbeInProgress, 0);
+                return new GoidaProbeResult();
+            }
+
             if (isVpnSessionActive?.Invoke() == true)
             {
                 Interlocked.Exchange(ref backgroundProbeInProgress, 0);
@@ -319,21 +353,62 @@ namespace InvisibleGorillaXRay.Services.Goida
             try
             {
                 GoidaProfileSettings settings = getSettings().Clone();
-                List<GoidaNode> targets = FilterProbeTargets(settings, store.GetNodes(), manual).ToList();
+                List<GoidaNode> targets = ResolveLiveProbeTargets(
+                    FilterProbeTargets(settings, store.GetNodes(), manual).ToList());
 
-                GoidaProbeResult result = manual
-                    ? await monitor.ProbeNodesFastAsync(targets, cancellationToken).ConfigureAwait(false)
-                    : await monitor.ProbeNodesFastAsync(
-                        targets.Take(MaxBackgroundProbeBatch).ToList(),
-                        cancellationToken).ConfigureAwait(false);
+                int maxVless = manual ? GoidaProfileSettings.MaxVerifiedNodes : MaxBackgroundVerifyBatch;
+                int earlyStopOk = manual
+                    ? GoidaProfileSettings.DefaultAutoPoolSize
+                    : Math.Min(5, MaxBackgroundVerifyBatch);
 
-                // A TCP connect only proves the endpoint is reachable, not that VLESS
-                // actually works. Verify the fastest candidates with a real xray test
-                // so dead "3 ms OK" nodes don't end up at the top and get auto-picked.
-                if (manual && !result.Cancelled && isVpnSessionActive?.Invoke() != true)
-                    await VerifyTopNodesAsync(cancellationToken).ConfigureAwait(false);
+                bool paused = false;
+                if (isVpnSessionActive?.Invoke() == true)
+                {
+                    paused = pauseNativeForTest?.Invoke() == true;
+                    if (!paused)
+                    {
+                        maxVless = 0;
+                        StatusMessage?.Invoke("verify-skipped-vpn");
+                    }
+                }
 
-                if (!result.Cancelled && result.Ok > 0 && settings.AutoSwitchOnFly)
+                GoidaTcpVlessProbeOptions probeOptions = new()
+                {
+                    MaxVlessTests = maxVless,
+                    EarlyStopOkCount = earlyStopOk,
+                    MaxTcpLatencyForVlessMs = settings.AutoSwitchLatencyMs,
+                    OnFirstVlessOk = () => _ = EvaluateAutoSwitchAsync(getSettings().Clone())
+                };
+
+                GoidaProbeResult result;
+                try
+                {
+                    store.BeginBulkUpdate();
+                    try
+                    {
+                        IReadOnlyList<GoidaNode> probeTargets = manual
+                            ? targets
+                            : targets.Take(MaxBackgroundProbeBatch).ToList();
+                        result = await monitor.ProbeTcpThenVlessAsync(
+                            probeTargets,
+                            probeOptions,
+                            cancellationToken).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        store.EndBulkUpdate();
+                    }
+                }
+                finally
+                {
+                    if (paused)
+                        resumeNativeAfterTest?.Invoke();
+                }
+
+                if (!result.Cancelled
+                    && result.Ok > 0
+                    && settings.AutoSwitchOnFly
+                    && isVpnSessionActive?.Invoke() != true)
                     await EvaluateAutoSwitchAsync(settings).ConfigureAwait(false);
 
                 return result;
@@ -372,8 +447,8 @@ namespace InvisibleGorillaXRay.Services.Goida
             HashSet<string> failedIds;
             if (!string.IsNullOrWhiteSpace(activeId))
             {
-                store.UpdateNodeStatus(activeId, Values.Availability.ERROR, GoidaNodeStatus.Error,
-                    vlessVerified: false);
+                // Do not overwrite probe status (Ok/VlessVerified) on the node that was
+                // live — TCP/timeouts during an active session are often false positives.
                 lock (recentTunnelFailures)
                     recentTunnelFailures[activeId] = DateTime.UtcNow;
             }
@@ -525,22 +600,59 @@ namespace InvisibleGorillaXRay.Services.Goida
             }
         }
 
-        private async Task VerifyTopNodesAsync(CancellationToken cancellationToken)
+        private async Task RunVlessVerificationAsync(
+            CancellationToken cancellationToken,
+            bool manual,
+            IReadOnlyList<GoidaNode>? tcpBatch = null)
         {
+            GoidaProfileSettings settings = getSettings().Clone();
+            int limit = manual ? GoidaProfileSettings.MaxVerifiedNodes : MaxBackgroundVerifyBatch;
+            List<GoidaNode> top = tcpBatch?.Count > 0
+                ? BuildVerifyListFromTcpBatch(tcpBatch, limit)
+                : BuildVerifyTargetList(settings, limit);
+            if (top.Count == 0)
+            {
+                DiagnosticLog.Write("Goida.VerifyTopNodes",
+                    $"No VLESS verify targets (tcpBatch={tcpBatch?.Count ?? 0}, manual={manual})");
+                return;
+            }
+
+            DiagnosticLog.Write("Goida.VerifyTopNodes",
+                $"Starting VLESS verify on {top.Count} nodes (manual={manual})");
+
+            bool paused = false;
+            if (isVpnSessionActive?.Invoke() == true)
+            {
+                paused = pauseNativeForTest?.Invoke() == true;
+                if (!paused)
+                {
+                    DiagnosticLog.Write("Goida.VerifyTopNodes",
+                        "Skipped VLESS verify: live VPN session could not be paused");
+                    StatusMessage?.Invoke("verify-skipped-vpn");
+                    return;
+                }
+            }
+
             try
             {
-                GoidaProfileSettings settings = getSettings().Clone();
-                List<GoidaNode> top = FilterProbeTargets(settings, store.GetNodes(), manual: true)
-                    .Where(node => !node.VlessVerified && node.LatencyMs >= 0)
-                    .OrderBy(node => node.LatencyMs)
-                    .Take(GoidaProfileSettings.MaxVerifiedNodes)
-                    .ToList();
-
-                if (top.Count == 0)
-                    return;
-
                 StatusMessage?.Invoke("verify-start");
-                await monitor.ProbeNodesAsync(top, cancellationToken).ConfigureAwait(false);
+                store.BeginBulkUpdate();
+                try
+                {
+                    await monitor.ProbeNodesAsync(top, cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    store.EndBulkUpdate();
+                }
+
+                int verifiedOk = top.Count(node =>
+                    store.FindById(node.Id) is GoidaNode live
+                    && live.VlessVerified
+                    && live.Status == GoidaNodeStatus.Ok);
+                DiagnosticLog.Write("Goida.VerifyTopNodes",
+                    $"VLESS verify finished: {verifiedOk}/{top.Count} OK");
+
                 StatusMessage?.Invoke("verify-complete");
                 NodesUpdated?.Invoke();
             }
@@ -551,6 +663,56 @@ namespace InvisibleGorillaXRay.Services.Goida
             {
                 DiagnosticLog.WriteException("Goida.VerifyTopNodes", ex);
             }
+            finally
+            {
+                if (paused)
+                    resumeNativeAfterTest?.Invoke();
+            }
+        }
+
+        private List<GoidaNode> BuildVerifyTargetList(GoidaProfileSettings settings, int limit)
+        {
+            return ResolveLiveProbeTargets(
+                FilterProbeTargets(settings, store.GetNodes(), manual: true)
+                    .Where(node => !node.VlessVerified && node.LatencyMs >= 0)
+                    .OrderBy(node => node.LatencyMs)
+                    .Take(limit)
+                    .ToList());
+        }
+
+        /// <summary>
+        /// After a TCP batch, FilterProbeTargets returns a different node set because
+        /// sort keys (LastCheckedUtc, Status) changed — verify must use the batch we
+        /// actually probed, not a freshly re-filtered list.
+        /// </summary>
+        private List<GoidaNode> BuildVerifyListFromTcpBatch(IReadOnlyList<GoidaNode> tcpBatch, int limit)
+        {
+            Dictionary<string, GoidaNode> liveByEndpoint = store.GetNodes()
+                .Where(node => !string.IsNullOrWhiteSpace(node.Endpoint))
+                .GroupBy(node => BuildEndpointKey(node.ListId, node.Endpoint),
+                    StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+            List<GoidaNode> candidates = new(tcpBatch.Count);
+            foreach (GoidaNode target in tcpBatch)
+            {
+                GoidaNode? live = null;
+                if (liveByEndpoint.TryGetValue(
+                    BuildEndpointKey(target.ListId, target.Endpoint), out GoidaNode? fromEndpoint))
+                    live = fromEndpoint;
+                else
+                    live = store.FindById(target.Id);
+
+                if (live == null || live.VlessVerified || live.LatencyMs < 0)
+                    continue;
+
+                candidates.Add(live);
+            }
+
+            return candidates
+                .OrderBy(node => node.LatencyMs)
+                .Take(limit)
+                .ToList();
         }
 
         public void SetActiveNode(string nodeId, bool persistOnly = false, bool notifyExternal = true)
@@ -588,6 +750,14 @@ namespace InvisibleGorillaXRay.Services.Goida
             IEnumerable<GoidaNode> filtered = nodes
                 .Where(node => enabledLists.Contains(node.ListId));
 
+            // Never TCP-probe the live active node — it often times out while traffic
+            // flows through it and would get wrongly marked failed / auto-replaced.
+            if (!string.IsNullOrWhiteSpace(settings.ActiveNodeId))
+            {
+                filtered = filtered.Where(node =>
+                    !string.Equals(node.Id, settings.ActiveNodeId, StringComparison.OrdinalIgnoreCase));
+            }
+
             // Manual "Probe all" always scans every enabled list — pool/pinned
             // filters apply only to background probes and auto-switch selection.
             if (!manual)
@@ -612,19 +782,6 @@ namespace InvisibleGorillaXRay.Services.Goida
             }
 
             List<GoidaNode> materialized = filtered.ToList();
-            string? activeId = settings.ActiveNodeId;
-            if (!string.IsNullOrWhiteSpace(activeId))
-            {
-                GoidaNode? active = materialized.FirstOrDefault(node =>
-                    string.Equals(node.Id, activeId, StringComparison.OrdinalIgnoreCase));
-                if (active != null && !manual)
-                {
-                    return materialized
-                        .OrderByDescending(node => string.Equals(node.Id, activeId, StringComparison.OrdinalIgnoreCase))
-                        .Take(Math.Min(materialized.Count, batchLimit));
-                }
-            }
-
             return SelectProbeRoundRobin(materialized, batchLimit);
         }
 
@@ -697,11 +854,11 @@ namespace InvisibleGorillaXRay.Services.Goida
                         continue;
                     }
 
-                    // While the VPN session is live, switch to a lightweight watchdog:
-                    // ping the active endpoint every 5s and fail over quickly when it dies.
+                    // While VPN is live, skip background probes — tunnel health is
+                    // checked from the main window (exit IP). TCP to the active
+                    // endpoint during a session produced false timeouts.
                     if (isVpnSessionActive?.Invoke() == true)
                     {
-                        WatchActiveNode(settings);
                         await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
                         continue;
                     }
@@ -744,50 +901,51 @@ namespace InvisibleGorillaXRay.Services.Goida
             }
         }
 
-        private int activeNodeFailStreak;
+        private static string BuildEndpointKey(int listId, string endpoint) =>
+            $"{listId}|{endpoint.Trim()}";
 
-        /// <summary>
-        /// Cheap liveness check of the active node while the VPN session is running.
-        /// Two consecutive TCP failures trigger a failover to the next best node.
-        /// </summary>
-        private void WatchActiveNode(GoidaProfileSettings settings)
+        private List<GoidaNode> ResolveLiveProbeTargets(IReadOnlyList<GoidaNode> targets)
         {
-            try
+            if (targets.Count == 0)
+                return new List<GoidaNode>();
+
+            IReadOnlyList<GoidaNode> liveNodes = store.GetNodes();
+            Dictionary<string, GoidaNode> byId = liveNodes
+                .ToDictionary(node => node.Id, StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, GoidaNode> byEndpoint = liveNodes
+                .Where(node => !string.IsNullOrWhiteSpace(node.Endpoint))
+                .GroupBy(node => BuildEndpointKey(node.ListId, node.Endpoint),
+                    StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+            List<GoidaNode> resolved = new(targets.Count);
+            foreach (GoidaNode target in targets)
             {
-                if (!settings.AutoSwitchOnFly
-                    || settings.SelectionMode == GoidaSelectionMode.ManualFixed
-                    || string.IsNullOrWhiteSpace(settings.ActiveNodeId))
+                if (byId.TryGetValue(target.Id, out GoidaNode? live))
                 {
-                    activeNodeFailStreak = 0;
-                    return;
+                    resolved.Add(live);
+                    continue;
                 }
 
-                GoidaNode? active = store.FindById(settings.ActiveNodeId);
-                if (active == null)
-                    return;
-
-                int latency = GoidaEndpointProbe.ProbeTcp(active.Endpoint, 1500);
-                if (latency >= 0)
+                string endpointKey = BuildEndpointKey(target.ListId, target.Endpoint);
+                if (byEndpoint.TryGetValue(endpointKey, out live))
                 {
-                    activeNodeFailStreak = 0;
-                    // TCP reachability does not mean VLESS works; promoting back to
-                    // Ok here was undoing tunnel-failure marks and blocking failover.
-                    return;
+                    resolved.Add(live);
+                    continue;
                 }
 
-                activeNodeFailStreak++;
-                if (activeNodeFailStreak < 2)
-                    return;
+                resolved.Add(target);
+            }
 
-                activeNodeFailStreak = 0;
-                DiagnosticLog.Write("Goida.WatchActiveNode",
-                    $"Active node {active.Id} unreachable twice in a row, failing over");
-                ReportTunnelFailure();
-            }
-            catch (Exception ex)
-            {
-                DiagnosticLog.WriteException("Goida.WatchActiveNode", ex);
-            }
+            return resolved;
+        }
+
+        private static void CopyProbeState(GoidaNode source, GoidaNode target)
+        {
+            target.LatencyMs = source.LatencyMs;
+            target.Status = source.Status;
+            target.LastCheckedUtc = source.LastCheckedUtc;
+            target.VlessVerified = source.VlessVerified;
         }
 
         private bool ShouldRunBackground(GoidaProfileSettings settings)

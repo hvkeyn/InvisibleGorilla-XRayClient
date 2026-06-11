@@ -23,7 +23,17 @@ namespace InvisibleGorillaXRay.Factories
             this.handlersManager = handlersManager;
         }
 
-        public MainWindow GetMainWindow() => Application.Current.MainWindow as MainWindow;
+        public MainWindow? GetMainWindow()
+        {
+            if (Application.Current?.Dispatcher == null)
+                return null;
+
+            if (Application.Current.Dispatcher.CheckAccess())
+                return Application.Current.MainWindow as MainWindow;
+
+            return Application.Current.Dispatcher.Invoke(
+                () => Application.Current.MainWindow as MainWindow);
+        }
 
         public MainWindow CreateMainWindow()
         {

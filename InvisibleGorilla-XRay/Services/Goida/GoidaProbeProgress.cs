@@ -1,3 +1,4 @@
+using System;
 using InvisibleGorillaXRay.Models;
 
 namespace InvisibleGorillaXRay.Services.Goida
@@ -9,6 +10,17 @@ namespace InvisibleGorillaXRay.Services.Goida
         public GoidaNode? Node { get; init; }
         public int LatencyMs { get; init; }
         public GoidaNodeStatus Status { get; init; }
+        public bool IsVlessPhase { get; init; }
+    }
+
+    public sealed class GoidaTcpVlessProbeOptions
+    {
+        public int MaxVlessTests { get; init; } = 100;
+        public int EarlyStopOkCount { get; init; } = 100;
+        public int MaxTcpLatencyForVlessMs { get; init; } = 3000;
+        public int NativeTimeoutMs { get; init; } = 7000;
+        public int TcpTimeoutMs { get; init; } = 2500;
+        public Action? OnFirstVlessOk { get; init; }
     }
 
     public sealed class GoidaProbeResult

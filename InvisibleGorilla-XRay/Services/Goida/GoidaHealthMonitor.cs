@@ -11,8 +11,9 @@ namespace InvisibleGorillaXRay.Services.Goida
     public sealed class GoidaHealthMonitor
     {
         private const int FastProbeConcurrency = 16;
-        private const int FastProbeTimeoutMs = 1500;
-        private const int ProgressNotifyEvery = 8;
+        private const int FastProbeTimeoutMs = 2500;
+        private const int NativeProbeTimeoutMs = 7000;
+        private const int ProgressNotifyEvery = 4;
 
         private static readonly SemaphoreSlim NativeTestGate = new(1, 1);
 
@@ -40,6 +41,232 @@ namespace InvisibleGorillaXRay.Services.Goida
             CancellationToken cancellationToken = default)
         {
             return ProbeNodesInternalAsync(nodes, useNativeTest: false, cancellationToken);
+        }
+
+        /// <summary>
+        /// TCP probes run in parallel; each TCP-ok node is queued for VLESS immediately
+        /// (fastest TCP latency first) so real connection tests start while TCP is still running.
+        /// </summary>
+        public async Task<GoidaProbeResult> ProbeTcpThenVlessAsync(
+            IReadOnlyList<GoidaNode> targets,
+            GoidaTcpVlessProbeOptions options,
+            CancellationToken cancellationToken = default)
+        {
+            if (targets.Count == 0)
+                return new GoidaProbeResult();
+
+            List<GoidaNode> vlessPending = new();
+            object vlessLock = new();
+            bool tcpPhaseDone = false;
+            int tcpOk = 0;
+            int tcpTimeout = 0;
+            int tcpError = 0;
+            int tcpCompleted = 0;
+            int nativeOk = 0;
+            int nativeTimeout = 0;
+            int nativeError = 0;
+            int nativeTested = 0;
+            bool cancelled = false;
+            GoidaNode? bestNode = null;
+            int bestLatency = int.MaxValue;
+            int vlessEnqueued = 0;
+            int vlessTargetTotal = 0;
+            bool vlessPhaseAnnounced = false;
+
+            void EnqueueForVless(GoidaNode? live, int tcpLatency)
+            {
+                if (live == null
+                    || live.VlessVerified
+                    || tcpLatency < 0
+                    || tcpLatency > options.MaxTcpLatencyForVlessMs)
+                    return;
+
+                lock (vlessLock)
+                {
+                    int insertAt = vlessPending.FindIndex(node => node.LatencyMs > live.LatencyMs);
+                    if (insertAt < 0)
+                        vlessPending.Add(live);
+                    else
+                        vlessPending.Insert(insertAt, live);
+
+                    vlessEnqueued++;
+                    vlessTargetTotal = Math.Min(options.MaxVlessTests, vlessEnqueued);
+                }
+            }
+
+            Task nativeWorker = options.MaxVlessTests <= 0
+                ? Task.CompletedTask
+                : Task.Run(async () =>
+            {
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    GoidaNode? node = null;
+                    lock (vlessLock)
+                    {
+                        if (vlessPending.Count > 0)
+                            node = vlessPending[0];
+                        if (node != null)
+                            vlessPending.RemoveAt(0);
+                        else if (tcpPhaseDone)
+                            break;
+                    }
+
+                    if (node == null)
+                    {
+                        await Task.Delay(25, cancellationToken).ConfigureAwait(false);
+                        continue;
+                    }
+
+                    if (nativeTested >= options.MaxVlessTests)
+                        break;
+
+                    if (nativeOk >= options.EarlyStopOkCount)
+                        break;
+
+                    await NativeTestGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                    try
+                    {
+                        int latency = await RunNativeProbeWithDeadline(
+                            node,
+                            options.NativeTimeoutMs > 0
+                                ? options.NativeTimeoutMs
+                                : NativeProbeTimeoutMs,
+                            cancellationToken).ConfigureAwait(false);
+
+                        ApplyProbeResult(node.Id, node.ListId, node.Endpoint, latency, vlessVerified: true,
+                            ref nativeOk, ref nativeTimeout, ref nativeError, ref nativeTested,
+                            ref bestNode, ref bestLatency);
+
+                        if (!vlessPhaseAnnounced)
+                            vlessPhaseAnnounced = true;
+
+                        NotifyProgress(nativeTested, Math.Max(1, vlessTargetTotal), node.Id, node.DisplayName,
+                            latency, vlessVerified: true);
+
+                        if (nativeOk == 1 && latency >= 0
+                            && latency != Values.Availability.ERROR
+                            && latency != Values.Availability.TIMEOUT)
+                            options.OnFirstVlessOk?.Invoke();
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        cancelled = true;
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        DiagnosticLog.WriteException($"Goida.ProbeNode.{node.Id}", ex);
+                        store.UpdateNodeStatus(node.Id, Values.Availability.ERROR, GoidaNodeStatus.Error,
+                            vlessVerified: false, listId: node.ListId, endpoint: node.Endpoint);
+                        nativeTested++;
+                        nativeError++;
+                        NotifyProgress(nativeTested, Math.Max(1, vlessTargetTotal), node.Id, node.DisplayName,
+                            Values.Availability.ERROR, vlessVerified: true);
+                    }
+                    finally
+                    {
+                        NativeTestGate.Release();
+                    }
+                }
+            }, cancellationToken);
+
+            if (options.MaxVlessTests <= 0)
+                tcpPhaseDone = true;
+
+            int tcpTimeoutMs = options.TcpTimeoutMs > 0 ? options.TcpTimeoutMs : FastProbeTimeoutMs;
+            using SemaphoreSlim gate = new(FastProbeConcurrency, FastProbeConcurrency);
+            List<Task> tcpTasks = new(targets.Count);
+            object tcpLock = new();
+
+            foreach (GoidaNode node in targets)
+            {
+                string probeNodeId = node.Id;
+                int probeListId = node.ListId;
+                string probeEndpoint = node.Endpoint;
+                string probeDisplayName = node.DisplayName;
+                tcpTasks.Add(Task.Run(async () =>
+                {
+                    await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                    try
+                    {
+                        if (cancellationToken.IsCancellationRequested)
+                            return;
+
+                        int latency = GoidaEndpointProbe.ProbeTcp(probeEndpoint, tcpTimeoutMs);
+
+                        lock (tcpLock)
+                        {
+                            if (cancellationToken.IsCancellationRequested)
+                                return;
+
+                            ApplyProbeResult(probeNodeId, probeListId, probeEndpoint, latency,
+                                vlessVerified: false, ref tcpOk, ref tcpTimeout,
+                                ref tcpError, ref tcpCompleted, ref bestNode, ref bestLatency);
+
+                            if (!vlessPhaseAnnounced)
+                                NotifyProgress(tcpCompleted, targets.Count, probeNodeId, probeDisplayName, latency,
+                                    vlessVerified: false);
+
+                            GoidaNode? stored = ResolveStoredNode(probeNodeId, probeListId, probeEndpoint);
+                            EnqueueForVless(stored, latency);
+                        }
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        cancelled = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        DiagnosticLog.WriteException($"Goida.FastProbe.{probeNodeId}", ex);
+                        lock (tcpLock)
+                        {
+                            store.UpdateNodeStatus(probeNodeId, Values.Availability.ERROR, GoidaNodeStatus.Error,
+                                listId: probeListId, endpoint: probeEndpoint);
+                            tcpCompleted++;
+                            tcpError++;
+                            if (!vlessPhaseAnnounced)
+                                NotifyProgress(tcpCompleted, targets.Count, probeNodeId, probeDisplayName,
+                                    Values.Availability.ERROR, vlessVerified: false);
+                        }
+                    }
+                    finally
+                    {
+                        gate.Release();
+                    }
+                }, cancellationToken));
+            }
+
+            try
+            {
+                await Task.WhenAll(tcpTasks).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                cancelled = true;
+            }
+
+            lock (vlessLock)
+                tcpPhaseDone = true;
+
+            try
+            {
+                await nativeWorker.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                cancelled = true;
+            }
+
+            return new GoidaProbeResult
+            {
+                Total = targets.Count,
+                Completed = tcpCompleted,
+                Ok = nativeOk > 0 ? nativeOk : tcpOk,
+                Timeout = nativeTested > 0 ? nativeTimeout : tcpTimeout,
+                Error = nativeTested > 0 ? nativeError : tcpError,
+                Cancelled = cancelled,
+                BestNode = bestNode
+            };
         }
 
         private async Task<GoidaProbeResult> ProbeNodesInternalAsync(
@@ -85,13 +312,13 @@ namespace InvisibleGorillaXRay.Services.Goida
                 await NativeTestGate.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
-                    int latency = await Task.Run(
-                        () => ProbeNodeSafe(node),
-                        cancellationToken).ConfigureAwait(false);
-                    ApplyProbeResult(node.Id, latency, vlessVerified: true, ref ok, ref timeout, ref error,
-                        ref completed, ref bestNode, ref bestLatency);
+                    int latency = await RunNativeProbeWithDeadline(node, NativeProbeTimeoutMs, cancellationToken)
+                        .ConfigureAwait(false);
+                    ApplyProbeResult(node.Id, node.ListId, node.Endpoint, latency, vlessVerified: true,
+                        ref ok, ref timeout, ref error, ref completed, ref bestNode, ref bestLatency);
 
-                    NotifyProgress(completed, targets.Count, node.Id, latency, vlessVerified: true);
+                    NotifyProgress(completed, targets.Count, node.Id, node.DisplayName, latency,
+                        vlessVerified: true);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
@@ -102,18 +329,16 @@ namespace InvisibleGorillaXRay.Services.Goida
                 {
                     DiagnosticLog.WriteException($"Goida.ProbeNode.{node.Id}", ex);
                     store.UpdateNodeStatus(node.Id, Values.Availability.ERROR, GoidaNodeStatus.Error,
-                        vlessVerified: false);
+                        vlessVerified: false, listId: node.ListId, endpoint: node.Endpoint);
                     completed++;
                     error++;
-                    NotifyProgress(completed, targets.Count, node.Id, Values.Availability.ERROR, vlessVerified: false);
+                    NotifyProgress(completed, targets.Count, node.Id, node.DisplayName,
+                        Values.Availability.ERROR, vlessVerified: false);
                 }
                 finally
                 {
                     NativeTestGate.Release();
                 }
-
-                if (index < targets.Count - 1 && !cancellationToken.IsCancellationRequested)
-                    await Task.Delay(80, cancellationToken).ConfigureAwait(false);
             }
 
             return BuildResult(targets.Count, completed, ok, timeout, error, cancelled, bestNode);
@@ -137,6 +362,10 @@ namespace InvisibleGorillaXRay.Services.Goida
 
             foreach (GoidaNode node in targets)
             {
+                string probeNodeId = node.Id;
+                int probeListId = node.ListId;
+                string probeEndpoint = node.Endpoint;
+                string probeDisplayName = node.DisplayName;
                 tasks.Add(Task.Run(async () =>
                 {
                     await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -145,15 +374,17 @@ namespace InvisibleGorillaXRay.Services.Goida
                         if (cancellationToken.IsCancellationRequested)
                             return;
 
-                        int latency = GoidaEndpointProbe.ProbeTcp(node.Endpoint, FastProbeTimeoutMs);
+                        int latency = GoidaEndpointProbe.ProbeTcp(probeEndpoint, FastProbeTimeoutMs);
                         lock (progressLock)
                         {
                             if (cancellationToken.IsCancellationRequested)
                                 return;
 
-                            ApplyProbeResult(node.Id, latency, vlessVerified: false, ref ok, ref timeout,
+                            ApplyProbeResult(probeNodeId, probeListId, probeEndpoint, latency,
+                                vlessVerified: false, ref ok, ref timeout,
                                 ref error, ref completed, ref bestNode, ref bestLatency);
-                            NotifyProgress(completed, targets.Count, node.Id, latency, vlessVerified: false);
+                            NotifyProgress(completed, targets.Count, probeNodeId, probeDisplayName, latency,
+                                vlessVerified: false);
                         }
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -162,14 +393,15 @@ namespace InvisibleGorillaXRay.Services.Goida
                     }
                     catch (Exception ex)
                     {
-                        DiagnosticLog.WriteException($"Goida.FastProbe.{node.Id}", ex);
+                        DiagnosticLog.WriteException($"Goida.FastProbe.{probeNodeId}", ex);
                         lock (progressLock)
                         {
-                            store.UpdateNodeStatus(node.Id, Values.Availability.ERROR, GoidaNodeStatus.Error);
+                            store.UpdateNodeStatus(probeNodeId, Values.Availability.ERROR, GoidaNodeStatus.Error,
+                                listId: probeListId, endpoint: probeEndpoint);
                             completed++;
                             error++;
-                            NotifyProgress(completed, targets.Count, node.Id, Values.Availability.ERROR,
-                                vlessVerified: false);
+                            NotifyProgress(completed, targets.Count, probeNodeId, probeDisplayName,
+                                Values.Availability.ERROR, vlessVerified: false);
                         }
                     }
                     finally
@@ -194,10 +426,78 @@ namespace InvisibleGorillaXRay.Services.Goida
             }
         }
 
-        public int TestNodeNative(GoidaNode node) => ProbeNodeSafe(node);
+        public int TestNodeNative(GoidaNode node) =>
+            ProbeNodeSafeWithTimeout(node, NativeProbeTimeoutMs);
+
+        private async Task<int> RunNativeProbeWithDeadline(
+            GoidaNode node,
+            int timeoutMs,
+            CancellationToken cancellationToken)
+        {
+            Task<int> probeTask = Task.Run(() => ProbeNodeSafe(node), cancellationToken);
+            try
+            {
+                Task completed = await Task.WhenAny(
+                    probeTask,
+                    Task.Delay(timeoutMs, cancellationToken)).ConfigureAwait(false);
+                if (completed == probeTask)
+                    return probeTask.Result;
+
+                DiagnosticLog.Write("Goida.ProbeNodeNative",
+                    $"Deadline {timeoutMs}ms on {node.DisplayName} ({node.Endpoint}), waiting for native test to finish");
+                return await probeTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException($"Goida.ProbeNodeNative.{node.Id}", ex);
+                return Values.Availability.TIMEOUT;
+            }
+        }
+
+        private int ProbeNodeSafeWithTimeout(GoidaNode node, int timeoutMs)
+        {
+            try
+            {
+                Task<int> probeTask = Task.Run(() => ProbeNodeSafe(node));
+                if (probeTask.Wait(timeoutMs))
+                    return probeTask.Result;
+
+                DiagnosticLog.Write("Goida.ProbeNodeNative",
+                    $"Sync deadline {timeoutMs}ms on {node.DisplayName} ({node.Endpoint})");
+                return probeTask.Wait(timeoutMs * 2) ? probeTask.Result : Values.Availability.TIMEOUT;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException($"Goida.ProbeNodeNative.{node.Id}", ex);
+                return Values.Availability.TIMEOUT;
+            }
+        }
+
+        private GoidaNode? ResolveStoredNode(string nodeId, int listId, string endpoint)
+        {
+            GoidaNode? stored = store.FindById(nodeId);
+            if (stored != null)
+                return stored;
+
+            if (listId > 0 && !string.IsNullOrWhiteSpace(endpoint))
+            {
+                stored = store.GetNodes().FirstOrDefault(candidate =>
+                    candidate.ListId == listId
+                    && string.Equals(candidate.Endpoint?.Trim(), endpoint.Trim(),
+                        StringComparison.OrdinalIgnoreCase));
+            }
+
+            return stored;
+        }
 
         private void ApplyProbeResult(
             string nodeId,
+            int listId,
+            string endpoint,
             int latency,
             bool vlessVerified,
             ref int ok,
@@ -210,8 +510,10 @@ namespace InvisibleGorillaXRay.Services.Goida
             GoidaNodeStatus status = vlessVerified
                 ? MapLatency(latency)
                 : MapTcpOnlyLatency(latency);
-            store.UpdateNodeStatus(nodeId, latency, status, vlessVerified);
+            store.UpdateNodeStatus(nodeId, latency, status, vlessVerified, listId, endpoint);
             completed++;
+
+            GoidaNode? stored = ResolveStoredNode(nodeId, listId, endpoint);
 
             switch (status)
             {
@@ -220,7 +522,7 @@ namespace InvisibleGorillaXRay.Services.Goida
                     if (vlessVerified && latency >= 0 && latency < bestLatency)
                     {
                         bestLatency = latency;
-                        bestNode = store.FindById(nodeId);
+                        bestNode = stored ?? store.FindById(nodeId);
                     }
                     break;
                 case GoidaNodeStatus.Timeout:
@@ -234,7 +536,13 @@ namespace InvisibleGorillaXRay.Services.Goida
             }
         }
 
-        private void NotifyProgress(int completed, int total, string nodeId, int latencyMs, bool vlessVerified)
+        private void NotifyProgress(
+            int completed,
+            int total,
+            string nodeId,
+            string displayName,
+            int latencyMs,
+            bool vlessVerified)
         {
             GoidaNodeStatus status = vlessVerified
                 ? MapLatency(latencyMs)
@@ -242,13 +550,24 @@ namespace InvisibleGorillaXRay.Services.Goida
             if (completed % ProgressNotifyEvery == 0 || completed == total)
                 NodesUpdated?.Invoke();
 
+            GoidaNode? node = store.FindById(nodeId);
+            if (node == null && !string.IsNullOrWhiteSpace(displayName))
+            {
+                node = new GoidaNode
+                {
+                    Id = nodeId,
+                    DisplayName = displayName
+                };
+            }
+
             ProbeProgress?.Invoke(new GoidaProbeProgress
             {
                 Current = completed,
                 Total = total,
-                Node = store.FindById(nodeId),
+                Node = node,
                 LatencyMs = latencyMs,
-                Status = status
+                Status = status,
+                IsVlessPhase = vlessVerified
             });
         }
 
@@ -280,7 +599,11 @@ namespace InvisibleGorillaXRay.Services.Goida
                 if (string.IsNullOrWhiteSpace(node.ConfigPath))
                     return Values.Availability.ERROR;
 
-                return testConnection(node.ConfigPath);
+                int latency = testConnection(node.ConfigPath);
+                if (latency < 0)
+                    DiagnosticLog.Write("Goida.ProbeNodeNative",
+                        $"{node.DisplayName} ({node.Endpoint}): result={latency}");
+                return latency;
             }
             catch (Exception ex)
             {

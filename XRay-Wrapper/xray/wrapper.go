@@ -130,11 +130,20 @@ func TestConnection(config *C.char, port int) int {
 	}
 
 	start := time.Now()
-	http.DefaultTransport = &http.Transport{
-		Proxy:               http.ProxyURL(proxyUrl),
-		TLSHandshakeTimeout: time.Second * 5,
+	client := &http.Client{
+		Timeout: 8 * time.Second,
+		Transport: &http.Transport{
+			Proxy:                 http.ProxyURL(proxyUrl),
+			TLSHandshakeTimeout:   3 * time.Second,
+			ResponseHeaderTimeout: 5 * time.Second,
+		},
 	}
-	response, err := http.Head("https://www.gstatic.com/generate_204")
+	req, err := http.NewRequest(http.MethodHead, "https://www.gstatic.com/generate_204", nil)
+	if err != nil {
+		server.Close()
+		return PingError
+	}
+	response, err := client.Do(req)
 
 	if err != nil {
 		server.Close()

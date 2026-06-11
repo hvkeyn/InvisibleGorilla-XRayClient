@@ -31,6 +31,7 @@ namespace InvisibleGorillaXRay
         // null = not checked yet / VPN idle, true = tunnel passes traffic, false = tunnel dead.
         private bool? lastTunnelCheckOk;
         private int consecutiveTunnelFailures;
+        private DateTime goidaSwitchGraceUntil = DateTime.MinValue;
 
         private Func<bool> isNeedToShowPolicyWindow;
         private Func<bool> shouldStartHidden;
@@ -677,6 +678,8 @@ namespace InvisibleGorillaXRay
 
             isConnected = true;
             consecutiveTunnelFailures = 0;
+            if (IsGoidaProfileActive())
+                goidaSwitchGraceUntil = DateTime.UtcNow.AddSeconds(20);
             connectionInfoTimer.Interval = IsGoidaProfileActive()
                 ? TimeSpan.FromSeconds(8)
                 : TimeSpan.FromSeconds(20);
@@ -825,9 +828,15 @@ namespace InvisibleGorillaXRay
 
         private void RegisterTunnelFailure()
         {
+            if (IsGoidaProfileActive() && DateTime.UtcNow < goidaSwitchGraceUntil)
+            {
+                consecutiveTunnelFailures = 0;
+                return;
+            }
+
             consecutiveTunnelFailures++;
 
-            // Goida keys die fast — one failed tunnel check is enough to switch.
+            // After grace, one failed check switches; otherwise confirm twice.
             int requiredFailures = IsGoidaProfileActive() ? 1 : 2;
             if (consecutiveTunnelFailures < requiredFailures)
             {
@@ -845,15 +854,16 @@ namespace InvisibleGorillaXRay
                 try
                 {
                     bool switched = onTunnelBroken.Invoke();
-                    if (!switched && isConnected)
+                    if (switched)
+                    {
+                        goidaSwitchGraceUntil = DateTime.UtcNow.AddSeconds(25);
+                        Dispatcher.BeginInvoke(new Action(() =>
+                            ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(10))));
+                    }
+                    else if (isConnected)
                     {
                         Dispatcher.BeginInvoke(new Action(() =>
                             ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(5))));
-                    }
-                    else if (switched)
-                    {
-                        Dispatcher.BeginInvoke(new Action(() =>
-                            ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(8))));
                     }
                 }
                 catch (Exception ex)

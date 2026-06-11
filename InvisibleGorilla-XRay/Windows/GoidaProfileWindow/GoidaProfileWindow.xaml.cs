@@ -216,7 +216,15 @@ namespace InvisibleGorillaXRay
                 else if (string.Equals(message, "refresh-no-vpn-lists", StringComparison.OrdinalIgnoreCase))
                     SetStatusText(Localize("Lang.Goida.NoListsSelected"));
                 else if (string.Equals(message, "verify-start", StringComparison.OrdinalIgnoreCase))
+                {
+                    probeCurrent = 0;
+                    probeTotal = Math.Max(1, goidaHandler?.Manager.CountVerifyTargets(manual: true) ?? 1);
+                    progressProbe.Maximum = probeTotal;
+                    progressProbe.Value = 0;
                     SetStatusText(Localize("Lang.Goida.VerifyingTop"));
+                }
+                else if (string.Equals(message, "verify-skipped-vpn", StringComparison.OrdinalIgnoreCase))
+                    SetStatusText(Localize("Lang.Goida.VerifySkippedVpn"));
                 else if (string.Equals(message, "verify-complete", StringComparison.OrdinalIgnoreCase))
                 {
                     RefreshGrid(forceLatencySort: true);

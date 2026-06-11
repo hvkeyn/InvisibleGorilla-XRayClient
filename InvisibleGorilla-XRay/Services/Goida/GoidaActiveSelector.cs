@@ -60,8 +60,11 @@ namespace InvisibleGorillaXRay.Services.Goida
             if (!settings.AutoSwitchOnFly)
                 return false;
 
-            if (settings.SelectionMode != GoidaSelectionMode.AutoBest
-                && settings.SelectionMode != GoidaSelectionMode.ManualPool)
+            // Pool mode: rotation happens only on confirmed tunnel failure, not on probes.
+            if (settings.SelectionMode == GoidaSelectionMode.ManualPool)
+                return false;
+
+            if (settings.SelectionMode != GoidaSelectionMode.AutoBest)
                 return false;
 
             if (bestNode == null)
@@ -71,6 +74,10 @@ namespace InvisibleGorillaXRay.Services.Goida
                 return true;
 
             if (string.Equals(currentNode.Id, bestNode.Id, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            // A verified-working active node must not be replaced by a faster TCP probe.
+            if (currentNode.VlessVerified && currentNode.Status == GoidaNodeStatus.Ok)
                 return false;
 
             if (currentNode.Status is GoidaNodeStatus.Timeout or GoidaNodeStatus.Error)

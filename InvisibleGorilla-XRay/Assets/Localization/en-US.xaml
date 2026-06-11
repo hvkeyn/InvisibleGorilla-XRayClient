@@ -193,6 +193,7 @@
     <system:String x:Key="Lang.Goida.Refresh">Refresh lists</system:String>
     <system:String x:Key="Lang.Goida.ProbeAll">Probe all</system:String>
     <system:String x:Key="Lang.Goida.VerifyingTop">Verifying top nodes with a real connection…</system:String>
+    <system:String x:Key="Lang.Goida.VerifySkippedVpn">TCP scan finished. Stop VPN (or wait until it fully stops) and run Probe all again to complete VLESS verification.</system:String>
     <system:String x:Key="Lang.Goida.UseBest">Best node</system:String>
     <system:String x:Key="Lang.Goida.UseBestHint">Pick the fastest available node (based on probe results)</system:String>
     <system:String x:Key="Lang.Goida.SetActive">Set active</system:String>

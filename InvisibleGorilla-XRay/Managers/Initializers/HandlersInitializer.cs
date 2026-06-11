@@ -325,20 +325,30 @@ namespace InvisibleGorillaXRay.Managers.Initializers
                     resumeNativeAfterTest: ResumeNativeAfterGoidaProbe,
                     isVpnSessionActive: IsVpnSessionActive);
 
-                bool IsVpnSessionActive()
-                {
-                    return windowFactory.GetMainWindow()?.IsServerRunning ?? false;
-                }
+                bool IsVpnSessionActive() => InvokeOnUi(
+                    () => windowFactory.GetMainWindow()?.IsServerRunning ?? false);
 
-                bool PauseNativeForGoidaProbe()
+                bool PauseNativeForGoidaProbe() => InvokeOnUi(() =>
                 {
                     MainWindow? mainWindow = windowFactory.GetMainWindow();
                     return mainWindow?.TryPauseForNativeTest() ?? false;
-                }
+                });
 
-                void ResumeNativeAfterGoidaProbe()
+                void ResumeNativeAfterGoidaProbe() => InvokeOnUi(() =>
                 {
                     windowFactory.GetMainWindow()?.TryResumeAfterNativeTest();
+                    return true;
+                });
+
+                static T InvokeOnUi<T>(Func<T> action)
+                {
+                    if (Application.Current?.Dispatcher == null)
+                        return action();
+
+                    if (Application.Current.Dispatcher.CheckAccess())
+                        return action();
+
+                    return Application.Current.Dispatcher.Invoke(action);
                 }
 
                 void OnGoidaActiveNodeChanged(GoidaNode node)

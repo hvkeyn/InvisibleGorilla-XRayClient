@@ -86,7 +86,7 @@ namespace InvisibleGorillaXRay.Services.Goida
 
         private static string ComputeNodeId(int listId, string remark, string configJson)
         {
-            string source = $"{listId}|{remark}|{configJson.Length}|{configJson.GetHashCode()}";
+            string source = $"{listId}|{remark}|{configJson}";
             byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(source));
             return Convert.ToHexString(hash.AsSpan(0, 8)).ToLowerInvariant();
         }
