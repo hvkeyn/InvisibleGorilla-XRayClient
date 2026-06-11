@@ -4397,7 +4397,7 @@ namespace InvisibleGorillaXRay.Android.Views
             if (!settingsHandler.UserSettings.GetGoidaSettings().Enabled)
                 return;
 
-            settingsHandler.UpdateCurrentConfigPath(node.ConfigPath);
+            settingsHandler.UpdateCurrentConfigPath(GoidaProfilePaths.MarkerPath);
 
             Dispatcher.UIThread.Post(() =>
             {
@@ -4432,15 +4432,38 @@ namespace InvisibleGorillaXRay.Android.Views
             RefreshGoidaNodesList();
         }
 
+        private void ApplyGoidaListFilterToSettings(GoidaProfileSettings settings)
+        {
+            string filter = GoidaFilterListInput.Text?.Trim() ?? string.Empty;
+            if (int.TryParse(filter, out int listId) && listId >= 1)
+                settings.EnabledListIds = new List<int> { listId };
+            else if (settings.EnabledListIds == null || settings.EnabledListIds.Count == 0)
+                settings.EnabledListIds = Enumerable.Range(1, 26).ToList();
+        }
+
         private async void OnGoidaRefreshClick(object? sender, RoutedEventArgs e)
         {
+            UserSettings current = settingsHandler.UserSettings;
+            GoidaProfileSettings settings = current.GetGoidaSettings().Clone();
+            ApplyGoidaListFilterToSettings(settings);
+            current.Goida = settings;
+            settingsHandler.UpdateUserSettings(current);
+            goidaHandler.Manager.UpdateSettings(settings);
+
             await goidaHandler.Manager.RefreshListsAsync();
             RefreshGoidaNodesList();
         }
 
         private async void OnGoidaProbeClick(object? sender, RoutedEventArgs e)
         {
-            await goidaHandler.Manager.ProbeAsync();
+            UserSettings current = settingsHandler.UserSettings;
+            GoidaProfileSettings settings = current.GetGoidaSettings().Clone();
+            ApplyGoidaListFilterToSettings(settings);
+            current.Goida = settings;
+            settingsHandler.UpdateUserSettings(current);
+            goidaHandler.Manager.UpdateSettings(settings);
+
+            await goidaHandler.Manager.ProbeAsync(manual: true);
             RefreshGoidaNodesList();
         }
 
@@ -4462,11 +4485,7 @@ namespace InvisibleGorillaXRay.Android.Views
             settings.SelectionMode = GoidaSelectionMode.ManualFixed;
             current.Goida = settings;
             settingsHandler.UpdateUserSettings(current);
-
-            GoidaNode? node = goidaHandler.Manager.GetNodesSorted()
-                .FirstOrDefault(candidate => string.Equals(candidate.Id, row.Id, StringComparison.OrdinalIgnoreCase));
-            if (node != null)
-                HandleGoidaActiveNodeChanged(node);
+            goidaHandler.Manager.SetActiveNode(row.Id);
 
             ApplyGoidaSettingsToControls();
             RefreshGoidaNodesList();

@@ -81,7 +81,9 @@ namespace InvisibleGorillaXRay.Services.Goida
             GoidaProfileSettings settings,
             IReadOnlyList<GoidaNode> nodes)
         {
-            HashSet<int> enabledLists = settings.EnabledListIds?.ToHashSet() ?? new HashSet<int>();
+            HashSet<int> enabledLists = settings.EnabledListIds?.Count > 0
+                ? settings.EnabledListIds.ToHashSet()
+                : Enumerable.Range(1, 26).ToHashSet();
             IEnumerable<GoidaNode> filtered = nodes.Where(node => enabledLists.Contains(node.ListId));
 
             if (settings.SelectionMode == GoidaSelectionMode.ManualFixed

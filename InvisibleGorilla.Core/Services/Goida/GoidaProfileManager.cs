@@ -173,6 +173,7 @@ namespace InvisibleGorillaXRay.Services.Goida
                                 node.LatencyMs = previous.LatencyMs;
                                 node.Status = previous.Status;
                                 node.LastCheckedUtc = previous.LastCheckedUtc;
+                                node.VlessVerified = previous.VlessVerified;
                             }
 
                             merged.Add(node);
@@ -203,23 +204,61 @@ namespace InvisibleGorillaXRay.Services.Goida
             }
         }
 
-        public async Task ProbeAsync(CancellationToken cancellationToken = default)
+        public async Task<GoidaProbeResult> ProbeAsync(
+            CancellationToken cancellationToken = default,
+            bool manual = false)
         {
             if (Interlocked.CompareExchange(ref probeInProgress, 1, 0) != 0)
-                return;
+                return new GoidaProbeResult();
 
             bool pausedNative = false;
             try
             {
                 GoidaProfileSettings settings = getSettings().Clone();
-                IEnumerable<GoidaNode> targets = FilterProbeTargets(settings, store.GetNodes());
+                List<GoidaNode> targets = FilterProbeTargets(settings, store.GetNodes(), manual).ToList();
+                if (targets.Count == 0)
+                    return new GoidaProbeResult();
+
+                GoidaTcpVlessProbeOptions probeOptions = new()
+                {
+                    MaxVlessTests = manual
+                        ? GoidaProfileSettings.MaxVerifiedNodes
+                        : Math.Min(GoidaProfileSettings.MaxVerifiedNodes, MaxProbeBatch),
+                    EarlyStopOkCount = manual
+                        ? GoidaProfileSettings.DefaultAutoPoolSize
+                        : Math.Min(5, MaxProbeBatch),
+                    MaxTcpLatencyForVlessMs = settings.AutoSwitchLatencyMs,
+                    OnFirstVlessOk = () => _ = EvaluateAutoSwitchAsync(getSettings().Clone())
+                };
 
                 pausedNative = pauseNativeForTest?.Invoke() ?? false;
-                await monitor.ProbeNodesAsync(targets, cancellationToken).ConfigureAwait(false);
-                await EvaluateAutoSwitchAsync(settings).ConfigureAwait(false);
+
+                GoidaProbeResult result;
+                store.BeginBulkUpdate();
+                try
+                {
+                    result = await monitor.ProbeTcpThenVlessAsync(
+                        targets,
+                        probeOptions,
+                        cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    store.EndBulkUpdate();
+                }
+
+                if (!result.Cancelled && result.Ok > 0)
+                    await EvaluateAutoSwitchAsync(settings).ConfigureAwait(false);
+
+                return result;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return new GoidaProbeResult { Cancelled = true };
             }
             catch
             {
+                return new GoidaProbeResult();
             }
             finally
             {
@@ -258,27 +297,31 @@ namespace InvisibleGorillaXRay.Services.Goida
 
         private IEnumerable<GoidaNode> FilterProbeTargets(
             GoidaProfileSettings settings,
-            IReadOnlyList<GoidaNode> nodes)
+            IReadOnlyList<GoidaNode> nodes,
+            bool manual)
         {
-            HashSet<int> enabledLists = settings.EnabledListIds?.ToHashSet()
-                ?? Enumerable.Range(1, 26).ToHashSet();
+            HashSet<int> enabledLists = settings.EnabledListIds?.Count > 0
+                ? settings.EnabledListIds.ToHashSet()
+                : Enumerable.Range(1, 26).ToHashSet();
             IEnumerable<GoidaNode> filtered = nodes
                 .Where(node => enabledLists.Contains(node.ListId));
 
             if (settings.SelectionMode == GoidaSelectionMode.ManualFixed
                 && !string.IsNullOrWhiteSpace(settings.PinnedNodeId))
             {
-                return filtered.Where(node =>
+                filtered = filtered.Where(node =>
                     string.Equals(node.Id, settings.PinnedNodeId, StringComparison.OrdinalIgnoreCase));
             }
-
-            if (settings.SelectionMode == GoidaSelectionMode.ManualPool
+            else if (settings.SelectionMode == GoidaSelectionMode.ManualPool
                 && settings.ManualPoolNodeIds?.Count > 0)
             {
                 HashSet<string> pool = settings.ManualPoolNodeIds
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                return filtered.Where(node => pool.Contains(node.Id));
+                filtered = filtered.Where(node => pool.Contains(node.Id));
             }
+
+            if (manual)
+                return filtered;
 
             string? activeId = settings.ActiveNodeId;
             if (!string.IsNullOrWhiteSpace(activeId))

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
+using InvisibleGorillaXRay.Core;
 using InvisibleGorillaXRay.Models;
 
 namespace InvisibleGorillaXRay.Services.Goida
@@ -15,6 +16,7 @@ namespace InvisibleGorillaXRay.Services.Goida
 
         private readonly object sync = new();
         private List<GoidaNode> nodes = new();
+        private int bulkUpdateDepth;
 
         public string ProfileDirectory => Path.Combine(Values.Directory.CONFIGS, ProfileDirectoryName);
 
@@ -62,23 +64,53 @@ namespace InvisibleGorillaXRay.Services.Goida
                     .GroupBy(node => node.Id, StringComparer.OrdinalIgnoreCase)
                     .Select(group => group.Last())
                     .ToList();
-                SaveLocked();
+                if (bulkUpdateDepth == 0)
+                    SaveLocked();
             }
         }
 
-        public void UpdateNodeStatus(string nodeId, int latencyMs, GoidaNodeStatus status)
+        public void BeginBulkUpdate()
+        {
+            lock (sync)
+                bulkUpdateDepth++;
+        }
+
+        public void EndBulkUpdate()
         {
             lock (sync)
             {
-                GoidaNode? node = nodes.FirstOrDefault(candidate =>
-                    string.Equals(candidate.Id, nodeId, StringComparison.OrdinalIgnoreCase));
+                if (bulkUpdateDepth > 0)
+                    bulkUpdateDepth--;
+                if (bulkUpdateDepth == 0)
+                    SaveLocked();
+            }
+        }
+
+        public void UpdateNodeStatus(
+            string nodeId,
+            int latencyMs,
+            GoidaNodeStatus status,
+            bool? vlessVerified = null,
+            int listId = 0,
+            string? endpoint = null)
+        {
+            lock (sync)
+            {
+                GoidaNode? node = FindNodeLocked(nodeId, listId, endpoint);
                 if (node == null)
+                {
+                    DiagnosticLog.Write("GoidaNodeStore.UpdateNodeStatus",
+                        $"Node not found: id={nodeId}, list={listId}, endpoint={endpoint}");
                     return;
+                }
 
                 node.LatencyMs = latencyMs;
                 node.Status = status;
                 node.LastCheckedUtc = DateTime.UtcNow;
-                SaveLocked();
+                if (vlessVerified.HasValue)
+                    node.VlessVerified = vlessVerified.Value;
+                if (bulkUpdateDepth == 0)
+                    SaveLocked();
             }
         }
 
@@ -86,9 +118,27 @@ namespace InvisibleGorillaXRay.Services.Goida
         {
             lock (sync)
             {
-                return nodes.FirstOrDefault(candidate =>
-                    string.Equals(candidate.Id, nodeId, StringComparison.OrdinalIgnoreCase))?.Clone();
+                return FindNodeLocked(nodeId, 0, null)?.Clone();
             }
+        }
+
+        private GoidaNode? FindNodeLocked(string nodeId, int listId, string? endpoint)
+        {
+            GoidaNode? node = nodes.FirstOrDefault(candidate =>
+                string.Equals(candidate.Id, nodeId, StringComparison.OrdinalIgnoreCase));
+            if (node != null)
+                return node;
+
+            if (listId > 0 && !string.IsNullOrWhiteSpace(endpoint))
+            {
+                string normalizedEndpoint = endpoint.Trim();
+                node = nodes.FirstOrDefault(candidate =>
+                    candidate.ListId == listId
+                    && string.Equals(candidate.Endpoint?.Trim(), normalizedEndpoint,
+                        StringComparison.OrdinalIgnoreCase));
+            }
+
+            return node;
         }
 
         public void EnsureDirectories()

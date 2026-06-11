@@ -3,6 +3,7 @@ using InvisibleGorillaXRay.Handlers.DeepLinks;
 using InvisibleGorillaXRay.Handlers.Settings.Startup;
 using InvisibleGorillaXRay.Managers;
 using InvisibleGorillaXRay.Models;
+using InvisibleGorillaXRay.Services;
 using InvisibleGorillaXRay.Services.Goida;
 
 namespace InvisibleGorillaXRay.Android.Managers
@@ -63,9 +64,94 @@ namespace InvisibleGorillaXRay.Android.Managers
             void SetupConfigHandler()
             {
                 SettingsHandler settingsHandler = HandlersManager.GetHandler<SettingsHandler>();
+                GoidaProfileHandler goidaHandler = HandlersManager.GetHandler<GoidaProfileHandler>();
+
                 HandlersManager.GetHandler<ConfigHandler>().Setup(
-                    getCurrentConfigPath: settingsHandler.UserSettings.GetCurrentConfigPath
-                );
+                    getCurrentConfigPath: settingsHandler.UserSettings.GetCurrentConfigPath,
+                    getGoidaListConfig: BuildGoidaListConfig,
+                    getGoidaRuntimeConfig: BuildGoidaRuntimeConfig);
+
+                Config? BuildGoidaListConfig()
+                {
+                    GoidaProfileSettings settings = settingsHandler.UserSettings.GetGoidaSettings();
+                    if (!settings.ShouldShowInServerList())
+                        return null;
+
+                    GoidaNode? activeNode = goidaHandler.Manager.GetActiveNode();
+                    string updateTime = settings.LastRefreshUtc == default
+                        ? "-"
+                        : settings.LastRefreshUtc.ToLocalTime().ToString("dd.MM.yyyy");
+
+                    string name = activeNode == null
+                        ? LocalizeGoida("Lang.Goida.ServerListName", "Goida profile")
+                        : string.Format(
+                            LocalizeGoida("Lang.Goida.ServerListNameWithNode", "Goida · {0}"),
+                            activeNode.DisplayName);
+
+                    Config config = new Config(
+                        path: GoidaProfilePaths.MarkerPath,
+                        name: name,
+                        type: ConfigType.FILE,
+                        group: GroupType.GENERAL,
+                        updateTime: updateTime);
+                    ApplyGoidaAvailability(config, activeNode);
+                    return config;
+                }
+
+                static void ApplyGoidaAvailability(Config config, GoidaNode? activeNode)
+                {
+                    if (activeNode == null)
+                        return;
+
+                    config.SetAvailability(MapNodeLatency(activeNode.LatencyMs, activeNode.Status));
+                }
+
+                static int MapNodeLatency(int latencyMs, GoidaNodeStatus status)
+                {
+                    if (latencyMs >= 0)
+                        return latencyMs;
+
+                    return status switch
+                    {
+                        GoidaNodeStatus.Timeout => Values.Availability.TIMEOUT,
+                        GoidaNodeStatus.Error => Values.Availability.ERROR,
+                        _ => Values.Availability.NOT_CHECKED
+                    };
+                }
+
+                Config? BuildGoidaRuntimeConfig()
+                {
+                    if (!goidaHandler.Manager.TryEnsureActiveNode())
+                        return BuildGoidaListConfig();
+
+                    GoidaNode? activeNode = goidaHandler.Manager.GetActiveNode();
+                    if (activeNode == null || !System.IO.File.Exists(activeNode.ConfigPath))
+                        return BuildGoidaListConfig();
+
+                    return new Config(
+                        path: activeNode.ConfigPath,
+                        name: string.Format(
+                            LocalizeGoida("Lang.Goida.ServerListNameWithNode", "Goida · {0}"),
+                            activeNode.DisplayName),
+                        type: ConfigType.FILE,
+                        group: GroupType.GENERAL,
+                        updateTime: activeNode.LastCheckedUtc == default
+                            ? "-"
+                            : activeNode.LastCheckedUtc.ToLocalTime().ToString("dd.MM.yyyy"));
+                }
+
+                string LocalizeGoida(string key, string fallback)
+                {
+                    try
+                    {
+                        string? term = LocalizationHandler.GetTerm(key);
+                        return string.IsNullOrWhiteSpace(term) ? fallback : term;
+                    }
+                    catch
+                    {
+                        return fallback;
+                    }
+                }
             }
 
             void SetupUpdateHandler()

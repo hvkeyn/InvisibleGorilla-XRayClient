@@ -290,7 +290,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             SetStatusText(Localize("Lang.Goida.Probing"));
             try
             {
-                await goidaHandler.Manager.ProbeAsync().ConfigureAwait(true);
+                await goidaHandler.Manager.ProbeAsync(manual: true).ConfigureAwait(true);
                 RefreshList();
                 UpdateStatusSummary();
             }

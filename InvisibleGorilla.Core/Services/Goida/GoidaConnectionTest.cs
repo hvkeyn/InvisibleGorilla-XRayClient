@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using InvisibleGorillaXRay.Core;
 using InvisibleGorillaXRay.Models;
+using InvisibleGorillaXRay.Utilities;
 using InvisibleGorillaXRay.Values;
 
 namespace InvisibleGorillaXRay.Services.Goida
@@ -14,14 +15,31 @@ namespace InvisibleGorillaXRay.Services.Goida
         {
             return configPath =>
             {
-                if (string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath))
-                    return Availability.ERROR;
+                try
+                {
+                    string resolvedPath = FileUtility.GetFullPath(configPath);
+                    if (string.IsNullOrWhiteSpace(resolvedPath) || !File.Exists(resolvedPath))
+                    {
+                        DiagnosticLog.Write("GoidaConnectionTest",
+                            $"Config missing: {configPath}");
+                        return Availability.ERROR;
+                    }
 
-                Status status = loadConfig(configPath);
-                if (status.Code != Code.SUCCESS)
-                    return Availability.ERROR;
+                    Status status = loadConfig(resolvedPath);
+                    if (status.Code != Code.SUCCESS)
+                        return Availability.ERROR;
 
-                return testJson(status.Content.ToString());
+                    string json = status.Content?.ToString() ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(json))
+                        return Availability.ERROR;
+
+                    return testJson(json);
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("GoidaConnectionTest", ex);
+                    return Availability.ERROR;
+                }
             };
         }
     }
