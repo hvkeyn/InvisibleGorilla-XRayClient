@@ -12,6 +12,7 @@
 /InvisibleGorilla.Core/obj
 *.dll
 *.dat
+!docs/data/Broadcast.dat
 *.exe
 *.dylib
 *.so

@@ -46,7 +46,7 @@
                 </TextBlock>
 
                 <!-- Website link -->
-                <TextBlock Text="https://invisiblegorilla.github.io" 
+                <TextBlock Text="https://github.com/hvkeyn/InvisibleGorilla-XRayClient" 
                     TextDecorations="Underline"
                     HorizontalAlignment="Center" VerticalAlignment="Top" 
                     Margin="20,10,20,20" Foreground="{StaticResource Color.Blue}" 

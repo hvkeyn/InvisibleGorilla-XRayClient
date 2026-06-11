@@ -51,7 +51,7 @@
                     <Run Text="{DynamicResource Lang.Window.About.VisitWebsite}" />
                 </TextBlock>
 
-                <TextBlock Grid.Row="2" Text="https://invisiblegorilla.github.io" 
+                <TextBlock Grid.Row="2" Text="https://github.com/hvkeyn/InvisibleGorilla-XRayClient" 
                     FontFamily="{StaticResource SegoeUI}" TextDecorations="Underline"
                     HorizontalAlignment="Center" VerticalAlignment="Top" 
                     Margin="20 10 20 20" Foreground="{StaticResource Color.Blue}" 
