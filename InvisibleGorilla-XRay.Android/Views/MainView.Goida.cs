@@ -43,6 +43,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private bool isGoidaSectionInitialized;
         private bool goidaProbeUiInProgress;
         private bool goidaListSelectionDirty;
+        private bool isRefreshingGoidaNodesList;
         private string? goidaPendingActiveNodeId;
         private CancellationTokenSource? goidaProbeCts;
         private int goidaProbeCurrent;
@@ -57,8 +58,16 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void OnGoidaSectionClick(object? sender, RoutedEventArgs e)
         {
-            ShowSection(NavigationSection.Goida);
-            EnsureGoidaSectionInitialized();
+            try
+            {
+                ShowSection(NavigationSection.Goida);
+                EnsureGoidaSectionInitialized();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.Goida.OpenSection", ex);
+                SetStatus(ex.Message);
+            }
         }
 
         private void EnsureGoidaSectionInitialized()
@@ -131,7 +140,6 @@ namespace InvisibleGorillaXRay.Android.Views
                     Margin = new Thickness(0, 0, 8, 4),
                     MinWidth = 34
                 };
-                ToolTip.SetTip(box, list.Title);
                 box.Click += OnGoidaListCheckboxClick;
                 goidaListCheckboxes[list.Id] = box;
                 GoidaListCheckboxesPanel.Children.Add(box);
@@ -281,8 +289,8 @@ namespace InvisibleGorillaXRay.Android.Views
             GoidaMainPresentation presentation =
                 GoidaNodeDisplay.BuildMainPresentation(activeNode);
 
-            var statusBrush = new SolidColorBrush(Color.Parse(presentation.ColorHex));
-            var inactiveBrush = new SolidColorBrush(Color.Parse("#4A4A4A"));
+            IBrush statusBrush = TryParseBrush(presentation.ColorHex, "#6DCC8E");
+            IBrush inactiveBrush = TryParseBrush("#4A4A4A", "#4A4A4A");
             int level = presentation.SignalLevel;
 
             GetRequiredControl<Avalonia.Controls.Shapes.Ellipse>("GoidaWifiDot").Fill = statusBrush;
@@ -301,6 +309,19 @@ namespace InvisibleGorillaXRay.Android.Views
         }
 
         private void RefreshGoidaNodesListBox(bool forceLatencySort = false)
+        {
+            isRefreshingGoidaNodesList = true;
+            try
+            {
+                RefreshGoidaNodesListBoxCore(forceLatencySort);
+            }
+            finally
+            {
+                isRefreshingGoidaNodesList = false;
+            }
+        }
+
+        private void RefreshGoidaNodesListBoxCore(bool forceLatencySort = false)
         {
             GoidaProfileSettings settings = settingsHandler.UserSettings.GetGoidaSettings();
             string filter = GoidaFilterListTextBox.Text?.Trim() ?? string.Empty;
@@ -862,8 +883,23 @@ namespace InvisibleGorillaXRay.Android.Views
         private void OnGoidaClearPoolClick(object? sender, RoutedEventArgs e) =>
             ModifyGoidaPool(pool => pool.Clear());
 
-        private void OnGoidaPoolCheckBoxClick(object? sender, RoutedEventArgs e)
+        private static IBrush TryParseBrush(string? colorHex, string fallbackHex)
         {
+            try
+            {
+                return new SolidColorBrush(Color.Parse(string.IsNullOrWhiteSpace(colorHex) ? fallbackHex : colorHex));
+            }
+            catch
+            {
+                return new SolidColorBrush(Color.Parse(fallbackHex));
+            }
+        }
+
+        private void OnGoidaPoolCheckBoxChanged(object? sender, RoutedEventArgs e)
+        {
+            if (isRefreshingGoidaNodesList)
+                return;
+
             if (sender is not CheckBox box || box.Tag is not string nodeId || string.IsNullOrWhiteSpace(nodeId))
                 return;
 

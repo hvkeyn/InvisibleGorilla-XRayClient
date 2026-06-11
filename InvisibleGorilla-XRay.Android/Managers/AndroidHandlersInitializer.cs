@@ -74,9 +74,6 @@ namespace InvisibleGorillaXRay.Android.Managers
                 Config? BuildGoidaListConfig()
                 {
                     GoidaProfileSettings settings = settingsHandler.UserSettings.GetGoidaSettings();
-                    if (!settings.ShouldShowInServerList())
-                        return null;
-
                     GoidaNode? activeNode = goidaHandler.Manager.GetActiveNode();
                     string updateTime = settings.LastRefreshUtc == default
                         ? "-"

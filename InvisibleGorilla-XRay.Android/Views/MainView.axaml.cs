@@ -1738,14 +1738,35 @@ namespace InvisibleGorillaXRay.Android.Views
                 host.Children.Add(CreateConfigCard(config));
         }
 
+        private void ActivateGoidaProfileForSelection()
+        {
+            UserSettings current = settingsHandler.UserSettings;
+            GoidaProfileSettings settings = current.GetGoidaSettings().Clone();
+            if (settings.Enabled)
+                return;
+
+            settings.Enabled = true;
+            current.Goida = settings;
+            settingsHandler.UpdateUserSettings(current);
+            goidaHandler.Manager.UpdateSettings(settings);
+
+            if (isGoidaSectionInitialized)
+                ApplyGoidaSettingsToControls();
+        }
+
         private Border CreateConfigCard(Config config)
         {
-            bool isSelected = string.Equals(
-                settingsHandler.UserSettings.GetCurrentConfigPath(),
-                config.Path,
-                StringComparison.OrdinalIgnoreCase);
+            bool isGoidaMarker = GoidaProfilePaths.IsMarker(config.Path);
+            string currentPath = settingsHandler.UserSettings.GetCurrentConfigPath();
+            bool isSelected = string.Equals(currentPath, config.Path, StringComparison.OrdinalIgnoreCase)
+                || (isGoidaMarker
+                    && settingsHandler.UserSettings.GetGoidaSettings().Enabled
+                    && (GoidaProfilePaths.IsMarker(currentPath)
+                        || goidaHandler.Manager.GetActiveNode() != null));
 
-            TorProfile? torProfile = settingsHandler.UserSettings.FindTorProfileByPath(config.Path);
+            TorProfile? torProfile = isGoidaMarker
+                ? null
+                : settingsHandler.UserSettings.FindTorProfileByPath(config.Path);
 
             Border border = new()
             {
@@ -1830,9 +1851,10 @@ namespace InvisibleGorillaXRay.Android.Views
                 Margin = new Thickness(0, 4, 0, 0),
                 Spacing = 4
             };
-            if (torProfile == null)
+            if (torProfile == null && !isGoidaMarker)
                 actionRow.Children.Add(CreateIconActionButton("Icon.Share", 11, 13, () => _ = ShareConfigAsync(config)));
-            actionRow.Children.Add(CreateIconActionButton("Icon.Delete", 12, 12, () => DeleteSelectedConfig(config)));
+            if (!isGoidaMarker)
+                actionRow.Children.Add(CreateIconActionButton("Icon.Delete", 12, 12, () => DeleteSelectedConfig(config)));
             actionRow.Children.Add(CreateIconActionButton("Icon.Connection", 15, 11, () =>
             {
                 if (torProfile != null)
@@ -2502,7 +2524,14 @@ namespace InvisibleGorillaXRay.Android.Views
             if (string.IsNullOrWhiteSpace(path))
                 return false;
 
+            if (GoidaProfilePaths.IsMarker(path))
+                ActivateGoidaProfileForSelection();
+
             settingsHandler.UpdateCurrentConfigPath(path);
+
+            if (GoidaProfilePaths.IsMarker(path))
+                goidaHandler.Manager.TryEnsureActiveNode();
+
             Config? selectedConfig = configHandler.GetCurrentConfig();
             if (selectedConfig == null)
                 return false;
@@ -3679,6 +3708,9 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void DeleteSelectedConfig(Config config)
         {
+            if (GoidaProfilePaths.IsMarker(config.Path))
+                return;
+
             if (pendingConfigShare != null &&
                 string.Equals(pendingConfigShare.Path, config.Path, StringComparison.OrdinalIgnoreCase))
             {

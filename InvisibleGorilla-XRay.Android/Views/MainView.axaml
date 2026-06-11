@@ -40,6 +40,20 @@
             </DrawingBrush.Drawing>
         </DrawingBrush>
 
+        <DrawingBrush x:Key="Icon.GoidaNav" Stretch="Uniform">
+            <DrawingBrush.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="#2d2d2d" Geometry="M349,100 C290,100 240,120 210,160 C180,200 165,255 163,320 C161,385 175,440 205,485 C235,525 283,555 349,555 C415,555 463,525 493,485 C523,440 537,385 535,320 C533,255 518,200 488,160 C458,120 408,100 349,100Z"/>
+                    <GeometryDrawing Brush="#2d2d2d" Geometry="M225,265 C235,238 280,220 349,220 C418,220 463,238 473,265 C480,282 474,305 462,318 C445,335 410,345 349,345 C288,345 253,335 236,318 C224,305 218,282 225,265Z"/>
+                    <GeometryDrawing Brush="#6dcc8e" Geometry="M258,278 A32,20 0 1,0 322,278 A32,20 0 1,0 258,278Z"/>
+                    <GeometryDrawing Brush="#6dcc8e" Geometry="M376,278 A32,20 0 1,0 440,278 A32,20 0 1,0 376,278Z"/>
+                    <GeometryDrawing Brush="#1e3e2a" Geometry="M278,278 A12,10 0 1,0 302,278 A12,10 0 1,0 278,278Z"/>
+                    <GeometryDrawing Brush="#1e3e2a" Geometry="M396,278 A12,10 0 1,0 420,278 A12,10 0 1,0 396,278Z"/>
+                    <GeometryDrawing Brush="#2d2d2d" Geometry="M290,350 C272,375 268,415 282,448 C294,475 318,492 349,492 C380,492 404,475 416,448 C430,415 426,375 408,350Z"/>
+                </DrawingGroup>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+
         <DrawingBrush x:Key="Icon.Stop" Stretch="Uniform">
             <DrawingBrush.Drawing>
                 <DrawingGroup>
@@ -1228,7 +1242,7 @@
                                                            TextTrimming="CharacterEllipsis" />
                                                 <CheckBox Content="Pool" IsChecked="{Binding InPool}"
                                                           Tag="{Binding Id}"
-                                                          Click="OnGoidaPoolCheckBoxClick" />
+                                                          IsCheckedChanged="OnGoidaPoolCheckBoxChanged" />
                                             </StackPanel>
                                         </Border>
                                     </DataTemplate>
@@ -2043,9 +2057,9 @@
                         Height="30"
                         Theme="{StaticResource CircleActionButton}"
                         Click="OnGoidaSectionClick">
-                    <Rectangle Fill="{StaticResource Icon.Server.MintyGreen}"
-                               Width="14"
-                               Height="14"
+                    <Rectangle Fill="{StaticResource Icon.GoidaNav}"
+                               Width="16"
+                               Height="16"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center" />
                 </Button>
