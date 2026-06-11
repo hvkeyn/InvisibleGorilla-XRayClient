@@ -40,6 +40,7 @@ namespace InvisibleGorillaXRay.Services.Goida
         private Action<GoidaNode>? onActiveNodeChanged;
         private Func<bool>? pauseNativeForTest;
         private Action? resumeNativeAfterTest;
+        private Func<bool> canProbe = () => true;
 
         private CancellationTokenSource? loopCts;
         private Task? backgroundTask;
@@ -90,13 +91,15 @@ namespace InvisibleGorillaXRay.Services.Goida
             Action<GoidaProfileSettings> saveSettings,
             Action<GoidaNode>? onActiveNodeChanged = null,
             Func<bool>? pauseNativeForTest = null,
-            Action? resumeNativeAfterTest = null)
+            Action? resumeNativeAfterTest = null,
+            Func<bool>? canProbe = null)
         {
             this.getSettings = getSettings ?? throw new ArgumentNullException(nameof(getSettings));
             this.saveSettings = saveSettings ?? throw new ArgumentNullException(nameof(saveSettings));
             this.onActiveNodeChanged = onActiveNodeChanged;
             this.pauseNativeForTest = pauseNativeForTest;
             this.resumeNativeAfterTest = resumeNativeAfterTest;
+            this.canProbe = canProbe ?? (() => true);
             parser = new GoidaNodeParser(convertConfigLinkToV2Ray);
             monitor = new GoidaHealthMonitor(store, testConnection);
             monitor.NodesUpdated += () => NodesUpdated?.Invoke();
@@ -429,7 +432,9 @@ namespace InvisibleGorillaXRay.Services.Goida
                         lastRefresh = DateTime.UtcNow;
                     }
 
-                    if (store.GetNodes().Count > 0 && DateTime.UtcNow - lastProbe >= probeInterval)
+                    if (canProbe()
+                        && store.GetNodes().Count > 0
+                        && DateTime.UtcNow - lastProbe >= probeInterval)
                     {
                         await ProbeAsync(cancellationToken).ConfigureAwait(false);
                         lastProbe = DateTime.UtcNow;

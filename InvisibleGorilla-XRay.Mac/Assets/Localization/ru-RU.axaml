@@ -325,6 +325,7 @@
     <x:String x:Key="Lang.Goida.Signal.Fair">Средне</x:String>
     <x:String x:Key="Lang.Goida.Signal.Slow">Медленно</x:String>
     <x:String x:Key="Lang.Goida.Signal.Unknown">Не проверено</x:String>
+    <x:String x:Key="Lang.Goida.Signal.Unverified">Не проверено (VLESS)</x:String>
     <x:String x:Key="Lang.Goida.Signal.Offline">Недоступен</x:String>
     <x:String x:Key="Lang.Goida.Loading">Загрузка списков узлов...</x:String>
     <x:String x:Key="Lang.Goida.Probing">Проверка узлов...</x:String>

@@ -196,7 +196,8 @@ namespace InvisibleGorillaXRay.Android.Managers
                     testConnection: GoidaConnectionTest.CreateFromConfigPath(coreInstance.LoadConfig, coreInstance.Test),
                     getUserSettings: () => settingsHandler.UserSettings,
                     updateUserSettings: settingsHandler.UpdateUserSettings,
-                    onActiveNodeChanged: node => GoidaActiveNodeBridge.OnActiveNodeChanged?.Invoke(node));
+                    onActiveNodeChanged: node => GoidaActiveNodeBridge.OnActiveNodeChanged?.Invoke(node),
+                    canProbe: () => !AndroidVpnServiceController.IsRunning);
             }
         }
     }

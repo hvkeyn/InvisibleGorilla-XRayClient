@@ -1766,7 +1766,6 @@ namespace InvisibleGorillaXRay.Android.Views
             settings.Enabled = true;
             current.Goida = settings;
             settingsHandler.UpdateUserSettings(current);
-            goidaHandler.Manager.UpdateSettings(settings);
 
             if (isGoidaSectionInitialized)
                 ApplyGoidaSettingsToControls();
@@ -1888,6 +1887,8 @@ namespace InvisibleGorillaXRay.Android.Views
             {
                 if (torProfile != null)
                     _ = CheckTorProfileAsync(torProfile);
+                else if (isGoidaMarker)
+                    _ = CheckGoidaProfileAsync();
                 else
                     _ = CheckConfigAsync(config);
             }));
@@ -1904,7 +1905,15 @@ namespace InvisibleGorillaXRay.Android.Views
                 if (sourceControl is Button || sourceControl?.FindAncestorOfType<Button>() != null)
                     return;
 
-                TrySelectConfigByPath(config.Path, showStatus: true);
+                try
+                {
+                    TrySelectConfigByPath(config.Path, showStatus: true);
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("MainView.SelectConfigCard", ex);
+                    SetStatus(ex.Message);
+                }
             };
 
             return border;
@@ -2217,7 +2226,8 @@ namespace InvisibleGorillaXRay.Android.Views
 
             CurrentConfigNameText.Text = currentConfigText;
             AppRulesEditorCurrentConfigText.Text = currentConfigText;
-            RefreshGoidaSummary();
+            if (GoidaSectionScroll.IsVisible)
+                SafeRefreshGoidaSummary();
             RefreshAppRulesSummary();
         }
 
@@ -2562,32 +2572,49 @@ namespace InvisibleGorillaXRay.Android.Views
             if (string.IsNullOrWhiteSpace(path))
                 return false;
 
-            if (GoidaProfilePaths.IsMarker(path))
-                ActivateGoidaProfileForSelection();
+            try
+            {
+                Config? selectedConfig = null;
 
-            settingsHandler.UpdateCurrentConfigPath(path);
+                if (GoidaProfilePaths.IsMarker(path))
+                {
+                    WithGoidaConnectionRestartSuppressed(() =>
+                    {
+                        ActivateGoidaProfileForSelection();
+                        settingsHandler.UpdateCurrentConfigPath(path);
+                        selectedConfig = configHandler.GetCurrentConfig();
+                    });
+                }
+                else
+                {
+                    settingsHandler.UpdateCurrentConfigPath(path);
+                    selectedConfig = configHandler.GetCurrentConfig();
+                }
 
-            if (GoidaProfilePaths.IsMarker(path))
-                goidaHandler.Manager.TryEnsureActiveNode();
+                if (selectedConfig == null)
+                    return false;
 
-            Config? selectedConfig = configHandler.GetCurrentConfig();
-            if (selectedConfig == null)
+                ApplyTorStateForSelectedConfig(path);
+
+                UpdateCurrentConfigSummary();
+                UpdateRuntimeSummary();
+                RefreshConfigs();
+                RefreshSubscriptions();
+                ShowServerTab(selectedConfig.Group == GroupType.SUBSCRIPTION
+                    ? ServerTab.Subscriptions
+                    : ServerTab.Configurations);
+
+                if (showStatus)
+                    SetStatus(LocalizeFormat("Lang.Android.Status.SelectedConfig", selectedConfig.Name));
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.TrySelectConfigByPath", ex);
+                SetStatus(ex.Message);
                 return false;
-
-            ApplyTorStateForSelectedConfig(path);
-
-            UpdateCurrentConfigSummary();
-            UpdateRuntimeSummary();
-            RefreshConfigs();
-            RefreshSubscriptions();
-            ShowServerTab(selectedConfig.Group == GroupType.SUBSCRIPTION
-                ? ServerTab.Subscriptions
-                : ServerTab.Configurations);
-
-            if (showStatus)
-                SetStatus(LocalizeFormat("Lang.Android.Status.SelectedConfig", selectedConfig.Name));
-
-            return true;
+            }
         }
 
         /// <summary>
@@ -3618,11 +3645,24 @@ namespace InvisibleGorillaXRay.Android.Views
             await CheckConfigAsync(currentConfig);
         }
 
-        private async Task CheckConfigAsync(Config config)
+        private async Task CheckGoidaProfileAsync()
+        {
+            Config? runtimeConfig = configHandler.GetCurrentConfig();
+            if (runtimeConfig == null || GoidaProfilePaths.IsMarker(runtimeConfig.Path))
+            {
+                SetStatus(Localize("Lang.Goida.EmptyHint"));
+                return;
+            }
+
+            await CheckConfigAsync(runtimeConfig, GoidaProfilePaths.MarkerPath);
+        }
+
+        private async Task CheckConfigAsync(Config config, string? availabilityKey = null)
         {
             if (isCheckWorkerBusy)
                 return;
 
+            string availabilityPath = availabilityKey ?? config.Path;
             isCheckWorkerBusy = true;
             SetStatus(LocalizeFormat("Lang.Android.Status.CheckingConfig", config.Name));
             try
@@ -3634,7 +3674,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     {
                         Dispatcher.UIThread.Post(() =>
                         {
-                            SetConfigAvailability(config.Path, InvisibleGorillaXRay.Values.Availability.ERROR);
+                            SetConfigAvailability(availabilityPath, InvisibleGorillaXRay.Values.Availability.ERROR);
                             RefreshConfigs();
                             RefreshSubscriptions();
                             SetStatus(loadStatus.Content?.ToString() ?? "Lang.Message.InvalidConfig");
@@ -3649,7 +3689,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     {
                         if (ping >= 0)
                         {
-                            SetConfigAvailability(config.Path, ping);
+                            SetConfigAvailability(availabilityPath, ping);
                             SetStatus(LocalizeFormat(
                                 "Lang.Android.Status.CheckedConfigSuccess",
                                 config.Name,
@@ -3657,12 +3697,12 @@ namespace InvisibleGorillaXRay.Android.Views
                         }
                         else if (ping == -1)
                         {
-                            SetConfigAvailability(config.Path, InvisibleGorillaXRay.Values.Availability.TIMEOUT);
+                            SetConfigAvailability(availabilityPath, InvisibleGorillaXRay.Values.Availability.TIMEOUT);
                             SetStatus(LocalizeFormat("Lang.Android.Status.CheckedConfigTimeout", config.Name));
                         }
                         else
                         {
-                            SetConfigAvailability(config.Path, InvisibleGorillaXRay.Values.Availability.ERROR);
+                            SetConfigAvailability(availabilityPath, InvisibleGorillaXRay.Values.Availability.ERROR);
                             SetStatus(LocalizeFormat("Lang.Android.Status.CheckedConfigError", config.Name));
                         }
 
@@ -3673,7 +3713,7 @@ namespace InvisibleGorillaXRay.Android.Views
             }
             catch (Exception ex)
             {
-                SetConfigAvailability(config.Path, InvisibleGorillaXRay.Values.Availability.ERROR);
+                SetConfigAvailability(availabilityPath, InvisibleGorillaXRay.Values.Availability.ERROR);
                 SetStatus(MapExceptionToStatus(ex));
             }
             finally

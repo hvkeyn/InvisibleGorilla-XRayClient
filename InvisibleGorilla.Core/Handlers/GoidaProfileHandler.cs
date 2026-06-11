@@ -19,7 +19,8 @@ namespace InvisibleGorillaXRay.Handlers
             Action<UserSettings> updateUserSettings,
             Action<GoidaNode>? onActiveNodeChanged = null,
             Func<bool>? pauseNativeForTest = null,
-            Action? resumeNativeAfterTest = null)
+            Action? resumeNativeAfterTest = null,
+            Func<bool>? canProbe = null)
         {
             this.getUserSettings = getUserSettings;
             this.updateUserSettings = updateUserSettings;
@@ -31,7 +32,8 @@ namespace InvisibleGorillaXRay.Handlers
                 saveSettings: SaveGoidaSettings,
                 onActiveNodeChanged: onActiveNodeChanged,
                 pauseNativeForTest: pauseNativeForTest,
-                resumeNativeAfterTest: resumeNativeAfterTest);
+                resumeNativeAfterTest: resumeNativeAfterTest,
+                canProbe: canProbe);
         }
 
         public void StartBackground() => manager.Start();

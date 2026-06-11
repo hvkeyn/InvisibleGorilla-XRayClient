@@ -50,6 +50,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private int goidaProbeCurrent;
         private int goidaProbeTotal;
         private DateTime goidaLastGridRefreshUtc = DateTime.MinValue;
+        private int suppressGoidaConnectionRestart;
         private readonly Dictionary<int, CheckBox> goidaListCheckboxes = new();
 
         private const int GoidaMaxDisplayRows = 200;
@@ -493,6 +494,21 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private GoidaNodeRow? GetSelectedGoidaRow() => GoidaNodesListBox.SelectedItem as GoidaNodeRow;
 
+        private bool IsGoidaConnectionRestartSuppressed => suppressGoidaConnectionRestart > 0;
+
+        private void WithGoidaConnectionRestartSuppressed(Action action)
+        {
+            suppressGoidaConnectionRestart++;
+            try
+            {
+                action();
+            }
+            finally
+            {
+                suppressGoidaConnectionRestart--;
+            }
+        }
+
         private void HandleGoidaActiveNodeChanged(GoidaNode node)
         {
             if (node == null || string.IsNullOrWhiteSpace(node.ConfigPath))
@@ -505,24 +521,71 @@ namespace InvisibleGorillaXRay.Android.Views
 
             Dispatcher.UIThread.Post(() =>
             {
-                UpdateCurrentConfigSummary();
-                if (IsConnectionActive())
-                    _ = RestartConnectionAfterSettingsChangeAsync();
+                try
+                {
+                    UpdateCurrentConfigSummary();
+                    if (!IsGoidaConnectionRestartSuppressed && IsConnectionActive())
+                        _ = RestartConnectionAfterSettingsChangeAsync();
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("MainView.Goida.ActiveNodeChanged", ex);
+                }
             });
         }
 
         private void OnGoidaNodesUpdated()
         {
-            Dispatcher.UIThread.Post(() =>
+            Dispatcher.UIThread.Post(ApplyGoidaNodesUpdatedUi);
+        }
+
+        private void ApplyGoidaNodesUpdatedUi()
+        {
+            if (!isInitialized)
+                return;
+
+            try
             {
-                RefreshGoidaNodesListBoxThrottled();
-                if (!goidaProbeUiInProgress)
+                if (GoidaSectionScroll.IsVisible || isGoidaSectionInitialized)
                 {
-                    RefreshGoidaSummary();
-                    UpdateGoidaStatusSummary();
+                    RefreshGoidaNodesListBoxThrottled();
+                    if (!goidaProbeUiInProgress)
+                    {
+                        SafeRefreshGoidaSummary();
+                        SafeUpdateGoidaStatusSummary();
+                    }
                 }
+
                 UpdateCurrentConfigSummary();
-            });
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.Goida.NodesUpdated", ex);
+            }
+        }
+
+        private void SafeRefreshGoidaSummary()
+        {
+            try
+            {
+                RefreshGoidaSummary();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.Goida.RefreshSummary", ex);
+            }
+        }
+
+        private void SafeUpdateGoidaStatusSummary()
+        {
+            try
+            {
+                UpdateGoidaStatusSummary();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.Goida.StatusSummary", ex);
+            }
         }
 
         private void RefreshGoidaNodesListBoxThrottled(bool force = false)

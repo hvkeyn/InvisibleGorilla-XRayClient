@@ -325,6 +325,7 @@
     <x:String x:Key="Lang.Goida.Signal.Fair">Fair</x:String>
     <x:String x:Key="Lang.Goida.Signal.Slow">Slow</x:String>
     <x:String x:Key="Lang.Goida.Signal.Unknown">Not checked</x:String>
+    <x:String x:Key="Lang.Goida.Signal.Unverified">Not verified</x:String>
     <x:String x:Key="Lang.Goida.Signal.Offline">Offline</x:String>
     <x:String x:Key="Lang.Goida.Loading">Loading node lists...</x:String>
     <x:String x:Key="Lang.Goida.Probing">Probing nodes...</x:String>
