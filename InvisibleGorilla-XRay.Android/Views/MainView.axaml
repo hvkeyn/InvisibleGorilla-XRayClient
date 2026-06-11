@@ -1080,6 +1080,7 @@
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                 <TextBlock x:Name="GoidaHeaderTitleTextBlock"
                                            Text="Goida profile"
+                                           Foreground="White"
                                            FontSize="21" FontWeight="SemiBold" />
                                 <TextBlock x:Name="GoidaHeaderDescriptionTextBlock"
                                            TextWrapping="Wrap"
@@ -1116,6 +1117,7 @@
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <TextBlock x:Name="GoidaSignalLabelTextBlock"
+                                               Foreground="White"
                                                FontSize="13" FontWeight="SemiBold" />
                                     <TextBlock x:Name="GoidaSignalLatencyTextBlock"
                                                FontSize="12" Foreground="#9A9A9A" />
@@ -1133,18 +1135,24 @@
                         <StackPanel Spacing="10">
                             <TextBlock x:Name="GoidaSettingsCardTitleTextBlock"
                                        Text="Profile settings"
+                                       Foreground="White"
                                        FontSize="18" FontWeight="SemiBold" />
                             <CheckBox x:Name="GoidaEnabledCheckBox"
+                                      Foreground="White"
                                       Checked="OnGoidaSettingsChanged"
                                       Unchecked="OnGoidaSettingsChanged" />
                             <CheckBox x:Name="GoidaAutoSwitchCheckBox"
+                                      Foreground="White"
                                       Checked="OnGoidaSettingsChanged"
                                       Unchecked="OnGoidaSettingsChanged" />
                             <ComboBox x:Name="GoidaSelectionModeComboBox"
+                                      Foreground="White"
                                       SelectionChanged="OnGoidaSelectionModeChanged" />
                             <ComboBox x:Name="GoidaSortModeComboBox"
+                                      Foreground="White"
                                       SelectionChanged="OnGoidaSortModeChanged" />
                             <TextBox x:Name="GoidaFilterListTextBox"
+                                     Foreground="White"
                                      TextChanged="OnGoidaFilterChanged" />
                         </StackPanel>
                     </Border>
@@ -1155,6 +1163,7 @@
                         <StackPanel Spacing="8">
                             <TextBlock x:Name="GoidaListsCardTitleTextBlock"
                                        Text="Node lists"
+                                       Foreground="White"
                                        FontSize="18" FontWeight="SemiBold" />
                             <TextBlock x:Name="GoidaListSelectionTitleTextBlock"
                                        Foreground="{StaticResource TextMuted}"
@@ -1209,6 +1218,7 @@
                         <StackPanel Spacing="8">
                             <TextBlock x:Name="GoidaNodesCardTitleTextBlock"
                                        Text="Nodes"
+                                       Foreground="White"
                                        FontSize="18" FontWeight="SemiBold" />
                             <TextBlock x:Name="GoidaPoolInfoTextBlock"
                                        TextWrapping="Wrap" FontSize="12"
@@ -1240,7 +1250,9 @@
                                                 <TextBlock Text="{Binding Endpoint}"
                                                            Foreground="#8A8A8A" FontSize="10"
                                                            TextTrimming="CharacterEllipsis" />
-                                                <CheckBox Content="Pool" IsChecked="{Binding InPool}"
+                                                <CheckBox Content="{Binding PoolLabel}"
+                                                          Foreground="White"
+                                                          IsChecked="{Binding InPool}"
                                                           Tag="{Binding Id}"
                                                           IsCheckedChanged="OnGoidaPoolCheckBoxChanged" />
                                             </StackPanel>

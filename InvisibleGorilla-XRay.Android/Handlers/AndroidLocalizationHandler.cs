@@ -19,6 +19,7 @@ namespace InvisibleGorillaXRay.Android.Handlers
         public void Setup(Func<string> getCurrentLanguage)
         {
             this.getCurrentLanguage = getCurrentLanguage;
+            TryApplyCurrentLanguage();
         }
 
         public string GetTerm(string key)
@@ -68,8 +69,15 @@ namespace InvisibleGorillaXRay.Android.Handlers
             try
             {
                 ResourceDictionary dict = LoadDictionary(language);
+
                 if (currentLangDict != null && Application.Current != null)
                     Application.Current.Resources.MergedDictionaries.Remove(currentLangDict);
+
+                foreach (KeyValuePair<object, object> pair in dict)
+                {
+                    if (pair.Key is string key && pair.Value is string term)
+                        terms[key] = term;
+                }
 
                 currentLangDict = dict;
 

@@ -297,6 +297,8 @@
     <x:String x:Key="Lang.AppRules.LoadFailed">Couldn't open the app rules editor. Please try again.</x:String>
     <x:String x:Key="Lang.Goida.WindowTitle">Goida profile</x:String>
     <x:String x:Key="Lang.Goida.Title">Goida profile</x:String>
+    <x:String x:Key="Lang.Goida.SettingsSection">Profile settings</x:String>
+    <x:String x:Key="Lang.Goida.ListsSection">Node lists (1–26)</x:String>
     <x:String x:Key="Lang.Goida.Description">Built-in profile with 26 public node lists from goida-vpn-configs. Nodes are refreshed automatically, probed for latency, and can be switched on the fly.</x:String>
     <x:String x:Key="Lang.Goida.Enabled">Enable Goida profile</x:String>
     <x:String x:Key="Lang.Goida.AutoSwitch">Auto-switch on failure</x:String>

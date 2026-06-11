@@ -522,8 +522,7 @@ namespace InvisibleGorillaXRay.Android.Views
             UpdateSubscriptionEmptyState();
             RefreshAppRulesSummary();
 
-            if (isInitialized)
-                ApplyGoidaLocalizedText();
+            ApplyGoidaLocalizedText();
         }
 
         private string Localize(string key)

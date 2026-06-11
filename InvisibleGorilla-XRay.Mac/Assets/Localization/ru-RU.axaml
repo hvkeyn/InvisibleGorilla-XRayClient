@@ -297,6 +297,8 @@
     <x:String x:Key="Lang.AppRules.LoadFailed">Не удалось открыть редактор правил приложений. Попробуйте еще раз.</x:String>
     <x:String x:Key="Lang.Goida.WindowTitle">Профиль Goida</x:String>
     <x:String x:Key="Lang.Goida.Title">Профиль Goida</x:String>
+    <x:String x:Key="Lang.Goida.SettingsSection">Настройки профиля</x:String>
+    <x:String x:Key="Lang.Goida.ListsSection">Списки узлов (1–26)</x:String>
     <x:String x:Key="Lang.Goida.Description">Встроенный профиль с 26 публичными списками узлов из goida-vpn-configs. Списки обновляются автоматически, проверяется задержка, узлы можно переключать на лету.</x:String>
     <x:String x:Key="Lang.Goida.Enabled">Включить профиль Goida</x:String>
     <x:String x:Key="Lang.Goida.AutoSwitch">Авто-переключение при сбое</x:String>
