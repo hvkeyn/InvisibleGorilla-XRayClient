@@ -141,6 +141,15 @@ namespace InvisibleGorillaXRay.Services.Goida
             return node;
         }
 
+        public int CountNodesForLists(IEnumerable<int> listIds)
+        {
+            HashSet<int> enabled = listIds.ToHashSet();
+            lock (sync)
+            {
+                return nodes.Count(node => enabled.Contains(node.ListId));
+            }
+        }
+
         public void EnsureDirectories()
         {
             System.IO.Directory.CreateDirectory(NodesDirectory);

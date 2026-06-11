@@ -10,6 +10,26 @@ namespace InvisibleGorillaXRay.Services.Goida
     public sealed class GoidaProfileManager : IDisposable
     {
         public const int MaxProbeBatch = 16;
+        public const int MaxManualProbeBatch = 512;
+
+        public static List<int> GetVpnListIds(GoidaProfileSettings settings)
+        {
+            return settings.EnabledListIds?
+                .Where(id => id >= 1 && id <= 26)
+                .Distinct()
+                .OrderBy(id => id)
+                .ToList() ?? Enumerable.Range(1, 25).ToList();
+        }
+
+        public static bool HasVpnListsEnabled(GoidaProfileSettings settings)
+        {
+            return GetVpnListIds(settings).Count > 0;
+        }
+
+        public static HashSet<int> GetEnabledListSet(GoidaProfileSettings settings)
+        {
+            return GetVpnListIds(settings).ToHashSet();
+        }
         private readonly GoidaNodeStore store = new();
         private readonly GoidaFetcher fetcher = new();
         private GoidaNodeParser parser;
@@ -28,8 +48,40 @@ namespace InvisibleGorillaXRay.Services.Goida
 
         public event Action? NodesUpdated;
         public event Action<string>? StatusMessage;
+        public event Action<GoidaProbeProgress>? ProbeProgress;
 
         public IReadOnlyList<GoidaListMeta> Lists => GoidaSourceCatalog.AllLists;
+
+        public int CountManualProbeTargets()
+        {
+            GoidaProfileSettings settings = getSettings().Clone();
+            return FilterProbeTargets(settings, store.GetNodes(), manual: true).Count();
+        }
+
+        public int CountVerifyTargets(bool manual = true)
+        {
+            GoidaProfileSettings settings = getSettings().Clone();
+            int limit = manual ? GoidaProfileSettings.MaxVerifiedNodes : MaxProbeBatch;
+            return FilterProbeTargets(settings, store.GetNodes(), manual)
+                .Take(limit)
+                .Count();
+        }
+
+        public IReadOnlyList<GoidaNode> GetVisibleNodes()
+        {
+            GoidaProfileSettings settings = getSettings().Clone();
+            HashSet<int> enabledLists = GetEnabledListSet(settings);
+
+            return store.GetNodes()
+                .Where(node => enabledLists.Contains(node.ListId))
+                .ToList();
+        }
+
+        public int CountVisibleNodes()
+        {
+            GoidaProfileSettings settings = getSettings().Clone();
+            return store.CountNodesForLists(GetVpnListIds(settings));
+        }
 
         public void Setup(
             Func<string, Status> convertConfigLinkToV2Ray,
@@ -48,6 +100,7 @@ namespace InvisibleGorillaXRay.Services.Goida
             parser = new GoidaNodeParser(convertConfigLinkToV2Ray);
             monitor = new GoidaHealthMonitor(store, testConnection);
             monitor.NodesUpdated += () => NodesUpdated?.Invoke();
+            monitor.ProbeProgress += progress => ProbeProgress?.Invoke(progress);
             store.EnsureDirectories();
             store.Load();
         }
@@ -77,7 +130,7 @@ namespace InvisibleGorillaXRay.Services.Goida
 
         public IReadOnlyList<GoidaNode> GetNodesSorted()
         {
-            return store.GetNodes()
+            return GetVisibleNodes()
                 .OrderBy(node => node.Status == GoidaNodeStatus.Ok ? 0 : 1)
                 .ThenBy(node => node.LatencyMs < 0 ? int.MaxValue : node.LatencyMs)
                 .ThenBy(node => node.ListId)
@@ -92,7 +145,7 @@ namespace InvisibleGorillaXRay.Services.Goida
             int error = 0;
             int unknown = 0;
 
-            foreach (GoidaNode node in store.GetNodes())
+            foreach (GoidaNode node in GetVisibleNodes())
             {
                 switch (node.Status)
                 {
