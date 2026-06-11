@@ -1142,22 +1142,40 @@
                                        Text="{DynamicResource Lang.Goida.SettingsSection}"
                                        Foreground="White"
                                        FontSize="18" FontWeight="SemiBold" />
-                            <CheckBox x:Name="GoidaEnabledCheckBox"
-                                      Content="{DynamicResource Lang.Goida.Enabled}"
-                                      Foreground="White"
-                                      Checked="OnGoidaSettingsChanged"
-                                      Unchecked="OnGoidaSettingsChanged" />
-                            <CheckBox x:Name="GoidaAutoSwitchCheckBox"
-                                      Content="{DynamicResource Lang.Goida.AutoSwitch}"
-                                      Foreground="White"
-                                      Checked="OnGoidaSettingsChanged"
-                                      Unchecked="OnGoidaSettingsChanged" />
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <CheckBox x:Name="GoidaEnabledCheckBox"
+                                          Foreground="White"
+                                          Checked="OnGoidaSettingsChanged"
+                                          Unchecked="OnGoidaSettingsChanged" />
+                                <TextBlock Text="{DynamicResource Lang.Goida.Enabled}"
+                                           Foreground="White"
+                                           VerticalAlignment="Center"
+                                           IsHitTestVisible="False" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <CheckBox x:Name="GoidaAutoSwitchCheckBox"
+                                          Foreground="White"
+                                          Checked="OnGoidaSettingsChanged"
+                                          Unchecked="OnGoidaSettingsChanged" />
+                                <TextBlock Text="{DynamicResource Lang.Goida.AutoSwitch}"
+                                           Foreground="White"
+                                           VerticalAlignment="Center"
+                                           IsHitTestVisible="False" />
+                            </StackPanel>
+                            <TextBlock Text="{DynamicResource Lang.Goida.SelectionModeLabel}"
+                                       Foreground="{StaticResource TextMuted}"
+                                       FontSize="12" />
                             <ComboBox x:Name="GoidaSelectionModeComboBox"
                                       Foreground="White"
+                                      MinHeight="38"
                                       ItemTemplate="{StaticResource GoidaComboBoxItemTemplate}"
                                       SelectionChanged="OnGoidaSelectionModeChanged" />
+                            <TextBlock Text="{DynamicResource Lang.Goida.SortModeLabel}"
+                                       Foreground="{StaticResource TextMuted}"
+                                       FontSize="12" />
                             <ComboBox x:Name="GoidaSortModeComboBox"
                                       Foreground="White"
+                                      MinHeight="38"
                                       ItemTemplate="{StaticResource GoidaComboBoxItemTemplate}"
                                       SelectionChanged="OnGoidaSortModeChanged" />
                             <TextBox x:Name="GoidaFilterListTextBox"
@@ -1273,11 +1291,16 @@
                                                 <TextBlock Text="{Binding Endpoint}"
                                                            Foreground="#8A8A8A" FontSize="10"
                                                            TextTrimming="CharacterEllipsis" />
-                                                <CheckBox Content="{DynamicResource Lang.Goida.AddToPool}"
-                                                          Foreground="White"
-                                                          IsChecked="{Binding InPool}"
-                                                          Tag="{Binding Id}"
-                                                          IsCheckedChanged="OnGoidaPoolCheckBoxChanged" />
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <CheckBox IsChecked="{Binding InPool}"
+                                                              Foreground="White"
+                                                              Tag="{Binding Id}"
+                                                              IsCheckedChanged="OnGoidaPoolCheckBoxChanged" />
+                                                    <TextBlock Text="{Binding PoolLabel}"
+                                                               Foreground="White"
+                                                               VerticalAlignment="Center"
+                                                               IsHitTestVisible="False" />
+                                                </StackPanel>
                                             </StackPanel>
                                         </Border>
                                     </DataTemplate>
@@ -2099,6 +2122,7 @@
                 <Button x:Name="GoidaSectionButton"
                         Width="30"
                         Height="30"
+                        IsEnabled="False"
                         Theme="{StaticResource CircleActionButton}"
                         Click="OnGoidaSectionClick">
                     <Rectangle Fill="{StaticResource Icon.GoidaNav}"

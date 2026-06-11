@@ -308,6 +308,8 @@
     <x:String x:Key="Lang.Goida.ProbeAll">Проверить все</x:String>
     <x:String x:Key="Lang.Goida.SetActive">Сделать активным</x:String>
     <x:String x:Key="Lang.Goida.AddToPool">Добавить в группу</x:String>
+    <x:String x:Key="Lang.Goida.SelectionModeLabel">Режим выбора</x:String>
+    <x:String x:Key="Lang.Goida.SortModeLabel">Сортировка узлов</x:String>
     <x:String x:Key="Lang.Goida.Mode.AutoBest">Авто (лучший)</x:String>
     <x:String x:Key="Lang.Goida.Mode.ManualFixed">Вручную (один узел)</x:String>
     <x:String x:Key="Lang.Goida.Mode.ManualPool">Группа ротации</x:String>

@@ -308,6 +308,8 @@
     <x:String x:Key="Lang.Goida.ProbeAll">Probe all</x:String>
     <x:String x:Key="Lang.Goida.SetActive">Set active</x:String>
     <x:String x:Key="Lang.Goida.AddToPool">Add to pool</x:String>
+    <x:String x:Key="Lang.Goida.SelectionModeLabel">Selection mode</x:String>
+    <x:String x:Key="Lang.Goida.SortModeLabel">Sort nodes</x:String>
     <x:String x:Key="Lang.Goida.Mode.AutoBest">Auto best</x:String>
     <x:String x:Key="Lang.Goida.Mode.ManualFixed">Manual (single node)</x:String>
     <x:String x:Key="Lang.Goida.Mode.ManualPool">Manual pool</x:String>

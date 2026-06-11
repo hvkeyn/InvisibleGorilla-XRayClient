@@ -35,6 +35,7 @@ namespace InvisibleGorillaXRay.Android.Views
             public string LatencyText { get; init; } = string.Empty;
             public string MetaLine { get; init; } = string.Empty;
             public string ActiveMark { get; init; } = string.Empty;
+            public string PoolLabel { get; init; } = string.Empty;
             public bool InPool { get; init; }
         }
 
@@ -59,6 +60,9 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void OnGoidaSectionClick(object? sender, RoutedEventArgs e)
         {
+            if (!isInitialized)
+                return;
+
             try
             {
                 ShowSection(NavigationSection.Goida);
@@ -73,6 +77,7 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void EnsureGoidaSectionInitialized()
         {
+            localizationHandler.MergeInto(this);
             ApplyGoidaLocalizedText();
 
             if (!isGoidaSectionInitialized)
@@ -106,6 +111,9 @@ namespace InvisibleGorillaXRay.Android.Views
             int selectionModeIndex = GoidaSelectionModeComboBox.SelectedIndex;
             int sortModeIndex = GoidaSortModeComboBox.SelectedIndex;
 
+            isApplyingGoidaSettings = true;
+            try
+            {
             GoidaSelectionModeComboBox.ItemsSource = new[]
             {
                 Localize("Lang.Goida.Mode.AutoBest"),
@@ -131,6 +139,11 @@ namespace InvisibleGorillaXRay.Android.Views
                 GoidaSortModeComboBox.SelectedIndex = sortModeIndex;
             else if (GoidaSortModeComboBox.SelectedIndex < 0)
                 GoidaSortModeComboBox.SelectedIndex = 0;
+            }
+            finally
+            {
+                isApplyingGoidaSettings = false;
+            }
         }
 
         private void SetGoidaProbeButtonLabel(string text)
@@ -199,25 +212,33 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void CaptureGoidaSettingsFromControls()
         {
-            if (isApplyingGoidaSettings)
+            if (!isInitialized || isApplyingGoidaSettings)
                 return;
 
-            UserSettings current = settingsHandler.UserSettings;
-            GoidaProfileSettings settings = current.GetGoidaSettings().Clone();
-            settings.Enabled = GoidaEnabledCheckBox.IsChecked == true;
-            settings.AutoSwitchOnFly = GoidaAutoSwitchCheckBox.IsChecked == true;
-            settings.SelectionMode = GoidaSelectionModeComboBox.SelectedIndex switch
+            try
             {
-                1 => GoidaSelectionMode.ManualFixed,
-                2 => GoidaSelectionMode.ManualPool,
-                _ => GoidaSelectionMode.AutoBest
-            };
+                UserSettings current = settingsHandler.UserSettings;
+                GoidaProfileSettings settings = current.GetGoidaSettings().Clone();
+                settings.Enabled = GoidaEnabledCheckBox.IsChecked == true;
+                settings.AutoSwitchOnFly = GoidaAutoSwitchCheckBox.IsChecked == true;
+                settings.SelectionMode = GoidaSelectionModeComboBox.SelectedIndex switch
+                {
+                    1 => GoidaSelectionMode.ManualFixed,
+                    2 => GoidaSelectionMode.ManualPool,
+                    _ => GoidaSelectionMode.AutoBest
+                };
 
-            current.Goida = settings;
-            settingsHandler.UpdateUserSettings(current);
-            goidaHandler.Manager.UpdateSettings(settings);
-            RefreshGoidaSummary();
-            UpdateGoidaPoolInfo();
+                current.Goida = settings;
+                settingsHandler.UpdateUserSettings(current);
+                goidaHandler.Manager.UpdateSettings(settings);
+                SafeRefreshGoidaSummary();
+                UpdateGoidaPoolInfo();
+                SafeUpdateGoidaStatusSummary();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.Goida.CaptureSettings", ex);
+            }
         }
 
         private void PersistGoidaListSelection()
@@ -420,6 +441,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 LatencyText = FormatGoidaLatency(node.LatencyMs),
                 MetaLine = $"{country} · {protocol} · {FormatGoidaStatus(node)}",
                 ActiveMark = string.Equals(node.Id, activeId, StringComparison.OrdinalIgnoreCase) ? "✓" : string.Empty,
+                PoolLabel = Localize("Lang.Goida.AddToPool"),
                 InPool = pool.Contains(node.Id)
             };
         }
@@ -704,15 +726,22 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void OnGoidaListCheckboxClick(object? sender, RoutedEventArgs e)
         {
-            if (isApplyingGoidaListSelection)
+            if (!isInitialized || isApplyingGoidaListSelection)
                 return;
 
-            CaptureGoidaListSelectionFromControls();
-            RefreshGoidaNodesListBox();
-            UpdateGoidaStatusSummary();
+            try
+            {
+                CaptureGoidaListSelectionFromControls();
+                RefreshGoidaNodesListBox();
+                UpdateGoidaStatusSummary();
 
-            if (!GoidaProfileManager.HasVpnListsEnabled(settingsHandler.UserSettings.GetGoidaSettings()))
-                SetGoidaStatusTextBlock(Localize("Lang.Goida.NoListsSelected"));
+                if (!GoidaProfileManager.HasVpnListsEnabled(settingsHandler.UserSettings.GetGoidaSettings()))
+                    SetGoidaStatusTextBlock(Localize("Lang.Goida.NoListsSelected"));
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.Goida.ListCheckbox", ex);
+            }
         }
 
         private void OnGoidaSelectListsNodesClick(object? sender, RoutedEventArgs e) =>

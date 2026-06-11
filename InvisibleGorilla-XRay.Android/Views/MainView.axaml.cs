@@ -160,6 +160,7 @@ namespace InvisibleGorillaXRay.Android.Views
             InitializeConnectionInfo();
             SetStatus(string.Empty);
             isInitialized = true;
+            GoidaNavButton.IsEnabled = true;
             DiagnosticLog.Write("MainView", "Setup completed");
             _ = LoadRemoteInfoAsync();
             DiagnosticLog.Write("MainView", "Remote info background load started");
