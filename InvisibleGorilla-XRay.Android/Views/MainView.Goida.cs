@@ -35,7 +35,6 @@ namespace InvisibleGorillaXRay.Android.Views
             public string LatencyText { get; init; } = string.Empty;
             public string MetaLine { get; init; } = string.Empty;
             public string ActiveMark { get; init; } = string.Empty;
-            public string PoolLabel { get; init; } = string.Empty;
             public bool InPool { get; init; }
         }
 
@@ -94,32 +93,11 @@ namespace InvisibleGorillaXRay.Android.Views
             goidaHandler.Manager.ProbeProgress += OnGoidaProbeProgress;
             goidaHandler.Manager.StatusMessage += OnGoidaStatusMessage;
             goidaPendingActiveNodeId = null;
-            ApplyGoidaLocalizedText();
+            ApplyGoidaComboBoxItems();
         }
 
         private void ApplyGoidaLocalizedText()
         {
-            GoidaHeaderTitleTextBlock.Text = Localize("Lang.Goida.Title");
-            GoidaHeaderDescriptionTextBlock.Text = Localize("Lang.Goida.Description");
-            GoidaSettingsCardTitleTextBlock.Text = Localize("Lang.Goida.SettingsSection");
-            GoidaListsCardTitleTextBlock.Text = Localize("Lang.Goida.ListsSection");
-            GoidaListSelectionTitleTextBlock.Text = Localize("Lang.Goida.ListSelectionTitle");
-            GoidaNodesCardTitleTextBlock.Text = Localize("Lang.Goida.NodesSection");
-            SetGoidaCheckBoxLabel(GoidaEnabledCheckBox, Localize("Lang.Goida.Enabled"));
-            SetGoidaCheckBoxLabel(GoidaAutoSwitchCheckBox, Localize("Lang.Goida.AutoSwitch"));
-            GoidaFilterListTextBox.Watermark = Localize("Lang.Goida.FilterListHint");
-            SetGoidaButtonLabel(GoidaRefreshButton, Localize("Lang.Goida.Refresh"));
-            SetGoidaButtonLabel(GoidaProbeButton, Localize("Lang.Goida.ProbeAll"));
-            SetGoidaButtonLabel(GoidaPresetNodesButton, Localize("Lang.Goida.ListPreset.Nodes"));
-            SetGoidaButtonLabel(GoidaPresetWhitelistButton, Localize("Lang.Goida.ListPreset.Whitelist"));
-            SetGoidaButtonLabel(GoidaPresetAllButton, Localize("Lang.Goida.ListPreset.All"));
-            SetGoidaButtonLabel(GoidaPresetNoneButton, Localize("Lang.Goida.ListPreset.None"));
-            SetGoidaButtonLabel(GoidaAutoPoolButton, Localize("Lang.Goida.AutoPool"), darkOnAccent: true);
-            SetGoidaButtonLabel(GoidaUseBestButton, Localize("Lang.Goida.UseBest"));
-            SetGoidaButtonLabel(GoidaSetActiveButton, Localize("Lang.Goida.SetActive"));
-            SetGoidaButtonLabel(GoidaClearPoolButton, Localize("Lang.Goida.ClearPool"));
-            SetGoidaButtonLabel(GoidaApplyButton, Localize("Lang.Button.Confirm"), darkOnAccent: true);
-            GoidaWorkflowHintTextBlock.Text = Localize("Lang.Goida.Workflow.Hint");
             ApplyGoidaComboBoxItems();
         }
 
@@ -146,23 +124,19 @@ namespace InvisibleGorillaXRay.Android.Views
 
             if (selectionModeIndex >= 0 && selectionModeIndex < 3)
                 GoidaSelectionModeComboBox.SelectedIndex = selectionModeIndex;
+            else if (GoidaSelectionModeComboBox.SelectedIndex < 0)
+                GoidaSelectionModeComboBox.SelectedIndex = 0;
 
             if (sortModeIndex >= 0 && sortModeIndex < 5)
                 GoidaSortModeComboBox.SelectedIndex = sortModeIndex;
+            else if (GoidaSortModeComboBox.SelectedIndex < 0)
+                GoidaSortModeComboBox.SelectedIndex = 0;
         }
 
-        private static void SetGoidaButtonLabel(Button button, string text, bool darkOnAccent = false)
+        private void SetGoidaProbeButtonLabel(string text)
         {
-            button.Content = text;
-            button.Foreground = darkOnAccent
-                ? new SolidColorBrush(Color.Parse("#252526"))
-                : Brushes.White;
-        }
-
-        private static void SetGoidaCheckBoxLabel(CheckBox box, string text)
-        {
-            box.Content = text;
-            box.Foreground = Brushes.White;
+            GoidaProbeButton.Content = text;
+            GoidaProbeButton.Foreground = Brushes.White;
         }
 
         private void BuildGoidaListCheckboxes()
@@ -446,7 +420,6 @@ namespace InvisibleGorillaXRay.Android.Views
                 LatencyText = FormatGoidaLatency(node.LatencyMs),
                 MetaLine = $"{country} · {protocol} · {FormatGoidaStatus(node)}",
                 ActiveMark = string.Equals(node.Id, activeId, StringComparison.OrdinalIgnoreCase) ? "✓" : string.Empty,
-                PoolLabel = Localize("Lang.Goida.AddToPool"),
                 InPool = pool.Contains(node.Id)
             };
         }
@@ -840,7 +813,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private void BeginGoidaProbeUi()
         {
             GoidaRefreshButton.IsEnabled = false;
-            SetGoidaButtonLabel(GoidaProbeButton, Localize("Lang.Goida.CancelProbe"));
+            SetGoidaProbeButtonLabel(Localize("Lang.Goida.CancelProbe"));
             GoidaProbeProgressBar.IsVisible = true;
             GoidaProbeProgressBar.Value = 0;
             GoidaProbeProgressBar.Maximum = Math.Max(1, goidaProbeTotal);
@@ -851,7 +824,7 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             goidaProbeUiInProgress = false;
             GoidaRefreshButton.IsEnabled = true;
-            SetGoidaButtonLabel(GoidaProbeButton, Localize("Lang.Goida.ProbeAll"));
+            SetGoidaProbeButtonLabel(Localize("Lang.Goida.ProbeAll"));
             GoidaProbeProgressBar.IsVisible = false;
         }
 

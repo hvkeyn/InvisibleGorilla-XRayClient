@@ -142,6 +142,7 @@ namespace InvisibleGorillaXRay.Android.Views
             updateHandler = appManager.HandlersManager.GetHandler<UpdateHandler>();
             broadcastHandler = appManager.HandlersManager.GetHandler<BroadcastHandler>();
             localizationHandler = appManager.HandlersManager.GetHandler<Android.Handlers.AndroidLocalizationHandler>();
+            localizationHandler.MergeInto(this);
             goidaHandler = appManager.HandlersManager.GetHandler<GoidaProfileHandler>();
             DiagnosticLog.Write("MainView", "Handlers resolved");
 
@@ -401,6 +402,9 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void ApplyLocalizedText()
         {
+            localizationHandler.TryApplyCurrentLanguage();
+            localizationHandler.MergeInto(this);
+
             ManageServerConfigurationText.Text = Localize("Lang.Window.Main.ManageServerConfiguration");
             CurrentConfigAppRulesButtonText.Text = Localize("Lang.AppRules.Manage");
 

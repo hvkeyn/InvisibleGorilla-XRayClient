@@ -54,6 +54,17 @@ namespace InvisibleGorillaXRay.Android.Handlers
             }
         }
 
+        public void MergeInto(Control target)
+        {
+            EnsureLanguageLoaded();
+
+            if (currentLangDict == null)
+                return;
+
+            if (!target.Resources.MergedDictionaries.Contains(currentLangDict))
+                target.Resources.MergedDictionaries.Add(currentLangDict);
+        }
+
         private void EnsureLanguageLoaded()
         {
             if (isLanguageLoaded)

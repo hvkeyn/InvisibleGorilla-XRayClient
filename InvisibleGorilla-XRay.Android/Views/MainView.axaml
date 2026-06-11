@@ -244,6 +244,10 @@
             </Style>
         </ControlTheme>
 
+        <DataTemplate x:Key="GoidaComboBoxItemTemplate">
+            <TextBlock Text="{Binding}" Foreground="White" />
+        </DataTemplate>
+
         <ControlTheme x:Key="TabButtonTheme" TargetType="Button">
             <Setter Property="Background" Value="{StaticResource SurfaceLight}" />
             <Setter Property="Template">
@@ -1079,10 +1083,11 @@
                             </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                 <TextBlock x:Name="GoidaHeaderTitleTextBlock"
-                                           Text="Goida profile"
+                                           Text="{DynamicResource Lang.Goida.Title}"
                                            Foreground="White"
                                            FontSize="21" FontWeight="SemiBold" />
                                 <TextBlock x:Name="GoidaHeaderDescriptionTextBlock"
+                                           Text="{DynamicResource Lang.Goida.Description}"
                                            TextWrapping="Wrap"
                                            Foreground="{StaticResource TextMuted}" />
                             </StackPanel>
@@ -1134,25 +1139,30 @@
                             BorderThickness="1" Background="{StaticResource SurfaceLight}">
                         <StackPanel Spacing="10">
                             <TextBlock x:Name="GoidaSettingsCardTitleTextBlock"
-                                       Text="Profile settings"
+                                       Text="{DynamicResource Lang.Goida.SettingsSection}"
                                        Foreground="White"
                                        FontSize="18" FontWeight="SemiBold" />
                             <CheckBox x:Name="GoidaEnabledCheckBox"
+                                      Content="{DynamicResource Lang.Goida.Enabled}"
                                       Foreground="White"
                                       Checked="OnGoidaSettingsChanged"
                                       Unchecked="OnGoidaSettingsChanged" />
                             <CheckBox x:Name="GoidaAutoSwitchCheckBox"
+                                      Content="{DynamicResource Lang.Goida.AutoSwitch}"
                                       Foreground="White"
                                       Checked="OnGoidaSettingsChanged"
                                       Unchecked="OnGoidaSettingsChanged" />
                             <ComboBox x:Name="GoidaSelectionModeComboBox"
                                       Foreground="White"
+                                      ItemTemplate="{StaticResource GoidaComboBoxItemTemplate}"
                                       SelectionChanged="OnGoidaSelectionModeChanged" />
                             <ComboBox x:Name="GoidaSortModeComboBox"
                                       Foreground="White"
+                                      ItemTemplate="{StaticResource GoidaComboBoxItemTemplate}"
                                       SelectionChanged="OnGoidaSortModeChanged" />
                             <TextBox x:Name="GoidaFilterListTextBox"
                                      Foreground="White"
+                                     Watermark="{DynamicResource Lang.Goida.FilterListHint}"
                                      TextChanged="OnGoidaFilterChanged" />
                         </StackPanel>
                     </Border>
@@ -1162,24 +1172,33 @@
                             BorderThickness="1" Background="{StaticResource SurfaceLight}">
                         <StackPanel Spacing="8">
                             <TextBlock x:Name="GoidaListsCardTitleTextBlock"
-                                       Text="Node lists"
+                                       Text="{DynamicResource Lang.Goida.ListsSection}"
                                        Foreground="White"
                                        FontSize="18" FontWeight="SemiBold" />
                             <TextBlock x:Name="GoidaListSelectionTitleTextBlock"
+                                       Text="{DynamicResource Lang.Goida.ListSelectionTitle}"
                                        Foreground="{StaticResource TextMuted}"
                                        FontSize="12" TextWrapping="Wrap" />
                             <WrapPanel x:Name="GoidaListPresetPanel" Orientation="Horizontal">
                                 <Button x:Name="GoidaPresetNodesButton" Margin="0,0,6,6" Height="32"
                                         Padding="10,0" Theme="{StaticResource GrayActionButton}"
+                                        Content="{DynamicResource Lang.Goida.ListPreset.Nodes}"
+                                        Foreground="White"
                                         Click="OnGoidaSelectListsNodesClick" />
                                 <Button x:Name="GoidaPresetWhitelistButton" Margin="0,0,6,6" Height="32"
                                         Padding="10,0" Theme="{StaticResource GrayActionButton}"
+                                        Content="{DynamicResource Lang.Goida.ListPreset.Whitelist}"
+                                        Foreground="White"
                                         Click="OnGoidaSelectListsWhitelistClick" />
                                 <Button x:Name="GoidaPresetAllButton" Margin="0,0,6,6" Height="32"
                                         Padding="10,0" Theme="{StaticResource GrayActionButton}"
+                                        Content="{DynamicResource Lang.Goida.ListPreset.All}"
+                                        Foreground="White"
                                         Click="OnGoidaSelectListsAllClick" />
                                 <Button x:Name="GoidaPresetNoneButton" Margin="0,0,6,6" Height="32"
                                         Padding="10,0" Theme="{StaticResource GrayActionButton}"
+                                        Content="{DynamicResource Lang.Goida.ListPreset.None}"
+                                        Foreground="White"
                                         Click="OnGoidaSelectListsNoneClick" />
                             </WrapPanel>
                             <ScrollViewer MaxHeight="110" HorizontalScrollBarVisibility="Disabled"
@@ -1197,10 +1216,14 @@
                                 <Button x:Name="GoidaRefreshButton" Grid.Column="0"
                                         Margin="0,0,5,0" Height="38"
                                         Theme="{StaticResource GrayActionButton}"
+                                        Content="{DynamicResource Lang.Goida.Refresh}"
+                                        Foreground="White"
                                         Click="OnGoidaRefreshClick" />
                                 <Button x:Name="GoidaProbeButton" Grid.Column="1"
                                         Margin="5,0,0,0" Height="38"
                                         Theme="{StaticResource GrayActionButton}"
+                                        Content="{DynamicResource Lang.Goida.ProbeAll}"
+                                        Foreground="White"
                                         Click="OnGoidaProbeClick" />
                             </Grid>
                             <TextBlock x:Name="GoidaStatusTextBlock"
@@ -1217,7 +1240,7 @@
                             BorderThickness="1" Background="{StaticResource SurfaceLight}">
                         <StackPanel Spacing="8">
                             <TextBlock x:Name="GoidaNodesCardTitleTextBlock"
-                                       Text="Nodes"
+                                       Text="{DynamicResource Lang.Goida.NodesSection}"
                                        Foreground="White"
                                        FontSize="18" FontWeight="SemiBold" />
                             <TextBlock x:Name="GoidaPoolInfoTextBlock"
@@ -1250,7 +1273,7 @@
                                                 <TextBlock Text="{Binding Endpoint}"
                                                            Foreground="#8A8A8A" FontSize="10"
                                                            TextTrimming="CharacterEllipsis" />
-                                                <CheckBox Content="{Binding PoolLabel}"
+                                                <CheckBox Content="{DynamicResource Lang.Goida.AddToPool}"
                                                           Foreground="White"
                                                           IsChecked="{Binding InPool}"
                                                           Tag="{Binding Id}"
@@ -1261,6 +1284,7 @@
                                 </ListBox.ItemTemplate>
                             </ListBox>
                             <TextBlock x:Name="GoidaWorkflowHintTextBlock"
+                                       Text="{DynamicResource Lang.Goida.Workflow.Hint}"
                                        TextWrapping="Wrap" FontSize="11"
                                        Foreground="#8A8A8A" />
                         </StackPanel>
@@ -1270,24 +1294,32 @@
                         <Button x:Name="GoidaAutoPoolButton" Grid.Row="0" Grid.Column="0"
                                 Margin="0,0,4,4" Height="38"
                                 Theme="{StaticResource GreenActionButton}"
+                                Content="{DynamicResource Lang.Goida.AutoPool}"
                                 Foreground="#252526" FontWeight="SemiBold"
                                 Click="OnGoidaAutoPoolClick" />
                         <Button x:Name="GoidaUseBestButton" Grid.Row="0" Grid.Column="1"
                                 Margin="4,0,0,4" Height="38"
                                 Theme="{StaticResource GrayActionButton}"
+                                Content="{DynamicResource Lang.Goida.UseBest}"
+                                Foreground="White"
                                 Click="OnGoidaUseBestClick" />
                         <Button x:Name="GoidaSetActiveButton" Grid.Row="1" Grid.Column="0"
                                 Margin="0,4,4,0" Height="38"
                                 Theme="{StaticResource GrayActionButton}"
+                                Content="{DynamicResource Lang.Goida.SetActive}"
+                                Foreground="White"
                                 Click="OnGoidaSetActiveClick" />
                         <Button x:Name="GoidaClearPoolButton" Grid.Row="1" Grid.Column="1"
                                 Margin="4,4,0,0" Height="38"
                                 Theme="{StaticResource GrayActionButton}"
+                                Content="{DynamicResource Lang.Goida.ClearPool}"
+                                Foreground="White"
                                 Click="OnGoidaClearPoolClick" />
                     </Grid>
 
                     <Button x:Name="GoidaApplyButton"
                             Height="42" Theme="{StaticResource GreenActionButton}"
+                            Content="{DynamicResource Lang.Button.Confirm}"
                             Foreground="#252526" FontWeight="Bold"
                             Click="OnGoidaApplyClick" />
                 </StackPanel>
