@@ -34,6 +34,7 @@ namespace InvisibleGorillaXRay.Services.Goida
         private readonly GoidaFetcher fetcher = new();
         private GoidaNodeParser parser;
         private GoidaHealthMonitor monitor;
+        private GoidaOperationLog? operationLog;
 
         private Func<GoidaProfileSettings> getSettings;
         private Action<GoidaProfileSettings> saveSettings;
@@ -46,6 +47,16 @@ namespace InvisibleGorillaXRay.Services.Goida
         private Task? backgroundTask;
         private int refreshInProgress;
         private int probeInProgress;
+
+        // When the VPN tunnel is active we must never run a native probe (TestConnection):
+        // the probe and the tunnel share the same native xray core, and running both at
+        // once crashes the Android process. ProbingSuspended hard-blocks every probe path
+        // (manual + background) and CancelActiveProbe aborts an in-flight one.
+        private volatile bool probingSuspended;
+        private CancellationTokenSource? activeProbeCts;
+        private readonly object probeGuard = new();
+
+        public bool ProbingSuspended => probingSuspended;
 
         public event Action? NodesUpdated;
         public event Action<string>? StatusMessage;
@@ -106,6 +117,18 @@ namespace InvisibleGorillaXRay.Services.Goida
             monitor.ProbeProgress += progress => ProbeProgress?.Invoke(progress);
             store.EnsureDirectories();
             store.Load();
+            operationLog = new GoidaOperationLog(
+                System.IO.Path.Combine(store.ProfileDirectory, "goida-operations.json"));
+        }
+
+        public IReadOnlyList<GoidaOperationEntry> GetRecentOperations(int count = 20)
+        {
+            return operationLog?.GetRecent(count) ?? new List<GoidaOperationEntry>();
+        }
+
+        public void LogOperation(string message)
+        {
+            operationLog?.Add(message);
         }
 
         public void Start()
@@ -247,6 +270,7 @@ namespace InvisibleGorillaXRay.Services.Goida
                 latest.LastRefreshUtc = DateTime.UtcNow;
                 saveSettings(latest);
 
+                operationLog?.Add($"Refresh: {merged.Count} nodes");
                 StatusMessage?.Invoke("refresh-complete");
                 NodesUpdated?.Invoke();
             }
@@ -260,16 +284,59 @@ namespace InvisibleGorillaXRay.Services.Goida
             }
         }
 
+        public void SuspendProbing()
+        {
+            probingSuspended = true;
+            CancelActiveProbe();
+        }
+
+        public void ResumeProbing()
+        {
+            probingSuspended = false;
+        }
+
+        public void CancelActiveProbe()
+        {
+            lock (probeGuard)
+            {
+                try { activeProbeCts?.Cancel(); }
+                catch { }
+            }
+        }
+
+        public async Task WaitForProbeIdleAsync(int timeoutMs = 9000)
+        {
+            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            while (Interlocked.CompareExchange(ref probeInProgress, 0, 0) != 0)
+            {
+                if (DateTime.UtcNow >= deadline)
+                    return;
+
+                try { await Task.Delay(50).ConfigureAwait(false); }
+                catch { return; }
+            }
+        }
+
         public async Task<GoidaProbeResult> ProbeAsync(
             CancellationToken cancellationToken = default,
             bool manual = false)
         {
+            if (probingSuspended)
+                return new GoidaProbeResult();
+
             if (Interlocked.CompareExchange(ref probeInProgress, 1, 0) != 0)
                 return new GoidaProbeResult();
 
             bool pausedNative = false;
+            CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            lock (probeGuard)
+                activeProbeCts = linkedCts;
+            CancellationToken probeToken = linkedCts.Token;
             try
             {
+                if (probingSuspended)
+                    return new GoidaProbeResult { Cancelled = true };
+
                 GoidaProfileSettings settings = getSettings().Clone();
                 List<GoidaNode> targets = FilterProbeTargets(settings, store.GetNodes(), manual).ToList();
                 if (targets.Count == 0)
@@ -296,19 +363,23 @@ namespace InvisibleGorillaXRay.Services.Goida
                     result = await monitor.ProbeTcpThenVlessAsync(
                         targets,
                         probeOptions,
-                        cancellationToken).ConfigureAwait(false);
+                        probeToken).ConfigureAwait(false);
                 }
                 finally
                 {
                     store.EndBulkUpdate();
                 }
 
-                if (!result.Cancelled && result.Ok > 0)
+                if (!result.Cancelled && result.Ok > 0 && !probingSuspended)
                     await EvaluateAutoSwitchAsync(settings).ConfigureAwait(false);
+
+                if (manual && !result.Cancelled)
+                    operationLog?.Add(
+                        $"Probe: {result.Ok} ok, {result.Timeout} timeout, {result.Error} error");
 
                 return result;
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException)
             {
                 return new GoidaProbeResult { Cancelled = true };
             }
@@ -323,6 +394,12 @@ namespace InvisibleGorillaXRay.Services.Goida
                     try { resumeNativeAfterTest?.Invoke(); } catch { }
                 }
 
+                lock (probeGuard)
+                {
+                    if (ReferenceEquals(activeProbeCts, linkedCts))
+                        activeProbeCts = null;
+                }
+                linkedCts.Dispose();
                 Interlocked.Exchange(ref probeInProgress, 0);
             }
         }
@@ -336,6 +413,7 @@ namespace InvisibleGorillaXRay.Services.Goida
             GoidaProfileSettings settings = getSettings().Clone();
             settings.ActiveNodeId = node.Id;
             saveSettings(settings);
+            operationLog?.Add($"Active node: {node.DisplayName}");
             onActiveNodeChanged?.Invoke(node);
             NodesUpdated?.Invoke();
         }
@@ -432,7 +510,8 @@ namespace InvisibleGorillaXRay.Services.Goida
                         lastRefresh = DateTime.UtcNow;
                     }
 
-                    if (canProbe()
+                    if (!probingSuspended
+                        && canProbe()
                         && store.GetNodes().Count > 0
                         && DateTime.UtcNow - lastProbe >= probeInterval)
                     {
@@ -480,6 +559,7 @@ namespace InvisibleGorillaXRay.Services.Goida
 
             settings.ActiveNodeId = best.Id;
             saveSettings(settings);
+            operationLog?.Add($"Auto-switch: {best.DisplayName}");
             onActiveNodeChanged?.Invoke(best);
             NodesUpdated?.Invoke();
             return Task.CompletedTask;

@@ -446,6 +446,65 @@
                                FontSize="12"
                                HorizontalAlignment="Center" />
 
+                    <Border x:Name="HomeGoidaCard"
+                            Width="320"
+                            Margin="0,16,0,0"
+                            Padding="16,14"
+                            CornerRadius="14"
+                            Background="{StaticResource SurfaceLight}"
+                            HorizontalAlignment="Center"
+                            IsVisible="False">
+                        <StackPanel Spacing="8">
+                            <StackPanel Orientation="Horizontal"
+                                        HorizontalAlignment="Center"
+                                        Spacing="10">
+                                <StackPanel Orientation="Horizontal"
+                                            Spacing="3"
+                                            VerticalAlignment="Center">
+                                    <Border x:Name="HomeGoidaBar1"
+                                            Width="5" Height="7"
+                                            CornerRadius="2"
+                                            VerticalAlignment="Bottom"
+                                            Background="#5FD38D" />
+                                    <Border x:Name="HomeGoidaBar2"
+                                            Width="5" Height="11"
+                                            CornerRadius="2"
+                                            VerticalAlignment="Bottom"
+                                            Background="#5FD38D" />
+                                    <Border x:Name="HomeGoidaBar3"
+                                            Width="5" Height="15"
+                                            CornerRadius="2"
+                                            VerticalAlignment="Bottom"
+                                            Background="#5FD38D" />
+                                    <Border x:Name="HomeGoidaBar4"
+                                            Width="5" Height="19"
+                                            CornerRadius="2"
+                                            VerticalAlignment="Bottom"
+                                            Background="#5FD38D" />
+                                </StackPanel>
+                                <TextBlock x:Name="HomeGoidaQualityTextBlock"
+                                           Text="Goida"
+                                           Foreground="#5FD38D"
+                                           FontWeight="SemiBold"
+                                           FontSize="15"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock x:Name="HomeGoidaNodeTextBlock"
+                                       Text=""
+                                       Foreground="White"
+                                       FontSize="14"
+                                       FontWeight="SemiBold"
+                                       TextAlignment="Center"
+                                       TextWrapping="Wrap" />
+                            <TextBlock x:Name="HomeGoidaDetailsTextBlock"
+                                       Text=""
+                                       Foreground="{StaticResource TextMuted}"
+                                       FontSize="12"
+                                       TextAlignment="Center"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
                     <Button x:Name="CurrentConfigAppRulesButton"
                             Theme="{StaticResource LinkButton}"
                             MinWidth="220"
@@ -1345,6 +1404,24 @@
                             Content="{DynamicResource Lang.Button.Confirm}"
                             Foreground="#252526" FontWeight="Bold"
                             Click="OnGoidaApplyClick" />
+
+                    <Border Margin="0,4,0,0"
+                            Padding="14,12"
+                            CornerRadius="12"
+                            Background="{StaticResource SurfaceLight}">
+                        <StackPanel Spacing="8">
+                            <TextBlock x:Name="GoidaHistoryTitleTextBlock"
+                                       Text="{DynamicResource Lang.Goida.HistoryTitle}"
+                                       Foreground="White"
+                                       FontWeight="SemiBold"
+                                       FontSize="14" />
+                            <TextBlock x:Name="GoidaHistoryTextBlock"
+                                       Text=""
+                                       Foreground="{StaticResource TextMuted}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <StackPanel x:Name="SettingsSectionPanel"

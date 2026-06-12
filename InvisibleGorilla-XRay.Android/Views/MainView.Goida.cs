@@ -103,6 +103,7 @@ namespace InvisibleGorillaXRay.Android.Views
             RefreshGoidaNodesListBox();
             UpdateGoidaPoolInfo();
             UpdateGoidaStatusSummary();
+            RefreshGoidaHistory();
         }
 
         private void InitializeGoidaControls()
@@ -364,6 +365,70 @@ namespace InvisibleGorillaXRay.Android.Views
             banner.IsVisible = true;
         }
 
+        private void RefreshGoidaHistory()
+        {
+            try
+            {
+                TextBlock historyText = GetRequiredControl<TextBlock>("GoidaHistoryTextBlock");
+                IReadOnlyList<GoidaOperationEntry> recent = goidaHandler.Manager.GetRecentOperations(12);
+
+                if (recent.Count == 0)
+                {
+                    historyText.Text = Localize("Lang.Goida.HistoryEmpty");
+                    return;
+                }
+
+                historyText.Text = string.Join(
+                    Environment.NewLine,
+                    recent.Select(entry =>
+                        $"{entry.TimestampUtc.ToLocalTime():dd.MM HH:mm} · {entry.Message}"));
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.Goida.RefreshHistory", ex);
+            }
+        }
+
+        // Compact Goida signal card shown on the Home screen when a Goida node is active, so
+        // the user can see the live profile and its signal without opening the Goida section.
+        private void UpdateHomeGoidaCard(GoidaNode? activeNode)
+        {
+            try
+            {
+                Border card = GetRequiredControl<Border>("HomeGoidaCard");
+                GoidaProfileSettings settings = settingsHandler.UserSettings.GetGoidaSettings();
+                bool goidaActive = settings.Enabled && activeNode != null;
+
+                card.IsVisible = goidaActive;
+                if (!goidaActive)
+                    return;
+
+                GoidaMainPresentation presentation = GoidaNodeDisplay.BuildMainPresentation(activeNode!);
+                IBrush activeBrush = TryParseBrush(presentation.ColorHex, "#5FD38D");
+                IBrush inactiveBrush = TryParseBrush("#3A3A3A", "#3A3A3A");
+                int level = presentation.SignalLevel;
+
+                GetRequiredControl<Border>("HomeGoidaBar1").Background = level >= 1 ? activeBrush : inactiveBrush;
+                GetRequiredControl<Border>("HomeGoidaBar2").Background = level >= 2 ? activeBrush : inactiveBrush;
+                GetRequiredControl<Border>("HomeGoidaBar3").Background = level >= 3 ? activeBrush : inactiveBrush;
+                GetRequiredControl<Border>("HomeGoidaBar4").Background = level >= 4 ? activeBrush : inactiveBrush;
+
+                TextBlock quality = GetRequiredControl<TextBlock>("HomeGoidaQualityTextBlock");
+                quality.Text = Localize(presentation.QualityLabel);
+                quality.Foreground = activeBrush;
+
+                GetRequiredControl<TextBlock>("HomeGoidaNodeTextBlock").Text = activeNode!.DisplayName;
+                GetRequiredControl<TextBlock>("HomeGoidaDetailsTextBlock").Text =
+                    $"{presentation.Summary} · {presentation.LatencyText}";
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.Goida.HomeCard", ex);
+                try { GetRequiredControl<Border>("HomeGoidaCard").IsVisible = false; }
+                catch { }
+            }
+        }
+
         private void RefreshGoidaNodesListBox(bool forceLatencySort = false)
         {
             isRefreshingGoidaNodesList = true;
@@ -525,6 +590,65 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private bool IsGoidaConnectionRestartSuppressed => suppressGoidaConnectionRestart > 0;
 
+        // The Goida health probe runs native xray TestConnection on the same native core that
+        // serves the live tunnel. Running both at once crashes the Android process (this is the
+        // "~1 minute after RUN" crash). Before the tunnel starts we cancel any in-flight probe
+        // and block new ones for the whole session; probing resumes once the tunnel is stopped.
+        private async Task StopGoidaProbingForConnectionAsync()
+        {
+            try
+            {
+                goidaProbeCts?.Cancel();
+                if (goidaHandler != null)
+                {
+                    goidaHandler.Manager.SuspendProbing();
+                    await goidaHandler.Manager.WaitForProbeIdleAsync().ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.Goida.StopProbingForConnection", ex);
+            }
+        }
+
+        private void ResumeGoidaProbingAfterConnection()
+        {
+            try
+            {
+                goidaHandler?.Manager.ResumeProbing();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.Goida.ResumeProbing", ex);
+            }
+        }
+
+        private void LogGoidaConnectionEvent(bool connected)
+        {
+            try
+            {
+                if (goidaHandler == null)
+                    return;
+
+                GoidaProfileSettings settings = settingsHandler.UserSettings.GetGoidaSettings();
+                if (!settings.Enabled)
+                    return;
+
+                if (!GoidaProfilePaths.IsMarker(settingsHandler.UserSettings.GetCurrentConfigPath()))
+                    return;
+
+                GoidaNode? node = goidaHandler.Manager.GetActiveNode();
+                string name = node?.DisplayName ?? "-";
+                goidaHandler.Manager.LogOperation(connected
+                    ? $"Connected: {name}"
+                    : $"Disconnected: {name}");
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.Goida.LogConnectionEvent", ex);
+            }
+        }
+
         private void WithGoidaConnectionRestartSuppressed(Action action)
         {
             suppressGoidaConnectionRestart++;
@@ -582,6 +706,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     {
                         SafeRefreshGoidaSummary();
                         SafeUpdateGoidaStatusSummary();
+                        RefreshGoidaHistory();
                     }
                 }
 
@@ -852,6 +977,7 @@ namespace InvisibleGorillaXRay.Android.Views
 
                 RefreshGoidaNodesListBox(forceLatencySort: true);
                 ShowGoidaProbeCompleteResult(result);
+                RefreshGoidaHistory();
             }
             catch (OperationCanceledException)
             {

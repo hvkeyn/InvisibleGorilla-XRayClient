@@ -2256,6 +2256,7 @@ namespace InvisibleGorillaXRay.Android.Views
 
             CurrentConfigNameText.Text = currentConfigText;
             AppRulesEditorCurrentConfigText.Text = currentConfigText;
+            UpdateHomeGoidaCard(activeGoidaNode);
             if (GoidaSectionScroll.IsVisible)
                 SafeRefreshGoidaSummary();
             RefreshAppRulesSummary();
@@ -2857,6 +2858,10 @@ namespace InvisibleGorillaXRay.Android.Views
             if (!TrySaveSettings(showSuccessMessage: false))
                 return;
 
+            // Stop the Goida native probe before the tunnel starts: both use the same native
+            // xray core and running them together crashes the process (the ~1 min crash).
+            await StopGoidaProbingForConnectionAsync();
+
             bool vpnPrepared = await global::InvisibleGorillaXRay.Android.MainActivity.EnsureVpnPreparedAsync();
             if (!vpnPrepared)
             {
@@ -2907,6 +2912,7 @@ namespace InvisibleGorillaXRay.Android.Views
 
                     started = true;
                     AndroidConnectionNotificationManager.MarkRunning();
+                    LogGoidaConnectionEvent(connected: true);
                     Dispatcher.UIThread.Post(() =>
                     {
                         SetConnectionState(ConnectionState.Running);
@@ -2939,6 +2945,11 @@ namespace InvisibleGorillaXRay.Android.Views
                     {
                         AndroidConnectionNotificationManager.Stop();
                     }
+
+                    // Tunnel is no longer running: it is safe to let Goida probe again.
+                    if (started)
+                        LogGoidaConnectionEvent(connected: false);
+                    ResumeGoidaProbingAfterConnection();
 
                     Dispatcher.UIThread.Post(() =>
                     {

@@ -115,7 +115,7 @@ namespace InvisibleGorillaXRay.Handlers
         {
             Values.Directory.EnsureWritableDirectories();
             string rawSettings = JsonConvert.SerializeObject(userSettings);
-            File.WriteAllText(Path.USER_SETTINGS, rawSettings);
+            FileUtility.WriteAllTextAtomic(Path.USER_SETTINGS, rawSettings);
         }
 
         private static string NormalizePath(string path, string fallback)

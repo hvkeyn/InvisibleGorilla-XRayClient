@@ -352,6 +352,8 @@
     <x:String x:Key="Lang.Goida.ClearPool">Clear pool</x:String>
     <x:String x:Key="Lang.Goida.ConfirmHint">Apply changes</x:String>
     <x:String x:Key="Lang.Goida.Workflow.Hint">Auto pool picks the 100 fastest nodes and rotates on failure. Best node switches once to the fastest node. To pick manually: select a row, Set active, then CONFIRM.</x:String>
+    <x:String x:Key="Lang.Goida.HistoryTitle">Recent operations</x:String>
+    <x:String x:Key="Lang.Goida.HistoryEmpty">No operations yet</x:String>
     <x:String x:Key="Lang.Goida.PoolCount">Pool: {0} nodes</x:String>
     <x:String x:Key="Lang.Goida.PoolModeHint">pool is used in rotation mode</x:String>
     <x:String x:Key="Lang.Goida.Sort.Latency">Sort: latency</x:String>

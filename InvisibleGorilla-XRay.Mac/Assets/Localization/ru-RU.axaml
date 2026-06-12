@@ -352,6 +352,8 @@
     <x:String x:Key="Lang.Goida.ClearPool">Очистить группу</x:String>
     <x:String x:Key="Lang.Goida.ConfirmHint">Применить изменения</x:String>
     <x:String x:Key="Lang.Goida.Workflow.Hint">Авто-группа выбирает 100 быстрых узлов и переключает при сбое. Лучший узел — один раз на самый быстрый. Вручную: выберите строку, «Сделать активным», затем ПРИМЕНИТЬ.</x:String>
+    <x:String x:Key="Lang.Goida.HistoryTitle">Последние операции</x:String>
+    <x:String x:Key="Lang.Goida.HistoryEmpty">Пока нет операций</x:String>
     <x:String x:Key="Lang.Goida.PoolCount">Группа: {0} узлов</x:String>
     <x:String x:Key="Lang.Goida.PoolModeHint">группа используется в режиме ротации</x:String>
     <x:String x:Key="Lang.Goida.Sort.Latency">Сортировка: задержка</x:String>

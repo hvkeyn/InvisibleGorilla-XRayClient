@@ -158,7 +158,9 @@ namespace InvisibleGorillaXRay.Services.Goida
         private void SaveLocked()
         {
             EnsureDirectories();
-            File.WriteAllText(StateFilePath, JsonConvert.SerializeObject(nodes, Formatting.Indented));
+            InvisibleGorillaXRay.Utilities.FileUtility.WriteAllTextAtomic(
+                StateFilePath,
+                JsonConvert.SerializeObject(nodes, Formatting.Indented));
         }
     }
 }

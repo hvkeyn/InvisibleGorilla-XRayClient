@@ -28,6 +28,53 @@ namespace InvisibleGorillaXRay.Utilities
             }
         }
 
+        public static void WriteAllTextAtomic(string path, string content)
+        {
+            if (string.IsNullOrEmpty(path))
+                return;
+
+            string directory = System.IO.Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(directory))
+                System.IO.Directory.CreateDirectory(directory);
+
+            // Write to a sibling temp file first, then swap it into place. A crash (managed
+            // or native) during the write only ever corrupts the throwaway temp file, never
+            // the real config, so settings survive an unexpected process kill.
+            string tempPath = path + ".tmp";
+            System.IO.File.WriteAllText(tempPath, content);
+
+            try
+            {
+                if (System.IO.File.Exists(path))
+                    System.IO.File.Replace(tempPath, path, null);
+                else
+                    System.IO.File.Move(tempPath, path);
+            }
+            catch
+            {
+                try
+                {
+                    System.IO.File.Copy(tempPath, path, overwrite: true);
+                }
+                finally
+                {
+                    TryDeleteFile(tempPath);
+                }
+            }
+        }
+
+        public static void TryDeleteFile(string path)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
+                    System.IO.File.Delete(path);
+            }
+            catch
+            {
+            }
+        }
+
         public static void SetFileTimeToNow(string path)
         {
             System.IO.File.SetCreationTime(path, DateTime.Now);
