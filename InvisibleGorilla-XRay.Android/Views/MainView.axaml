@@ -328,7 +328,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="80" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="52" />
+            <RowDefinition Height="64" />
         </Grid.RowDefinitions>
 
         <Border Grid.Row="0"
@@ -2078,39 +2078,47 @@
         </Border>
 
         <Border Grid.Row="2"
-                Background="{StaticResource SurfaceLight}">
+                Background="{StaticResource SurfaceLight}"
+                BoxShadow="0 -2 6 0 #55000000">
             <StackPanel Orientation="Horizontal"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Spacing="10">
-                <Button x:Name="HomeSectionButton"
-                        Width="30"
-                        Height="30"
-                        Theme="{StaticResource CircleActionButton}"
-                        Click="OnHomeSectionClick">
-                    <Rectangle Fill="{StaticResource Icon.About}"
-                               Width="6"
-                               Height="14"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center" />
-                </Button>
+                        Spacing="14">
+                <Grid Width="42" Height="42">
+                    <Border x:Name="HomeNavRing"
+                            Width="42" Height="42"
+                            CornerRadius="999"
+                            BorderBrush="White"
+                            BorderThickness="2"
+                            IsVisible="False" />
+                    <Button x:Name="HomeSectionButton"
+                            Width="34"
+                            Height="34"
+                            Theme="{StaticResource CircleActionButton}"
+                            Click="OnHomeSectionClick">
+                        <Rectangle Fill="{StaticResource Icon.About}"
+                                   Width="7"
+                                   Height="16"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Button>
+                </Grid>
 
-                <Grid Width="30"
-                      Height="30">
-                    <Button Width="30"
-                            Height="30"
+                <Grid Width="42" Height="42">
+                    <Button Width="34"
+                            Height="34"
                             Theme="{StaticResource CircleActionButton}"
                             Click="OnOpenReleasesClick">
                         <Rectangle Fill="{StaticResource Icon.Update}"
-                                   Width="15"
-                                   Height="15"
+                                   Width="17"
+                                   Height="17"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center" />
                     </Button>
                     <Ellipse x:Name="UpdateNotificationDot"
-                             Width="10"
-                             Height="10"
-                             Margin="-2,-2,0,0"
+                             Width="11"
+                             Height="11"
+                             Margin="0,2,2,0"
                              Fill="#F0A43A"
                              Stroke="{StaticResource SurfaceLight}"
                              StrokeThickness="2"
@@ -2119,51 +2127,71 @@
                              IsVisible="False" />
                 </Grid>
 
-                <Button x:Name="GoidaSectionButton"
-                        Width="30"
-                        Height="30"
-                        Theme="{StaticResource CircleActionButton}"
-                        Click="OnGoidaSectionClick">
-                    <Rectangle Fill="{StaticResource Icon.GoidaNav}"
-                               Width="16"
-                               Height="16"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center" />
-                </Button>
+                <Grid Width="42" Height="42">
+                    <Border x:Name="GoidaNavRing"
+                            Width="42" Height="42"
+                            CornerRadius="999"
+                            BorderBrush="White"
+                            BorderThickness="2"
+                            IsVisible="False" />
+                    <Button x:Name="GoidaSectionButton"
+                            Width="34"
+                            Height="34"
+                            Theme="{StaticResource CircleActionButton}"
+                            Click="OnGoidaSectionClick">
+                        <Rectangle Fill="{StaticResource Icon.GoidaNav}"
+                                   Width="18"
+                                   Height="18"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Button>
+                </Grid>
 
-                <Button x:Name="SettingsSectionButton"
-                        Width="30"
-                        Height="30"
-                        Theme="{StaticResource CircleActionButton}"
-                        Click="OnSettingsSectionClick">
-                    <Rectangle Fill="{StaticResource Icon.Settings}"
-                               Width="15"
-                               Height="15"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center" />
-                </Button>
+                <Grid Width="42" Height="42">
+                    <Border x:Name="SettingsNavRing"
+                            Width="42" Height="42"
+                            CornerRadius="999"
+                            BorderBrush="White"
+                            BorderThickness="2"
+                            IsVisible="False" />
+                    <Button x:Name="SettingsSectionButton"
+                            Width="34"
+                            Height="34"
+                            Theme="{StaticResource CircleActionButton}"
+                            Click="OnSettingsSectionClick">
+                        <Rectangle Fill="{StaticResource Icon.Settings}"
+                                   Width="17"
+                                   Height="17"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Button>
+                </Grid>
 
-                <Button Width="30"
-                        Height="30"
-                        Theme="{StaticResource CircleActionButton}"
-                        Click="OnOpenBugReportingClick">
-                    <Rectangle Fill="{StaticResource Icon.Bug}"
-                               Width="12"
-                               Height="16"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center" />
-                </Button>
+                <Grid Width="42" Height="42">
+                    <Button Width="34"
+                            Height="34"
+                            Theme="{StaticResource CircleActionButton}"
+                            Click="OnOpenBugReportingClick">
+                        <Rectangle Fill="{StaticResource Icon.Bug}"
+                                   Width="14"
+                                   Height="18"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Button>
+                </Grid>
 
-                <Button Width="30"
-                        Height="30"
-                        Theme="{StaticResource CircleActionButton}"
-                        Click="OnOpenGitHubClick">
-                    <Rectangle Fill="{StaticResource Icon.Github}"
-                               Width="18"
-                               Height="16"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center" />
-                </Button>
+                <Grid Width="42" Height="42">
+                    <Button Width="34"
+                            Height="34"
+                            Theme="{StaticResource CircleActionButton}"
+                            Click="OnOpenGitHubClick">
+                        <Rectangle Fill="{StaticResource Icon.Github}"
+                                   Width="20"
+                                   Height="18"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Button>
+                </Grid>
             </StackPanel>
         </Border>
     </Grid>

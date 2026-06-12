@@ -60,7 +60,10 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void OnGoidaSectionClick(object? sender, RoutedEventArgs e)
         {
-            if (!isInitialized)
+            // The Goida section opens on demand and initializes itself lazily, so it must never
+            // be gated behind an early-return: doing so previously left the nav button visually
+            // present but dead when Setup had not flipped isInitialized for any reason.
+            if (goidaHandler == null)
             {
                 pendingGoidaSectionOpen = true;
                 return;
@@ -85,6 +88,7 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void EnsureGoidaSectionInitialized()
         {
+            RebindGoidaControls();
             localizationHandler.MergeInto(this);
             ApplyGoidaLocalizedText();
 
@@ -103,10 +107,32 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void InitializeGoidaControls()
         {
+            RebindGoidaControls();
             goidaHandler.Manager.ProbeProgress += OnGoidaProbeProgress;
             goidaHandler.Manager.StatusMessage += OnGoidaStatusMessage;
             goidaPendingActiveNodeId = null;
             ApplyGoidaComboBoxItems();
+        }
+
+        // On Android the Avalonia NameGenerator x:Name fields for the Goida section are not reliably
+        // populated at runtime (they can stay null), which previously made Setup throw a
+        // NullReferenceException and left the whole view half-initialized. Resolving them on demand
+        // via FindControl is the supported workaround used elsewhere in this view.
+        private void RebindGoidaControls()
+        {
+            GoidaSelectionModeComboBox = this.FindControl<ComboBox>("GoidaSelectionModeComboBox") ?? GoidaSelectionModeComboBox;
+            GoidaSortModeComboBox = this.FindControl<ComboBox>("GoidaSortModeComboBox") ?? GoidaSortModeComboBox;
+            GoidaEnabledCheckBox = this.FindControl<CheckBox>("GoidaEnabledCheckBox") ?? GoidaEnabledCheckBox;
+            GoidaAutoSwitchCheckBox = this.FindControl<CheckBox>("GoidaAutoSwitchCheckBox") ?? GoidaAutoSwitchCheckBox;
+            GoidaFilterListTextBox = this.FindControl<TextBox>("GoidaFilterListTextBox") ?? GoidaFilterListTextBox;
+            GoidaListCheckboxesPanel = this.FindControl<WrapPanel>("GoidaListCheckboxesPanel") ?? GoidaListCheckboxesPanel;
+            GoidaNodesListBox = this.FindControl<ListBox>("GoidaNodesListBox") ?? GoidaNodesListBox;
+            GoidaRefreshButton = this.FindControl<Button>("GoidaRefreshButton") ?? GoidaRefreshButton;
+            GoidaProbeButton = this.FindControl<Button>("GoidaProbeButton") ?? GoidaProbeButton;
+            GoidaProbeProgressBar = this.FindControl<ProgressBar>("GoidaProbeProgressBar") ?? GoidaProbeProgressBar;
+            GoidaStatusTextBlock = this.FindControl<TextBlock>("GoidaStatusTextBlock") ?? GoidaStatusTextBlock;
+            GoidaPoolInfoTextBlock = this.FindControl<TextBlock>("GoidaPoolInfoTextBlock") ?? GoidaPoolInfoTextBlock;
+            GoidaActiveSummaryTextBlock = this.FindControl<TextBlock>("GoidaActiveSummaryTextBlock") ?? GoidaActiveSummaryTextBlock;
         }
 
         private void ApplyGoidaLocalizedText()

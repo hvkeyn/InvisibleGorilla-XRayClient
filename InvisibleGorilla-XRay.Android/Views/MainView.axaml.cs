@@ -126,6 +126,19 @@ namespace InvisibleGorillaXRay.Android.Views
             Setup(appManager);
         }
 
+        private static void TrySetupStep(string step, Action action)
+        {
+            try
+            {
+                action();
+                DiagnosticLog.Write("MainView", $"Setup step OK: {step}");
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException($"MainView.Setup.{step}", ex);
+            }
+        }
+
         public void Setup(AndroidAppManager appManager)
         {
             if (isInitialized)
@@ -149,17 +162,21 @@ namespace InvisibleGorillaXRay.Android.Views
 
             GoidaActiveNodeBridge.OnActiveNodeChanged = HandleGoidaActiveNodeChanged;
             goidaHandler.Manager.NodesUpdated += OnGoidaNodesUpdated;
-            InitializeGoidaControls();
+            TrySetupStep("InitializeGoidaControls", InitializeGoidaControls);
 
             InitializeControls();
             ApplyLocalizedText();
             AndroidDeepLinkDispatcher.Register(HandlePendingImport);
             DiagnosticLog.Write("MainView", "Controls initialized");
-            UpdateCurrentConfigSummary();
-            DiagnosticLog.Write("MainView", "Current config summary updated");
-            SetConnectionState(ConnectionState.Stopped);
-            InitializeConnectionInfo();
-            SetStatus(string.Empty);
+
+            // The remaining steps are non-essential for navigation. They must never prevent the
+            // view from being marked initialized, otherwise nav buttons that depend on the ready
+            // state (historically the Goida button) end up visible but dead.
+            TrySetupStep("UpdateCurrentConfigSummary", UpdateCurrentConfigSummary);
+            TrySetupStep("SetConnectionStateStopped", () => SetConnectionState(ConnectionState.Stopped));
+            TrySetupStep("InitializeConnectionInfo", InitializeConnectionInfo);
+            TrySetupStep("ClearStatus", () => SetStatus(string.Empty));
+
             isInitialized = true;
             DiagnosticLog.Write("MainView", "Setup completed");
 
@@ -177,6 +194,9 @@ namespace InvisibleGorillaXRay.Android.Views
         private StackPanel SettingsSectionScroll => GetRequiredControl<StackPanel>("SettingsSectionPanel");
         private Button HomeNavButton => GetRequiredControl<Button>("HomeSectionButton");
         private Button SettingsNavButton => GetRequiredControl<Button>("SettingsSectionButton");
+        private Border HomeNavRingBorder => GetRequiredControl<Border>("HomeNavRing");
+        private Border GoidaNavRingBorder => GetRequiredControl<Border>("GoidaNavRing");
+        private Border SettingsNavRingBorder => GetRequiredControl<Border>("SettingsNavRing");
         private Ellipse UpdateNotificationIndicator => GetRequiredControl<Ellipse>("UpdateNotificationDot");
         private Button ConfigurationsTabNavButton => GetRequiredControl<Button>("ConfigurationsTabButton");
         private Button SubscriptionsTabNavButton => GetRequiredControl<Button>("SubscriptionsTabButton");
@@ -2490,9 +2510,12 @@ namespace InvisibleGorillaXRay.Android.Views
             if (section != NavigationSection.Servers)
                 SetConfigShareVisible(false);
 
-            HomeNavButton.IsEnabled = section != NavigationSection.Home;
-            GoidaNavButton.IsEnabled = section != NavigationSection.Goida;
-            SettingsNavButton.IsEnabled = section != NavigationSection.Settings;
+            // Nav buttons stay clickable at all times; the active section is shown with a
+            // highlight ring instead of disabling the button (which used to dim it to the
+            // point of looking broken/non-clickable).
+            HomeNavRingBorder.IsVisible = section == NavigationSection.Home;
+            GoidaNavRingBorder.IsVisible = section == NavigationSection.Goida;
+            SettingsNavRingBorder.IsVisible = section == NavigationSection.Settings;
         }
 
         private void ShowServerTab(ServerTab tab)

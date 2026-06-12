@@ -61,8 +61,25 @@ namespace InvisibleGorillaXRay.Android.Handlers
             if (currentLangDict == null)
                 return;
 
-            if (!target.Resources.MergedDictionaries.Contains(currentLangDict))
-                target.Resources.MergedDictionaries.Add(currentLangDict);
+            // The active language dictionary is registered at the Application level in
+            // ApplyLanguage, so DynamicResource lookups in every control already resolve through
+            // it. A ResourceDictionary can only have a single owner in Avalonia, so trying to also
+            // attach the same instance to a control's MergedDictionaries throws
+            // "The ResourceDictionary already has a parent" and previously aborted MainView.Setup,
+            // leaving the view half-initialized (e.g. the Goida nav button stayed dead).
+            if (Application.Current != null &&
+                Application.Current.Resources.MergedDictionaries.Contains(currentLangDict))
+                return;
+
+            try
+            {
+                if (!target.Resources.MergedDictionaries.Contains(currentLangDict))
+                    target.Resources.MergedDictionaries.Add(currentLangDict);
+            }
+            catch (InvalidOperationException)
+            {
+                // Already owned elsewhere; app-level registration is sufficient for resolution.
+            }
         }
 
         private void EnsureLanguageLoaded()
