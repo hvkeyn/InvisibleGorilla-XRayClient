@@ -61,8 +61,16 @@ namespace InvisibleGorillaXRay.Android.Views
         private void OnGoidaSectionClick(object? sender, RoutedEventArgs e)
         {
             if (!isInitialized)
+            {
+                pendingGoidaSectionOpen = true;
                 return;
+            }
 
+            OpenGoidaSection();
+        }
+
+        private void OpenGoidaSection()
+        {
             try
             {
                 ShowSection(NavigationSection.Goida);

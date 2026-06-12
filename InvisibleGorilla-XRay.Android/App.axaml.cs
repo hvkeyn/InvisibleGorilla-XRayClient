@@ -2,8 +2,6 @@ using System;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
-using Avalonia.Threading;
-
 namespace InvisibleGorillaXRay.Android
 {
     using InvisibleGorillaXRay.Android.Handlers;
@@ -57,21 +55,18 @@ namespace InvisibleGorillaXRay.Android
                     singleView.MainView = mainView;
                     InvisibleGorillaXRay.Core.DiagnosticLog.Write("AndroidApp", "MainView assigned to lifetime");
 
-                    Dispatcher.UIThread.Post(() =>
+                    try
                     {
-                        try
-                        {
-                            appManager.HandlersManager
-                                .GetHandler<AndroidLocalizationHandler>()
-                                .TryApplyCurrentLanguage();
-                            mainView.Setup(appManager);
-                            InvisibleGorillaXRay.Core.DiagnosticLog.Write("AndroidApp", "MainView setup completed");
-                        }
-                        catch (Exception ex)
-                        {
-                            InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("AndroidApp.SetupPost", ex);
-                        }
-                    }, DispatcherPriority.ApplicationIdle);
+                        appManager.HandlersManager
+                            .GetHandler<AndroidLocalizationHandler>()
+                            .TryApplyCurrentLanguage();
+                        mainView.Setup(appManager);
+                        InvisibleGorillaXRay.Core.DiagnosticLog.Write("AndroidApp", "MainView setup completed");
+                    }
+                    catch (Exception ex)
+                    {
+                        InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("AndroidApp.Setup", ex);
+                    }
                 }
             }
             catch (Exception ex)

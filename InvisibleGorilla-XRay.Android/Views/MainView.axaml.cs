@@ -90,6 +90,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private bool isRunWorkerBusy;
         private bool isStopWorkerBusy;
         private bool isInitialized;
+        private bool pendingGoidaSectionOpen;
         private bool isShowingAdvancedImport;
         private bool isServersSectionInitialized;
         private bool isSettingsSectionInitialized;
@@ -160,8 +161,13 @@ namespace InvisibleGorillaXRay.Android.Views
             InitializeConnectionInfo();
             SetStatus(string.Empty);
             isInitialized = true;
-            GoidaNavButton.IsEnabled = true;
             DiagnosticLog.Write("MainView", "Setup completed");
+
+            if (pendingGoidaSectionOpen)
+            {
+                pendingGoidaSectionOpen = false;
+                OpenGoidaSection();
+            }
             _ = LoadRemoteInfoAsync();
             DiagnosticLog.Write("MainView", "Remote info background load started");
         }

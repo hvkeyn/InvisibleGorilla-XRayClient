@@ -2122,7 +2122,6 @@
                 <Button x:Name="GoidaSectionButton"
                         Width="30"
                         Height="30"
-                        IsEnabled="False"
                         Theme="{StaticResource CircleActionButton}"
                         Click="OnGoidaSectionClick">
                     <Rectangle Fill="{StaticResource Icon.GoidaNav}"
