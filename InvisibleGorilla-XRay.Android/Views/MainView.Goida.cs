@@ -53,7 +53,16 @@ namespace InvisibleGorillaXRay.Android.Views
         private int suppressGoidaConnectionRestart;
         private readonly Dictionary<int, CheckBox> goidaListCheckboxes = new();
 
-        private const int GoidaMaxDisplayRows = 200;
+        private DispatcherTimer? goidaLiveHealthTimer;
+        private CancellationTokenSource? goidaLiveHealthCts;
+        private bool isGoidaLiveHealthBusy;
+        private int goidaLiveHealthTicks;
+        private const int GoidaLiveHealthIntervalSeconds = 20;
+        private DateTime goidaSwitchGraceUntil = DateTime.MinValue;
+        private int consecutiveTunnelFailures;
+        private bool? lastTunnelCheckOk;
+
+        private const int GoidaMaxDisplayRows = 2000;
 
         private StackPanel GoidaSectionScroll => GetRequiredControl<StackPanel>("GoidaSectionPanel");
         private Button GoidaNavButton => GetRequiredControl<Button>("GoidaSectionButton");
@@ -590,6 +599,67 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private bool IsGoidaConnectionRestartSuppressed => suppressGoidaConnectionRestart > 0;
 
+        private bool IsGoidaProfileActive()
+        {
+            try
+            {
+                GoidaProfileSettings settings = settingsHandler.UserSettings.GetGoidaSettings();
+                if (!settings.Enabled)
+                    return false;
+
+                return GoidaProfilePaths.IsMarker(settingsHandler.UserSettings.GetCurrentConfigPath())
+                    || goidaHandler.Manager.GetActiveNode() != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void RegisterTunnelFailure()
+        {
+            if (!IsGoidaProfileActive())
+                return;
+
+            if (DateTime.UtcNow < goidaSwitchGraceUntil)
+            {
+                consecutiveTunnelFailures = 0;
+                return;
+            }
+
+            consecutiveTunnelFailures++;
+            if (consecutiveTunnelFailures < 1)
+            {
+                ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(3));
+                return;
+            }
+
+            consecutiveTunnelFailures = 0;
+
+            Task.Run(() =>
+            {
+                try
+                {
+                    bool switched = goidaHandler.Manager.ReportTunnelFailure();
+                    if (switched)
+                    {
+                        goidaSwitchGraceUntil = DateTime.UtcNow.AddSeconds(25);
+                        Dispatcher.UIThread.Post(() =>
+                            ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(8)));
+                    }
+                    else if (IsConnectionActive())
+                    {
+                        Dispatcher.UIThread.Post(() =>
+                            ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(5)));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("MainView.Goida.RegisterTunnelFailure", ex);
+                }
+            });
+        }
+
         // The Goida health probe runs native xray TestConnection on the same native core that
         // serves the live tunnel. Running both at once crashes the Android process (this is the
         // "~1 minute after RUN" crash). Before the tunnel starts we cancel any in-flight probe
@@ -620,6 +690,113 @@ namespace InvisibleGorillaXRay.Android.Views
             catch (Exception ex)
             {
                 DiagnosticLog.WriteException("MainView.Goida.ResumeProbing", ex);
+            }
+        }
+
+        // While the tunnel is up the native VLESS probe is suspended (that pairing crashes the
+        // process), so the signal indicator would otherwise freeze for the whole session. This
+        // lightweight loop TCP-pings only the active node — no native core involvement — to keep
+        // the live signal/latency fresh, and periodically nudges the IP widget so it cannot rot.
+        private void StartGoidaLiveHealthMonitor()
+        {
+            try
+            {
+                if (goidaHandler == null)
+                    return;
+
+                GoidaProfileSettings settings = settingsHandler.UserSettings.GetGoidaSettings();
+                if (!settings.Enabled || goidaHandler.Manager.GetActiveNode() == null)
+                    return;
+
+                StopGoidaLiveHealthMonitor();
+                goidaLiveHealthTicks = 0;
+                goidaLiveHealthCts = new CancellationTokenSource();
+                goidaLiveHealthTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(GoidaLiveHealthIntervalSeconds)
+                };
+                goidaLiveHealthTimer.Tick += (_, _) => _ = RunGoidaLiveHealthTickAsync();
+                goidaLiveHealthTimer.Start();
+                _ = RunGoidaLiveHealthTickAsync();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.Goida.StartLiveHealth", ex);
+            }
+        }
+
+        private void StopGoidaLiveHealthMonitor()
+        {
+            try
+            {
+                goidaLiveHealthTimer?.Stop();
+                goidaLiveHealthTimer = null;
+                goidaLiveHealthCts?.Cancel();
+                goidaLiveHealthCts?.Dispose();
+                goidaLiveHealthCts = null;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.Goida.StopLiveHealth", ex);
+            }
+        }
+
+        private async Task RunGoidaLiveHealthTickAsync()
+        {
+            if (isGoidaLiveHealthBusy || goidaHandler == null)
+                return;
+
+            isGoidaLiveHealthBusy = true;
+            CancellationToken token = goidaLiveHealthCts?.Token ?? CancellationToken.None;
+            try
+            {
+                // Refresh reachability (preserves VlessVerified). If the endpoint is dead, or the
+                // tunnel/IP check later reports failure, ReportTunnelFailure walks the pool and
+                // may run live VLESS tests to pick the next working node.
+                GoidaNode? node = await goidaHandler.Manager
+                    .ProbeActiveNodeTcpAsync(token)
+                    .ConfigureAwait(false);
+
+                bool activeDead = node != null
+                    && (node.LatencyMs < 0
+                        || node.Status == GoidaNodeStatus.Timeout
+                        || node.Status == GoidaNodeStatus.Error);
+                bool switched = activeDead && goidaHandler.Manager.ReportTunnelFailure();
+                GoidaNode? display = switched
+                    ? goidaHandler.Manager.GetActiveNode()
+                    : node;
+
+                if (token.IsCancellationRequested)
+                    return;
+
+                Dispatcher.UIThread.Post(() =>
+                {
+                    try
+                    {
+                        UpdateHomeGoidaCard(display);
+                        if (GoidaSectionScroll.IsVisible)
+                            SafeRefreshGoidaSummary();
+
+                        // Refresh the IP widget right after a failover (the exit changed) and
+                        // otherwise roughly once a minute, so a stale "unknown location" is
+                        // replaced without hammering the geo-IP endpoint.
+                        goidaLiveHealthTicks++;
+                        if (switched || goidaLiveHealthTicks % 3 == 0)
+                            _ = RefreshConnectionInfoAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        DiagnosticLog.WriteException("MainView.Goida.LiveHealthUi", ex);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.Goida.LiveHealthTick", ex);
+            }
+            finally
+            {
+                isGoidaLiveHealthBusy = false;
             }
         }
 

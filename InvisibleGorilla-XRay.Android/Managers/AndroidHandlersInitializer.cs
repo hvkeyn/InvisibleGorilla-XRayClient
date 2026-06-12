@@ -197,7 +197,10 @@ namespace InvisibleGorillaXRay.Android.Managers
                     getUserSettings: () => settingsHandler.UserSettings,
                     updateUserSettings: settingsHandler.UpdateUserSettings,
                     onActiveNodeChanged: node => GoidaActiveNodeBridge.OnActiveNodeChanged?.Invoke(node),
-                    canProbe: () => !AndroidVpnServiceController.IsRunning);
+                    pauseNativeForTest: () => GoidaNativeTestBridge.PauseForNativeTest?.Invoke() == true,
+                    resumeNativeAfterTest: () => GoidaNativeTestBridge.ResumeAfterNativeTest?.Invoke(),
+                    canProbe: () => !AndroidVpnServiceController.IsRunning,
+                    isVpnSessionActive: () => AndroidVpnServiceController.IsRunning);
             }
         }
     }

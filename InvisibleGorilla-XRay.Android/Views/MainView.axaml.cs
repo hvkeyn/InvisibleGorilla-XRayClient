@@ -112,7 +112,10 @@ namespace InvisibleGorillaXRay.Android.Views
         private CancellationTokenSource? connectionInfoLookupCancellation;
         private string baselineIp = string.Empty;
         private bool isConnectionInfoConnected;
+        private int connectionInfoFailureRetries;
+        private const int ConnectionInfoMaxFailureRetries = 4;
         private bool isConnectionInfoTor;
+        private bool resumeServerAfterNativeTest;
 
         public MainView()
         {
@@ -161,6 +164,8 @@ namespace InvisibleGorillaXRay.Android.Views
             DiagnosticLog.Write("MainView", "Handlers resolved");
 
             GoidaActiveNodeBridge.OnActiveNodeChanged = HandleGoidaActiveNodeChanged;
+            GoidaNativeTestBridge.PauseForNativeTest = TryPauseForNativeTest;
+            GoidaNativeTestBridge.ResumeAfterNativeTest = TryResumeAfterNativeTest;
             goidaHandler.Manager.NodesUpdated += OnGoidaNodesUpdated;
             TrySetupStep("InitializeGoidaControls", InitializeGoidaControls);
 
@@ -2175,7 +2180,8 @@ namespace InvisibleGorillaXRay.Android.Views
                     OnStopClick(null, new RoutedEventArgs());
             });
 
-            DateTime deadline = DateTime.UtcNow.AddSeconds(20);
+            int stopWaitMs = IsGoidaProfileActive() ? 12000 : 20000;
+            DateTime deadline = DateTime.UtcNow.AddMilliseconds(stopWaitMs);
             while (DateTime.UtcNow < deadline)
             {
                 if (!StopActionButton.IsVisible
@@ -2186,7 +2192,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     break;
                 }
 
-                await Task.Delay(250);
+                await Task.Delay(IsGoidaProfileActive() ? 150 : 250);
             }
 
             if (StopActionButton.IsVisible
@@ -2198,7 +2204,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 return;
             }
 
-            await Task.Delay(300);
+            await Task.Delay(IsGoidaProfileActive() ? 100 : 300);
             Dispatcher.UIThread.Post(() =>
             {
                 if (!isRunWorkerBusy && !AndroidVpnServiceController.IsRunning)
@@ -2378,6 +2384,59 @@ namespace InvisibleGorillaXRay.Android.Views
                 ? TimeSpan.FromSeconds(3)
                 : TimeSpan.FromMilliseconds(200);
             ScheduleConnectionInfoRefresh(delay);
+
+            if (state == ConnectionState.Running)
+            {
+                if (IsGoidaProfileActive())
+                    goidaSwitchGraceUntil = DateTime.UtcNow.AddSeconds(20);
+                connectionInfoTimer!.Interval = IsGoidaProfileActive()
+                    ? TimeSpan.FromSeconds(8)
+                    : TimeSpan.FromSeconds(45);
+                StartGoidaLiveHealthMonitor();
+            }
+            else
+            {
+                connectionInfoTimer!.Interval = TimeSpan.FromSeconds(45);
+                StopGoidaLiveHealthMonitor();
+            }
+        }
+
+        private bool TryPauseForNativeTest()
+        {
+            if (!IsConnectionActive())
+                return false;
+
+            resumeServerAfterNativeTest = true;
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!isStopWorkerBusy && StopActionButton.IsVisible)
+                    OnStopClick(null, new RoutedEventArgs());
+            });
+
+            DateTime deadline = DateTime.UtcNow.AddSeconds(15);
+            while (DateTime.UtcNow < deadline)
+            {
+                if (!IsConnectionActive())
+                    return true;
+
+                Thread.Sleep(50);
+            }
+
+            resumeServerAfterNativeTest = false;
+            return false;
+        }
+
+        private void TryResumeAfterNativeTest()
+        {
+            if (!resumeServerAfterNativeTest || IsConnectionActive())
+                return;
+
+            resumeServerAfterNativeTest = false;
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!isRunWorkerBusy && !AndroidVpnServiceController.IsRunning)
+                    OnRunClick(null, new RoutedEventArgs());
+            });
         }
 
         private void InitializeConnectionInfo()
@@ -2437,6 +2496,11 @@ namespace InvisibleGorillaXRay.Android.Views
             {
                 ConnectionInfoDotControl.Background = AvailabilityPendingBrush;
                 ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Checking");
+                // Show the "checking" placeholder in the IP field while the very first lookup is in
+                // flight so the widget never just hangs blank on a cold start.
+                if (string.IsNullOrWhiteSpace(ConnectionInfoIpText.Text)
+                    || string.Equals(ConnectionInfoIpText.Text, Localize("Lang.ConnectionInfo.Unknown"), StringComparison.Ordinal))
+                    ConnectionInfoIpText.Text = Localize("Lang.ConnectionInfo.Checking");
                 ConnectionInfoModeText.Text = connected && !string.IsNullOrEmpty(modeText)
                     ? $"{Localize("Lang.ConnectionInfo.Mode")} {modeText}"
                     : string.Empty;
@@ -2453,21 +2517,46 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             if (!info.Ok)
             {
+                // A failed lookup must not leave a permanently stale "unknown location" in the
+                // widget. Retry a few times with a short backoff so a transient network hiccup
+                // (common right after start or right after the tunnel comes up) self-heals.
+                if (!string.Equals(info.Error, "Canceled", StringComparison.OrdinalIgnoreCase)
+                    && connectionInfoFailureRetries < ConnectionInfoMaxFailureRetries)
+                {
+                    connectionInfoFailureRetries++;
+                    if (string.IsNullOrWhiteSpace(ConnectionInfoIpText.Text)
+                        || string.Equals(ConnectionInfoIpText.Text, Localize("Lang.ConnectionInfo.Unknown"), StringComparison.Ordinal))
+                        ConnectionInfoIpText.Text = Localize("Lang.ConnectionInfo.Checking");
+                    ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Checking");
+                    ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(4));
+                    return;
+                }
+
                 ConnectionInfoDotControl.Background = AvailabilityErrorBrush;
                 ConnectionInfoIpText.Text = Localize("Lang.ConnectionInfo.Unknown");
                 ConnectionInfoLocationText.Text = string.Empty;
                 ConnectionInfoOrgText.Text = string.Empty;
                 ConnectionInfoVerdictText.Text = LocalizeFormat("Lang.ConnectionInfo.Error", info.Error);
+                lastTunnelCheckOk = isConnectionInfoConnected ? false : null;
+                if (isConnectionInfoConnected)
+                    RegisterTunnelFailure();
                 return;
             }
+
+            connectionInfoFailureRetries = 0;
 
             if (string.IsNullOrWhiteSpace(baselineIp) && !isConnectionInfoConnected)
                 baselineIp = info.Ip;
 
-            bool changedFromBaseline = !string.IsNullOrWhiteSpace(baselineIp)
-                && !string.Equals(baselineIp, info.Ip, StringComparison.OrdinalIgnoreCase);
+            bool exposed = isConnectionInfoConnected
+                && !string.IsNullOrWhiteSpace(baselineIp)
+                && string.Equals(baselineIp, info.Ip, StringComparison.OrdinalIgnoreCase);
+            bool tunnelOk = !isConnectionInfoConnected
+                || string.IsNullOrWhiteSpace(baselineIp)
+                || !exposed;
+            lastTunnelCheckOk = isConnectionInfoConnected ? tunnelOk : null;
 
-            ConnectionInfoDotControl.Background = isConnectionInfoConnected && changedFromBaseline
+            ConnectionInfoDotControl.Background = isConnectionInfoConnected && tunnelOk
                 ? AvailabilitySuccessBrush
                 : isConnectionInfoConnected
                     ? AvailabilityErrorBrush
@@ -2489,16 +2578,21 @@ namespace InvisibleGorillaXRay.Android.Views
                 baselineIp = info.Ip;
                 ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Idle");
             }
-            else if (changedFromBaseline)
+            else if (tunnelOk)
             {
                 ConnectionInfoVerdictText.Text = isConnectionInfoTor
                     ? Localize("Lang.ConnectionInfo.ProtectedTor")
                     : Localize("Lang.ConnectionInfo.Protected");
+                consecutiveTunnelFailures = 0;
             }
             else
             {
                 ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Exposed");
+                RegisterTunnelFailure();
             }
+
+            if (GoidaSectionScroll.IsVisible || IsGoidaProfileActive())
+                SafeRefreshGoidaSummary();
         }
 
         private void ShowSection(NavigationSection section)

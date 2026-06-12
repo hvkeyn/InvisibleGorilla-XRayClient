@@ -20,7 +20,8 @@ namespace InvisibleGorillaXRay.Handlers
             Action<GoidaNode>? onActiveNodeChanged = null,
             Func<bool>? pauseNativeForTest = null,
             Action? resumeNativeAfterTest = null,
-            Func<bool>? canProbe = null)
+            Func<bool>? canProbe = null,
+            Func<bool>? isVpnSessionActive = null)
         {
             this.getUserSettings = getUserSettings;
             this.updateUserSettings = updateUserSettings;
@@ -33,7 +34,8 @@ namespace InvisibleGorillaXRay.Handlers
                 onActiveNodeChanged: onActiveNodeChanged,
                 pauseNativeForTest: pauseNativeForTest,
                 resumeNativeAfterTest: resumeNativeAfterTest,
-                canProbe: canProbe);
+                canProbe: canProbe,
+                isVpnSessionActive: isVpnSessionActive);
         }
 
         public void StartBackground() => manager.Start();

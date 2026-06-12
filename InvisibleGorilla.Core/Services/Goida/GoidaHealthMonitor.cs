@@ -43,6 +43,66 @@ namespace InvisibleGorillaXRay.Services.Goida
             return ProbeNodesInternalAsync(nodes, useNativeTest: false, cancellationToken);
         }
 
+        // Session-time liveness refresh. Unlike the normal fast probe it never touches the
+        // VlessVerified flag (passes null), so a node that was already VLESS-verified before the
+        // tunnel came up keeps that status while we just refresh latency/reachability over TCP.
+        // A reachable node stays Ok; an unreachable one is demoted to Timeout/Error so the
+        // failover logic can react. No native core is used, so this is safe during an active VPN.
+        public async Task ProbeNodesTcpRefreshAsync(
+            IReadOnlyList<GoidaNode> targets,
+            CancellationToken cancellationToken = default)
+        {
+            if (targets == null || targets.Count == 0)
+                return;
+
+            using SemaphoreSlim gate = new(FastProbeConcurrency, FastProbeConcurrency);
+            List<Task> tasks = new(targets.Count);
+
+            foreach (GoidaNode node in targets)
+            {
+                if (node == null)
+                    continue;
+
+                string probeNodeId = node.Id;
+                int probeListId = node.ListId;
+                string probeEndpoint = node.Endpoint;
+                tasks.Add(Task.Run(async () =>
+                {
+                    await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                    try
+                    {
+                        if (cancellationToken.IsCancellationRequested)
+                            return;
+
+                        int latency = GoidaEndpointProbe.ProbeTcp(probeEndpoint, FastProbeTimeoutMs);
+                        store.UpdateNodeStatus(probeNodeId, latency, MapLatency(latency),
+                            vlessVerified: null, listId: probeListId, endpoint: probeEndpoint);
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                    }
+                    catch (Exception ex)
+                    {
+                        DiagnosticLog.WriteException($"Goida.TcpRefresh.{probeNodeId}", ex);
+                    }
+                    finally
+                    {
+                        gate.Release();
+                    }
+                }, cancellationToken));
+            }
+
+            try
+            {
+                await Task.WhenAll(tasks).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+            }
+
+            NodesUpdated?.Invoke();
+        }
+
         public async Task<GoidaProbeResult> ProbeTcpThenVlessAsync(
             IReadOnlyList<GoidaNode> targets,
             GoidaTcpVlessProbeOptions options,
@@ -421,6 +481,9 @@ namespace InvisibleGorillaXRay.Services.Goida
                 return BuildResult(targets.Count, completed, ok, timeout, error, cancelled, bestNode);
             }
         }
+
+        public int TestNodeNative(GoidaNode node) =>
+            ProbeNodeSafe(node);
 
         private async Task<int> RunNativeProbeWithDeadline(
             GoidaNode node,

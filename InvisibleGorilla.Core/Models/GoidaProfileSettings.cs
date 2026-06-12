@@ -12,6 +12,10 @@ namespace InvisibleGorillaXRay.Models
         public const int DefaultAutoSwitchLatencyMs = 3000;
         public const int DefaultAutoPoolSize = 100;
         public const int MaxVerifiedNodes = 100;
+        // Manual "verify" runs on demand and is cancellable, so it may natively VLESS-verify a much
+        // larger slice of the selected lists than the lightweight background probe. The TCP phase
+        // already covers every selected node; this only caps the serial native verification.
+        public const int MaxManualVerifyNodes = 500;
 
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
         public bool Enabled { get; set; }
