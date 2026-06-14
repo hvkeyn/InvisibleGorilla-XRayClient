@@ -1326,6 +1326,11 @@
                             <ListBox x:Name="GoidaNodesListBox"
                                      MinHeight="220" MaxHeight="420"
                                      SelectionChanged="OnGoidaNodeSelectionChanged">
+                                <ListBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel />
+                                    </ItemsPanelTemplate>
+                                </ListBox.ItemsPanel>
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
                                         <Border Padding="10,8" Margin="0,4" CornerRadius="8"
@@ -1351,7 +1356,7 @@
                                                            Foreground="#8A8A8A" FontSize="10"
                                                            TextTrimming="CharacterEllipsis" />
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <CheckBox IsChecked="{Binding InPool}"
+                                                    <CheckBox IsChecked="{Binding InPool, Mode=OneWay}"
                                                               Foreground="White"
                                                               Tag="{Binding Id}"
                                                               IsCheckedChanged="OnGoidaPoolCheckBoxChanged" />

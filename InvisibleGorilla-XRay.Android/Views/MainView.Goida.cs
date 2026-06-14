@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
@@ -26,7 +29,7 @@ namespace InvisibleGorillaXRay.Android.Views
             ByName
         }
 
-        private sealed class GoidaNodeRow
+        private sealed class GoidaNodeRow : INotifyPropertyChanged
         {
             public int ListId { get; init; }
             public string Id { get; init; } = string.Empty;
@@ -34,9 +37,32 @@ namespace InvisibleGorillaXRay.Android.Views
             public string Endpoint { get; init; } = string.Empty;
             public string LatencyText { get; init; } = string.Empty;
             public string MetaLine { get; init; } = string.Empty;
-            public string ActiveMark { get; init; } = string.Empty;
             public string PoolLabel { get; init; } = string.Empty;
-            public bool InPool { get; init; }
+
+            private string activeMark = string.Empty;
+            public string ActiveMark
+            {
+                get => activeMark;
+                set => SetField(ref activeMark, value);
+            }
+
+            private bool inPool;
+            public bool InPool
+            {
+                get => inPool;
+                set => SetField(ref inPool, value);
+            }
+
+            public event PropertyChangedEventHandler? PropertyChanged;
+
+            private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+            {
+                if (EqualityComparer<T>.Default.Equals(field, value))
+                    return;
+
+                field = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            }
         }
 
         private bool isApplyingGoidaSettings;
@@ -49,6 +75,8 @@ namespace InvisibleGorillaXRay.Android.Views
         private bool goidaNodesListRefreshPending;
         private bool goidaNodesListRefreshPendingForceLatencySort;
         private bool goidaApplyUiPending;
+        private bool suppressGoidaPoolCheckBoxEvents;
+        private ObservableCollection<GoidaNodeRow>? goidaNodesListRows;
         private string? goidaPendingActiveNodeId;
         private CancellationTokenSource? goidaProbeCts;
         private int goidaProbeCurrent;
@@ -484,10 +512,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     .Select(node => ToGoidaNodeRow(node, effectiveActiveId, pool))
                     .ToList();
 
-                // Reset virtualization state before replacing a large list; otherwise
-                // VirtualizingStackPanel can throw ArgumentException on Confirm/Apply.
-                GoidaNodesListBox.ItemsSource = null;
-                GoidaNodesListBox.ItemsSource = rows;
+                ReplaceGoidaNodesListRows(rows);
 
                 if (truncated && !goidaProbeUiInProgress)
                     SetGoidaStatusTextBlock(LocalizeFormat(
@@ -498,6 +523,55 @@ namespace InvisibleGorillaXRay.Android.Views
             catch (Exception ex)
             {
                 DiagnosticLog.WriteException("MainView.Goida.RefreshNodesList", ex);
+            }
+        }
+
+        private void ReplaceGoidaNodesListRows(IReadOnlyList<GoidaNodeRow> rows)
+        {
+            suppressGoidaPoolCheckBoxEvents = true;
+            try
+            {
+                if (goidaNodesListRows == null)
+                {
+                    goidaNodesListRows = new ObservableCollection<GoidaNodeRow>(rows);
+                    GoidaNodesListBox.ItemsSource = goidaNodesListRows;
+                    return;
+                }
+
+                goidaNodesListRows.Clear();
+                foreach (GoidaNodeRow row in rows)
+                    goidaNodesListRows.Add(row);
+            }
+            finally
+            {
+                suppressGoidaPoolCheckBoxEvents = false;
+            }
+        }
+
+        private void SyncGoidaListRowStates()
+        {
+            if (goidaNodesListRows == null || goidaNodesListRows.Count == 0)
+                return;
+
+            GoidaProfileSettings settings = settingsHandler.UserSettings.GetGoidaSettings();
+            HashSet<string> pool = settings.ManualPoolNodeIds?
+                .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            string activeId = settings.ActiveNodeId ?? string.Empty;
+
+            suppressGoidaPoolCheckBoxEvents = true;
+            try
+            {
+                foreach (GoidaNodeRow row in goidaNodesListRows)
+                {
+                    row.InPool = pool.Contains(row.Id);
+                    row.ActiveMark = string.Equals(row.Id, activeId, StringComparison.OrdinalIgnoreCase)
+                        ? "✓"
+                        : string.Empty;
+                }
+            }
+            finally
+            {
+                suppressGoidaPoolCheckBoxEvents = false;
             }
         }
 
@@ -1390,7 +1464,7 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void OnGoidaPoolCheckBoxChanged(object? sender, RoutedEventArgs e)
         {
-            if (isRefreshingGoidaNodesList)
+            if (isRefreshingGoidaNodesList || suppressGoidaPoolCheckBoxEvents || goidaApplyUiPending)
                 return;
 
             if (sender is not CheckBox box || box.Tag is not string nodeId || string.IsNullOrWhiteSpace(nodeId))
@@ -1464,9 +1538,13 @@ namespace InvisibleGorillaXRay.Android.Views
                 {
                     try
                     {
-                        RefreshGoidaNodesListBox();
+                        // Confirm must not rebind the node list: VirtualizingStackPanel can crash
+                        // when ItemsSource is replaced while checkboxes are still detaching.
+                        SyncGoidaListRowStates();
                         RefreshGoidaSummary();
                         UpdateGoidaStatusSummary();
+                        UpdateGoidaPoolInfo();
+                        RefreshGoidaHistory();
                         SetGoidaStatusTextBlock(Localize("Lang.Goida.ConfirmHint"));
                     }
                     catch (Exception ex)
