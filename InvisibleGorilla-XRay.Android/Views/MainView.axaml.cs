@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -114,6 +115,8 @@ namespace InvisibleGorillaXRay.Android.Views
         private bool isConnectionInfoConnected;
         private int connectionInfoFailureRetries;
         private const int ConnectionInfoMaxFailureRetries = 4;
+        private int connectionInfoProxyWaitRetries;
+        private const int ConnectionInfoMaxProxyWaitRetries = 8;
         private bool isConnectionInfoTor;
         private bool resumeServerAfterNativeTest;
 
@@ -2466,6 +2469,27 @@ namespace InvisibleGorillaXRay.Android.Views
             });
         }
 
+        private void EnsureBaselineBeforeConnect()
+        {
+            if (!string.IsNullOrWhiteSpace(baselineIp))
+                return;
+
+            try
+            {
+                Task<ConnectionInfo> lookup = connectionInfoService.LookupAsync(null, CancellationToken.None);
+                if (!lookup.Wait(TimeSpan.FromSeconds(8)))
+                    return;
+
+                ConnectionInfo info = lookup.Result;
+                if (info.Ok && !string.IsNullOrWhiteSpace(info.Ip))
+                    baselineIp = info.Ip;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.EnsureBaselineBeforeConnect", ex);
+            }
+        }
+
         private async Task RefreshConnectionInfoAsync()
         {
             connectionInfoLookupCancellation?.Cancel();
@@ -2477,7 +2501,7 @@ namespace InvisibleGorillaXRay.Android.Views
             // The Android app excludes itself from its own VpnService, so a direct request
             // always leaks the real ISP IP. When connected, probe through the running xray
             // local SOCKS listener so the reported IP matches the actual tunnel exit.
-            System.Net.IWebProxy probeProxy = null;
+            IWebProxy probeProxy = null;
             string modeText = string.Empty;
             try
             {
@@ -2496,19 +2520,80 @@ namespace InvisibleGorillaXRay.Android.Views
             {
                 ConnectionInfoDotControl.Background = AvailabilityPendingBrush;
                 ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Checking");
-                // Show the "checking" placeholder in the IP field while the very first lookup is in
-                // flight so the widget never just hangs blank on a cold start.
-                if (string.IsNullOrWhiteSpace(ConnectionInfoIpText.Text)
-                    || string.Equals(ConnectionInfoIpText.Text, Localize("Lang.ConnectionInfo.Unknown"), StringComparison.Ordinal))
-                    ConnectionInfoIpText.Text = Localize("Lang.ConnectionInfo.Checking");
+                ConnectionInfoIpText.Text = Localize("Lang.ConnectionInfo.Checking");
                 ConnectionInfoModeText.Text = connected && !string.IsNullOrEmpty(modeText)
                     ? $"{Localize("Lang.ConnectionInfo.Mode")} {modeText}"
                     : string.Empty;
             });
 
-            ConnectionInfo info = await connectionInfoService.LookupAsync(probeProxy, token).ConfigureAwait(false);
-            if (token.IsCancellationRequested)
+            if (connected && probeProxy == null)
+            {
+                if (connectionInfoProxyWaitRetries < ConnectionInfoMaxProxyWaitRetries)
+                {
+                    connectionInfoProxyWaitRetries++;
+                    ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(2));
+                    return;
+                }
+
+                connectionInfoProxyWaitRetries = 0;
+                Dispatcher.UIThread.Post(() =>
+                {
+                    ConnectionInfoDotControl.Background = AvailabilityErrorBrush;
+                    ConnectionInfoIpText.Text = Localize("Lang.ConnectionInfo.Unknown");
+                    ConnectionInfoLocationText.Text = string.Empty;
+                    ConnectionInfoOrgText.Text = string.Empty;
+                    ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.TunnelProbeUnavailable");
+                });
                 return;
+            }
+
+            connectionInfoProxyWaitRetries = 0;
+
+            ConnectionInfo info;
+            if (connected)
+            {
+                ConnectionInfo tunnelInfo = await connectionInfoService
+                    .LookupThroughTunnelAsync(probeProxy!, token)
+                    .ConfigureAwait(false);
+                if (token.IsCancellationRequested)
+                    return;
+
+                if (!tunnelInfo.Ok)
+                {
+                    Dispatcher.UIThread.Post(() => ApplyConnectionInfo(tunnelInfo));
+                    return;
+                }
+
+                ConnectionInfo directInfo = await connectionInfoService
+                    .LookupAsync(null, token)
+                    .ConfigureAwait(false);
+                if (token.IsCancellationRequested)
+                    return;
+
+                if (directInfo.Ok
+                    && !string.IsNullOrWhiteSpace(baselineIp)
+                    && string.Equals(directInfo.Ip, tunnelInfo.Ip, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(baselineIp, tunnelInfo.Ip, StringComparison.OrdinalIgnoreCase))
+                {
+                    DiagnosticLog.Write(
+                        "ConnectionInfo",
+                        "Tunnel probe returned the same IP as the direct ISP baseline; retrying via SOCKS");
+                    if (connectionInfoFailureRetries < ConnectionInfoMaxFailureRetries)
+                    {
+                        connectionInfoFailureRetries++;
+                        ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(4));
+                        return;
+                    }
+                }
+
+                info = tunnelInfo;
+            }
+            else
+            {
+                info = await connectionInfoService.LookupAsync(null, token).ConfigureAwait(false);
+                if (token.IsCancellationRequested)
+                    return;
+            }
 
             Dispatcher.UIThread.Post(() => ApplyConnectionInfo(info));
         }
@@ -2552,7 +2637,6 @@ namespace InvisibleGorillaXRay.Android.Views
                 && !string.IsNullOrWhiteSpace(baselineIp)
                 && string.Equals(baselineIp, info.Ip, StringComparison.OrdinalIgnoreCase);
             bool tunnelOk = !isConnectionInfoConnected
-                || string.IsNullOrWhiteSpace(baselineIp)
                 || !exposed;
             lastTunnelCheckOk = isConnectionInfoConnected ? tunnelOk : null;
 
@@ -2965,6 +3049,7 @@ namespace InvisibleGorillaXRay.Android.Views
             }
 
             ShowSection(NavigationSection.Home);
+            EnsureBaselineBeforeConnect();
             isRunWorkerBusy = true;
             isStopWorkerBusy = false;
             SetRunningState(true);

@@ -516,11 +516,14 @@ namespace InvisibleGorillaXRay.Core
 
             if (activeLocalProxyCredentials != null && activeLocalProxyCredentials.HasValue)
             {
-                // .NET's SOCKS5 client takes the username/password from WebProxy.Credentials,
-                // not from the URI userinfo, so set it explicitly.
-                return new WebProxy($"socks5://{Global.LOCAL_HOST}:{proxyPort}")
+                // Put credentials in both the URI and WebProxy.Credentials: some Android/.NET
+                // runtimes only honour one of the two for SOCKS5 auth.
+                string proxyUri = activeLocalProxyCredentials.BuildSocks5Uri(Global.LOCAL_HOST, proxyPort);
+                return new WebProxy(proxyUri)
                 {
-                    Credentials = new NetworkCredential(activeLocalProxyCredentials.Username, activeLocalProxyCredentials.Password)
+                    Credentials = new NetworkCredential(
+                        activeLocalProxyCredentials.Username,
+                        activeLocalProxyCredentials.Password)
                 };
             }
 

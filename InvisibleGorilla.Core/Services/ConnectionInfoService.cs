@@ -59,6 +59,24 @@ namespace InvisibleGorillaXRay.Services
             return fallback.Ok ? fallback : primary;
         }
 
+        /// <summary>
+        /// When the app is excluded from its own VPN (Android), callers must pass the local
+        /// xray SOCKS proxy. Returns an error instead of falling back to a direct lookup.
+        /// </summary>
+        public Task<ConnectionInfo> LookupThroughTunnelAsync(IWebProxy proxy, CancellationToken token = default)
+        {
+            if (proxy == null)
+            {
+                return Task.FromResult(new ConnectionInfo
+                {
+                    Ok = false,
+                    Error = "Tunnel proxy unavailable"
+                });
+            }
+
+            return LookupAsync(proxy, token);
+        }
+
         private static async Task<ConnectionInfo> TryLookupAsync(string url, IWebProxy proxy, CancellationToken token)
         {
             using SocketsHttpHandler handler = new SocketsHttpHandler
