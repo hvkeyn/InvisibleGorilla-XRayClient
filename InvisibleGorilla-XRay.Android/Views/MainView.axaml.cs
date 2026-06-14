@@ -1795,34 +1795,34 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             UserSettings current = settingsHandler.UserSettings;
             GoidaProfileSettings settings = current.GetGoidaSettings().Clone();
-            if (settings.Enabled)
-                return;
-
             settings.Enabled = true;
             current.Goida = settings;
             settingsHandler.UpdateUserSettings(current);
+            goidaHandler.Manager.UpdateSettings(settings);
 
             if (isGoidaSectionInitialized)
                 ApplyGoidaSettingsToControls();
+        }
+
+        private void DeactivateGoidaProfileForSelection()
+        {
+            UserSettings current = settingsHandler.UserSettings;
+            GoidaProfileSettings settings = current.GetGoidaSettings().Clone();
+            if (!settings.Enabled)
+                return;
+
+            settings.Enabled = false;
+            current.Goida = settings;
+            settingsHandler.UpdateUserSettings(current);
+            goidaHandler.Manager.UpdateSettings(settings);
         }
 
         private Border CreateConfigCard(Config config)
         {
             bool isGoidaMarker = GoidaProfilePaths.IsMarker(config.Path);
             string currentPath = settingsHandler.UserSettings.GetCurrentConfigPath();
-            bool isGoidaActive = false;
-            if (isGoidaMarker && settingsHandler.UserSettings.GetGoidaSettings().Enabled)
-            {
-                try
-                {
-                    isGoidaActive = GoidaProfilePaths.IsMarker(currentPath)
-                        || goidaHandler.Manager.GetActiveNode() != null;
-                }
-                catch (Exception ex)
-                {
-                    DiagnosticLog.WriteException("MainView.Goida.ConfigCardSelection", ex);
-                }
-            }
+            bool isGoidaActive = isGoidaMarker
+                && GoidaProfilePaths.IsMarker(currentPath);
 
             bool isSelected = string.Equals(currentPath, config.Path, StringComparison.OrdinalIgnoreCase)
                 || isGoidaActive;
@@ -2715,6 +2715,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 }
                 else
                 {
+                    DeactivateGoidaProfileForSelection();
                     settingsHandler.UpdateCurrentConfigPath(path);
                     selectedConfig = configHandler.GetCurrentConfig();
                 }

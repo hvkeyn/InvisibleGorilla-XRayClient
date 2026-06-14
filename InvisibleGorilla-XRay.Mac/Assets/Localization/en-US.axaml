@@ -365,6 +365,7 @@
     <x:String x:Key="Lang.Goida.NoActiveNode">No active node selected</x:String>
     <x:String x:Key="Lang.Goida.NoListsSelected">No lists selected. Enable lists 1–26, then click Refresh lists.</x:String>
     <x:String x:Key="Lang.Goida.List26Selected">List 26 selected. Click Refresh lists to download nodes.</x:String>
+    <x:String x:Key="Lang.Goida.List26OnlyHint">No nodes loaded. Enable at least one list (1–26), then click Refresh lists.</x:String>
     <x:String x:Key="Lang.Goida.PendingActive">Selected: {0} — click CONFIRM to apply</x:String>
     <x:String x:Key="Lang.Goida.PendingApply">not applied yet</x:String>
     <x:String x:Key="Lang.Goida.Status.VlessOk">VLESS OK</x:String>

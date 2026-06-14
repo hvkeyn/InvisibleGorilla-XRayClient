@@ -6,7 +6,7 @@ namespace InvisibleGorillaXRay.Services.Goida
     public static class GoidaSourceCatalog
     {
         public const string BaseUrl =
-            "https://github.com/AvenCores/goida-vpn-configs/raw/refs/heads/main/githubmirror";
+            "https://raw.githubusercontent.com/AvenCores/goida-vpn-configs/refs/heads/main/githubmirror";
 
         public static IReadOnlyList<GoidaListMeta> AllLists { get; } = BuildLists();
 

@@ -365,6 +365,7 @@
     <x:String x:Key="Lang.Goida.NoActiveNode">Активный узел не выбран</x:String>
     <x:String x:Key="Lang.Goida.NoListsSelected">Списки не выбраны. Включите списки 1–26 и нажмите «Обновить списки».</x:String>
     <x:String x:Key="Lang.Goida.List26Selected">Список 26 выбран. Нажмите «Обновить списки».</x:String>
+    <x:String x:Key="Lang.Goida.List26OnlyHint">Узлы не загружены. Включите хотя бы один список (1–26) и нажмите «Обновить списки».</x:String>
     <x:String x:Key="Lang.Goida.PendingActive">Выбран: {0} — нажмите ПРИМЕНИТЬ</x:String>
     <x:String x:Key="Lang.Goida.PendingApply">ещё не применено</x:String>
     <x:String x:Key="Lang.Goida.Status.VlessOk">VLESS OK</x:String>

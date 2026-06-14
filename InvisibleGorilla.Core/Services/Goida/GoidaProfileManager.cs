@@ -476,9 +476,17 @@ namespace InvisibleGorillaXRay.Services.Goida
                     try
                     {
                         if (string.IsNullOrWhiteSpace(pair.Value))
+                        {
+                            DiagnosticLog.Write(
+                                "Goida.RefreshList",
+                                $"List {pair.Key}: empty fetch body");
                             continue;
+                        }
 
                         List<GoidaNode> parsed = parser.ParseList(pair.Key, pair.Value, store.NodesDirectory);
+                        DiagnosticLog.Write(
+                            "Goida.RefreshList",
+                            $"List {pair.Key}: fetched {pair.Value.Length} bytes, parsed {parsed.Count} nodes");
                         foreach (GoidaNode node in parsed)
                         {
                             GoidaNode? previous = null;

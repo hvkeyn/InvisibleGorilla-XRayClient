@@ -3,15 +3,26 @@ using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using InvisibleGorillaXRay.Core;
 
 namespace InvisibleGorillaXRay.Services.Goida
 {
     public sealed class GoidaFetcher
     {
-        private static readonly HttpClient SharedClient = new()
+        private static readonly HttpClient SharedClient = CreateClient();
+
+        private static HttpClient CreateClient()
         {
-            Timeout = TimeSpan.FromSeconds(45)
-        };
+            HttpClient client = new()
+            {
+                Timeout = TimeSpan.FromSeconds(90)
+            };
+            client.DefaultRequestHeaders.TryAddWithoutValidation(
+                "User-Agent",
+                "InvisibleGorilla-XRay/3.6.0 (Android)");
+            client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "*/*");
+            return client;
+        }
 
         public async Task<IReadOnlyDictionary<int, string>> FetchListsAsync(
             IEnumerable<int> listIds,
@@ -50,8 +61,9 @@ namespace InvisibleGorillaXRay.Services.Goida
                     results[listId] = body ?? string.Empty;
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                DiagnosticLog.WriteException($"Goida.FetchList.{listId}", ex);
                 lock (results)
                 {
                     results[listId] = string.Empty;

@@ -62,15 +62,24 @@ namespace InvisibleGorillaXRay.Models.Templates.Subscriptions
 
             void TryConvert()
             {
-                foreach(string link in data.Split("\n"))
+                foreach (string rawLine in data.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
                 {
-                    Status convertingStatus = convertConfigLinkToV2Ray.Invoke(link);
-                    if (convertingStatus.Code == Code.SUCCESS)
+                    string link = rawLine.Trim();
+                    if (string.IsNullOrWhiteSpace(link) || link.StartsWith("#", StringComparison.Ordinal))
+                        continue;
+
+                    try
                     {
-                        string[] config = GetConfig(convertingStatus);
-                        v2RayList.Add(
-                            new[] { GetConfigRemark(config), GetConfigData(config) }
-                        );
+                        Status convertingStatus = convertConfigLinkToV2Ray.Invoke(link);
+                        if (convertingStatus.Code == Code.SUCCESS)
+                        {
+                            string[] config = GetConfig(convertingStatus);
+                            v2RayList.Add(
+                                new[] { GetConfigRemark(config), GetConfigData(config) });
+                        }
+                    }
+                    catch
+                    {
                     }
                 }
 

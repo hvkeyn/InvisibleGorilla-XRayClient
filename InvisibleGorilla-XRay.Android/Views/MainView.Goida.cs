@@ -164,7 +164,6 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             GoidaSelectionModeComboBox = this.FindControl<ComboBox>("GoidaSelectionModeComboBox") ?? GoidaSelectionModeComboBox;
             GoidaSortModeComboBox = this.FindControl<ComboBox>("GoidaSortModeComboBox") ?? GoidaSortModeComboBox;
-            GoidaEnabledCheckBox = this.FindControl<CheckBox>("GoidaEnabledCheckBox") ?? GoidaEnabledCheckBox;
             GoidaAutoSwitchCheckBox = this.FindControl<CheckBox>("GoidaAutoSwitchCheckBox") ?? GoidaAutoSwitchCheckBox;
             GoidaFilterListTextBox = this.FindControl<TextBox>("GoidaFilterListTextBox") ?? GoidaFilterListTextBox;
             GoidaListCheckboxesPanel = this.FindControl<WrapPanel>("GoidaListCheckboxesPanel") ?? GoidaListCheckboxesPanel;
@@ -255,7 +254,6 @@ namespace InvisibleGorillaXRay.Android.Views
             try
             {
                 GoidaProfileSettings settings = settingsHandler.UserSettings.GetGoidaSettings();
-                GoidaEnabledCheckBox.IsChecked = settings.Enabled;
                 GoidaAutoSwitchCheckBox.IsChecked = settings.AutoSwitchOnFly;
                 GoidaSelectionModeComboBox.SelectedIndex = settings.SelectionMode switch
                 {
@@ -295,7 +293,6 @@ namespace InvisibleGorillaXRay.Android.Views
             {
                 UserSettings current = settingsHandler.UserSettings;
                 GoidaProfileSettings settings = current.GetGoidaSettings().Clone();
-                settings.Enabled = GoidaEnabledCheckBox.IsChecked == true;
                 settings.AutoSwitchOnFly = GoidaAutoSwitchCheckBox.IsChecked == true;
                 settings.SelectionMode = GoidaSelectionModeComboBox.SelectedIndex switch
                 {
@@ -438,8 +435,7 @@ namespace InvisibleGorillaXRay.Android.Views
             try
             {
                 Border card = GetRequiredControl<Border>("HomeGoidaCard");
-                GoidaProfileSettings settings = settingsHandler.UserSettings.GetGoidaSettings();
-                bool goidaActive = settings.Enabled && activeNode != null;
+                bool goidaActive = IsGoidaProfileSelected(settingsHandler.UserSettings) && activeNode != null;
 
                 card.IsVisible = goidaActive;
                 if (!goidaActive)
@@ -692,18 +688,16 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             try
             {
-                GoidaProfileSettings settings = settingsHandler.UserSettings.GetGoidaSettings();
-                if (!settings.Enabled)
-                    return false;
-
-                return GoidaProfilePaths.IsMarker(settingsHandler.UserSettings.GetCurrentConfigPath())
-                    || goidaHandler.Manager.GetActiveNode() != null;
+                return GoidaProfilePaths.IsMarker(settingsHandler.UserSettings.GetCurrentConfigPath());
             }
             catch
             {
                 return false;
             }
         }
+
+        private static bool IsGoidaProfileSelected(UserSettings settings) =>
+            GoidaProfilePaths.IsMarker(settings.GetCurrentConfigPath());
 
         private void RegisterTunnelFailure()
         {
@@ -794,7 +788,8 @@ namespace InvisibleGorillaXRay.Android.Views
                     return;
 
                 GoidaProfileSettings settings = settingsHandler.UserSettings.GetGoidaSettings();
-                if (!settings.Enabled || goidaHandler.Manager.GetActiveNode() == null)
+                if (!IsGoidaProfileSelected(settingsHandler.UserSettings)
+                    || goidaHandler.Manager.GetActiveNode() == null)
                     return;
 
                 StopGoidaLiveHealthMonitor();
@@ -897,7 +892,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     return;
 
                 GoidaProfileSettings settings = settingsHandler.UserSettings.GetGoidaSettings();
-                if (!settings.Enabled)
+                if (!IsGoidaProfileSelected(settingsHandler.UserSettings))
                     return;
 
                 if (!GoidaProfilePaths.IsMarker(settingsHandler.UserSettings.GetCurrentConfigPath()))
@@ -1252,6 +1247,16 @@ namespace InvisibleGorillaXRay.Android.Views
                 await goidaHandler.Manager.RefreshListsAsync();
                 RefreshGoidaNodesListBox();
                 UpdateGoidaStatusSummary();
+
+                int visibleCount = goidaHandler.Manager.GetVisibleNodes().Count;
+                if (visibleCount == 0)
+                {
+                    List<int> lists = GoidaProfileManager.GetVpnListIds(
+                        settingsHandler.UserSettings.GetGoidaSettings());
+                    SetGoidaStatusTextBlock(lists.Count == 1 && lists[0] == GoidaWhitelistStore.ListId
+                        ? Localize("Lang.Goida.List26OnlyHint")
+                        : Localize("Lang.Goida.EmptyHint"));
+                }
             }
             catch (Exception ex)
             {

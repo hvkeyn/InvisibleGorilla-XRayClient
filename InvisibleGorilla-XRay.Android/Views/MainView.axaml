@@ -1202,16 +1202,6 @@
                                        Foreground="White"
                                        FontSize="18" FontWeight="SemiBold" />
                             <StackPanel Orientation="Horizontal" Spacing="10">
-                                <CheckBox x:Name="GoidaEnabledCheckBox"
-                                          Foreground="White"
-                                          Checked="OnGoidaSettingsChanged"
-                                          Unchecked="OnGoidaSettingsChanged" />
-                                <TextBlock Text="{DynamicResource Lang.Goida.Enabled}"
-                                           Foreground="White"
-                                           VerticalAlignment="Center"
-                                           IsHitTestVisible="False" />
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="10">
                                 <CheckBox x:Name="GoidaAutoSwitchCheckBox"
                                           Foreground="White"
                                           Checked="OnGoidaSettingsChanged"
