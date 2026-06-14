@@ -60,6 +60,39 @@ namespace InvisibleGorillaXRay
         private string? pendingActiveNodeId;
         private const int MaxDisplayRows = 500;
 
+        private static int? TryParseListFilter(string? filterText)
+        {
+            string filter = filterText?.Trim() ?? string.Empty;
+            return int.TryParse(filter, out int listId) && listId >= 1 && listId <= 26
+                ? listId
+                : null;
+        }
+
+        private int? GetActiveListFilter()
+        {
+            if (getUserSettings == null)
+                return null;
+
+            return GoidaProfileManager.ResolveActiveListFilter(
+                textBoxFilterList.Text,
+                getUserSettings().GetGoidaSettings());
+        }
+
+        private void SyncListFilterWithSelection(IReadOnlyCollection<int> selected)
+        {
+            isApplyingListSelection = true;
+            try
+            {
+                textBoxFilterList.Text = selected.Count == 1
+                    ? selected.First().ToString()
+                    : string.Empty;
+            }
+            finally
+            {
+                isApplyingListSelection = false;
+            }
+        }
+
         public GoidaProfileWindow()
         {
             InitializeComponent();
@@ -254,17 +287,15 @@ namespace InvisibleGorillaXRay
                 return;
             }
 
-            IReadOnlyList<GoidaNode> nodes = goidaHandler.Manager.GetVisibleNodes();
-            int nodeCount = nodes.Count > 0
-                ? nodes.Count
-                : goidaHandler.Manager.CountVisibleNodes();
+            IReadOnlyList<GoidaNode> nodes = goidaHandler.Manager.GetVisibleNodes(GetActiveListFilter());
+            int nodeCount = nodes.Count;
             if (nodeCount == 0)
             {
                 SetStatusText(Localize("Lang.Goida.EmptyHint"));
                 return;
             }
 
-            (int ok, int timeout, int error, int unknown) = goidaHandler.Manager.GetProbeSummary();
+            (int ok, int timeout, int error, int unknown) = goidaHandler.Manager.GetProbeSummary(GetActiveListFilter());
             string activeText = BuildActiveStatusText();
 
             SetStatusText(string.Format(
@@ -323,8 +354,9 @@ namespace InvisibleGorillaXRay
 
             CaptureListSelectionFromControls();
 
-            int visibleCount = goidaHandler.Manager.GetVisibleNodes().Count;
-            if (goidaHandler.Manager.CountManualProbeTargets() == 0)
+            int? listFilter = GetActiveListFilter();
+            int visibleCount = goidaHandler.Manager.GetVisibleNodes(listFilter).Count;
+            if (goidaHandler.Manager.CountManualProbeTargets(listFilter) == 0)
             {
                 SetStatusText(visibleCount > 0
                     ? string.Format(Localize("Lang.Goida.ProbeNoTargets"), visibleCount)
@@ -338,12 +370,12 @@ namespace InvisibleGorillaXRay
 
             probeUiInProgress = true;
             probeCurrent = 0;
-            probeTotal = Math.Max(1, goidaHandler.Manager.CountManualProbeTargets());
-            BeginProbeUi();
+            probeTotal = Math.Max(1, goidaHandler.Manager.CountManualProbeTargets(listFilter));
+            BeginProbeUi(listFilter);
             try
             {
                 GoidaProbeResult result = await goidaHandler.Manager
-                    .ProbeAsync(probeCts.Token, manual: true)
+                    .ProbeAsync(probeCts.Token, manual: true, listIdFilter: listFilter)
                     .ConfigureAwait(false);
 
                 await Dispatcher.InvokeAsync(() =>
@@ -373,14 +405,16 @@ namespace InvisibleGorillaXRay
             }
         }
 
-        private void BeginProbeUi()
+        private void BeginProbeUi(int? listFilter)
         {
             buttonRefreshLists.IsEnabled = false;
             buttonProbeAll.Content = Localize("Lang.Goida.CancelProbe");
             progressProbe.Visibility = Visibility.Visible;
             progressProbe.Value = 0;
             progressProbe.Maximum = Math.Max(1, probeTotal);
-            SetStatusText(Localize("Lang.Goida.Probing"));
+            SetStatusText(listFilter is int listId
+                ? string.Format(Localize("Lang.Goida.ProbingList"), listId)
+                : Localize("Lang.Goida.Probing"));
         }
 
         private void EndProbeUi()
@@ -398,7 +432,7 @@ namespace InvisibleGorillaXRay
 
             if (result.Total == 0)
             {
-                SetStatusText(goidaHandler?.Manager.CountManualProbeTargets() == 0
+                SetStatusText(goidaHandler?.Manager.CountManualProbeTargets(GetActiveListFilter()) == 0
                     ? Localize("Lang.Goida.EmptyHint")
                     : Localize("Lang.Goida.ProbeBusy"));
                 UpdateStatusSummary();
@@ -497,8 +531,13 @@ namespace InvisibleGorillaXRay
             if (isApplyingListSelection)
                 return;
 
-            // Persist immediately — the 300 ms debounce left the status line
-            // and grid out of sync ("not loaded" while rows were still visible).
+            List<int> selected = listCheckboxes
+                .Where(pair => pair.Value.IsChecked == true)
+                .Select(pair => pair.Key)
+                .OrderBy(id => id)
+                .ToList();
+
+            SyncListFilterWithSelection(selected);
             CaptureListSelectionFromControls();
             RefreshGrid();
             UpdateStatusSummary();
@@ -540,19 +579,23 @@ namespace InvisibleGorillaXRay
 
         private void SetListSelection(IEnumerable<int> listIds)
         {
-            HashSet<int> selected = listIds.ToHashSet();
+            List<int> selected = listIds.OrderBy(id => id).ToList();
+            HashSet<int> selectedSet = selected.ToHashSet();
             isApplyingListSelection = true;
             try
             {
                 foreach (KeyValuePair<int, CheckBox> pair in listCheckboxes)
-                    pair.Value.IsChecked = selected.Contains(pair.Key);
+                    pair.Value.IsChecked = selectedSet.Contains(pair.Key);
             }
             finally
             {
                 isApplyingListSelection = false;
             }
 
+            SyncListFilterWithSelection(selected);
             CaptureListSelectionFromControls();
+            RefreshGrid();
+            UpdateStatusSummary();
         }
 
         private void OnSelectListsNodesClick(object sender, RoutedEventArgs e)
@@ -662,12 +705,9 @@ namespace InvisibleGorillaXRay
                 return;
 
             GoidaProfileSettings settings = getUserSettings().GetGoidaSettings();
-            string filter = textBoxFilterList.Text?.Trim() ?? string.Empty;
-            int? listFilter = int.TryParse(filter, out int listId) ? listId : null;
+            int? listFilter = TryParseListFilter(textBoxFilterList.Text);
 
-            List<GoidaNode> visible = goidaHandler.Manager.GetVisibleNodes()
-                .Where(node => listFilter == null || node.ListId == listFilter)
-                .ToList();
+            List<GoidaNode> visible = goidaHandler.Manager.GetVisibleNodes(listFilter).ToList();
 
             SortMode sortMode = forceLatencySort || probeUiInProgress
                 ? SortMode.ByLatency
@@ -826,6 +866,7 @@ namespace InvisibleGorillaXRay
         private void OnFilterChanged(object sender, TextChangedEventArgs e)
         {
             RefreshGrid();
+            UpdateStatusSummary();
         }
 
         private async void OnRefreshClick(object sender, RoutedEventArgs e)

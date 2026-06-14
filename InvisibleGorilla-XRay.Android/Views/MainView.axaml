@@ -1316,11 +1316,6 @@
                             <ListBox x:Name="GoidaNodesListBox"
                                      MinHeight="220" MaxHeight="420"
                                      SelectionChanged="OnGoidaNodeSelectionChanged">
-                                <ListBox.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <StackPanel />
-                                    </ItemsPanelTemplate>
-                                </ListBox.ItemsPanel>
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
                                         <Border Padding="10,8" Margin="0,4" CornerRadius="8"

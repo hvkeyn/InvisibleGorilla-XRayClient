@@ -77,6 +77,8 @@ namespace InvisibleGorillaXRay.Android.Views
         private bool goidaApplyUiPending;
         private bool suppressGoidaPoolCheckBoxEvents;
         private ObservableCollection<GoidaNodeRow>? goidaNodesListRows;
+        private bool goidaRefreshUiInProgress;
+        private int goidaListUiRefreshToken;
         private string? goidaPendingActiveNodeId;
         private CancellationTokenSource? goidaProbeCts;
         private int goidaProbeCurrent;
@@ -94,7 +96,37 @@ namespace InvisibleGorillaXRay.Android.Views
         private int consecutiveTunnelFailures;
         private bool? lastTunnelCheckOk;
 
-        private const int GoidaMaxDisplayRows = 2000;
+        private const int GoidaMaxDisplayRows = 250;
+
+        private static int? TryParseGoidaListFilter(string? filterText)
+        {
+            string filter = filterText?.Trim() ?? string.Empty;
+            return int.TryParse(filter, out int listId) && listId >= 1 && listId <= 26
+                ? listId
+                : null;
+        }
+
+        private int? GetGoidaActiveListFilter()
+        {
+            return GoidaProfileManager.ResolveActiveListFilter(
+                GoidaFilterListTextBox.Text,
+                settingsHandler.UserSettings.GetGoidaSettings());
+        }
+
+        private void SyncGoidaListFilterWithSelection(IReadOnlyCollection<int> selected)
+        {
+            isApplyingGoidaListSelection = true;
+            try
+            {
+                GoidaFilterListTextBox.Text = selected.Count == 1
+                    ? selected.First().ToString()
+                    : string.Empty;
+            }
+            finally
+            {
+                isApplyingGoidaListSelection = false;
+            }
+        }
 
         private StackPanel GoidaSectionScroll => GetRequiredControl<StackPanel>("GoidaSectionPanel");
         private Button GoidaNavButton => GetRequiredControl<Button>("GoidaSectionButton");
@@ -345,18 +377,20 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void SetGoidaListSelection(IEnumerable<int> listIds)
         {
-            HashSet<int> selected = listIds.ToHashSet();
+            List<int> selected = listIds.OrderBy(id => id).ToList();
+            HashSet<int> selectedSet = selected.ToHashSet();
             isApplyingGoidaListSelection = true;
             try
             {
                 foreach (KeyValuePair<int, CheckBox> pair in goidaListCheckboxes)
-                    pair.Value.IsChecked = selected.Contains(pair.Key);
+                    pair.Value.IsChecked = selectedSet.Contains(pair.Key);
             }
             finally
             {
                 isApplyingGoidaListSelection = false;
             }
 
+            SyncGoidaListFilterWithSelection(selected);
             CaptureGoidaListSelectionFromControls();
             RefreshGoidaNodesListBox();
             UpdateGoidaStatusSummary();
@@ -485,12 +519,9 @@ namespace InvisibleGorillaXRay.Android.Views
             try
             {
                 GoidaProfileSettings settings = settingsHandler.UserSettings.GetGoidaSettings();
-                string filter = GoidaFilterListTextBox.Text?.Trim() ?? string.Empty;
-                int? listFilter = int.TryParse(filter, out int listId) ? listId : null;
+                int? listFilter = TryParseGoidaListFilter(GoidaFilterListTextBox.Text);
 
-                List<GoidaNode> visible = goidaHandler.Manager.GetVisibleNodes()
-                    .Where(node => listFilter == null || node.ListId == listFilter)
-                    .ToList();
+                List<GoidaNode> visible = goidaHandler.Manager.GetVisibleNodes(listFilter).ToList();
 
                 GoidaSortMode sortMode = forceLatencySort || goidaProbeUiInProgress
                     ? GoidaSortMode.ByLatency
@@ -528,21 +559,25 @@ namespace InvisibleGorillaXRay.Android.Views
             suppressGoidaPoolCheckBoxEvents = true;
             try
             {
-                if (goidaNodesListRows == null)
-                {
-                    goidaNodesListRows = new ObservableCollection<GoidaNodeRow>(rows);
-                    GoidaNodesListBox.ItemsSource = goidaNodesListRows;
-                    return;
-                }
-
-                goidaNodesListRows.Clear();
-                foreach (GoidaNodeRow row in rows)
-                    goidaNodesListRows.Add(row);
+                goidaNodesListRows = new ObservableCollection<GoidaNodeRow>(rows);
+                GoidaNodesListBox.ItemsSource = goidaNodesListRows;
             }
             finally
             {
                 suppressGoidaPoolCheckBoxEvents = false;
             }
+        }
+
+        private void ScheduleRefreshGoidaNodesListBox(bool forceLatencySort = false)
+        {
+            int token = ++goidaListUiRefreshToken;
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (token != goidaListUiRefreshToken)
+                    return;
+
+                RefreshGoidaNodesListBox(forceLatencySort);
+            }, DispatcherPriority.Background);
         }
 
         private void SyncGoidaListRowStates()
@@ -1001,10 +1036,10 @@ namespace InvisibleGorillaXRay.Android.Views
             {
                 if (GoidaSectionScroll.IsVisible || isGoidaSectionInitialized)
                 {
-                    if (!goidaApplyUiPending)
-                        RefreshGoidaNodesListBoxThrottled();
+                    if (!goidaApplyUiPending && !goidaRefreshUiInProgress)
+                        ScheduleRefreshGoidaNodesListBox();
 
-                    if (IsGoidaNodesListRefreshSuppressed || goidaApplyUiPending)
+                    if (IsGoidaNodesListRefreshSuppressed || goidaApplyUiPending || goidaRefreshUiInProgress)
                         return;
 
                     if (!goidaProbeUiInProgress)
@@ -1124,10 +1159,8 @@ namespace InvisibleGorillaXRay.Android.Views
                 return;
             }
 
-            IReadOnlyList<GoidaNode> nodes = goidaHandler.Manager.GetVisibleNodes();
-            int nodeCount = nodes.Count > 0
-                ? nodes.Count
-                : goidaHandler.Manager.CountVisibleNodes();
+            IReadOnlyList<GoidaNode> nodes = goidaHandler.Manager.GetVisibleNodes(GetGoidaActiveListFilter());
+            int nodeCount = nodes.Count;
 
             if (nodeCount == 0)
             {
@@ -1135,7 +1168,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 return;
             }
 
-            (int ok, int timeout, int error, int unknown) = goidaHandler.Manager.GetProbeSummary();
+            (int ok, int timeout, int error, int unknown) = goidaHandler.Manager.GetProbeSummary(GetGoidaActiveListFilter());
             SetGoidaStatusTextBlock(LocalizeFormat(
                 "Lang.Goida.ProbeSummary",
                 nodeCount,
@@ -1194,7 +1227,11 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void OnGoidaSortModeChanged(object? sender, SelectionChangedEventArgs e) => RefreshGoidaNodesListBox();
 
-        private void OnGoidaFilterChanged(object? sender, TextChangedEventArgs e) => RefreshGoidaNodesListBox();
+        private void OnGoidaFilterChanged(object? sender, TextChangedEventArgs e)
+        {
+            RefreshGoidaNodesListBox();
+            UpdateGoidaStatusSummary();
+        }
 
         private void OnGoidaListCheckboxClick(object? sender, RoutedEventArgs e)
         {
@@ -1203,6 +1240,13 @@ namespace InvisibleGorillaXRay.Android.Views
 
             try
             {
+                List<int> selected = goidaListCheckboxes
+                    .Where(pair => pair.Value.IsChecked == true)
+                    .Select(pair => pair.Key)
+                    .OrderBy(id => id)
+                    .ToList();
+
+                SyncGoidaListFilterWithSelection(selected);
                 CaptureGoidaListSelectionFromControls();
                 RefreshGoidaNodesListBox();
                 UpdateGoidaStatusSummary();
@@ -1233,6 +1277,12 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private async void OnGoidaRefreshClick(object? sender, RoutedEventArgs e)
         {
+            if (goidaRefreshUiInProgress || goidaHandler.Manager.IsRefreshInProgress)
+            {
+                SetGoidaStatusTextBlock(Localize("Lang.Goida.ProbeBusy"));
+                return;
+            }
+
             CaptureGoidaListSelectionFromControls();
 
             if (!GoidaProfileManager.HasVpnListsEnabled(settingsHandler.UserSettings.GetGoidaSettings()))
@@ -1241,14 +1291,15 @@ namespace InvisibleGorillaXRay.Android.Views
                 return;
             }
 
+            goidaRefreshUiInProgress = true;
+            GoidaRefreshButton.IsEnabled = false;
             SetGoidaStatusTextBlock(Localize("Lang.Goida.Loading"));
             try
             {
-                await goidaHandler.Manager.RefreshListsAsync();
-                RefreshGoidaNodesListBox();
+                await goidaHandler.Manager.RefreshListsAsync().ConfigureAwait(true);
                 UpdateGoidaStatusSummary();
 
-                int visibleCount = goidaHandler.Manager.GetVisibleNodes().Count;
+                int visibleCount = goidaHandler.Manager.GetVisibleNodes(GetGoidaActiveListFilter()).Count;
                 if (visibleCount == 0)
                 {
                     List<int> lists = GoidaProfileManager.GetVpnListIds(
@@ -1263,6 +1314,13 @@ namespace InvisibleGorillaXRay.Android.Views
                 DiagnosticLog.WriteException("MainView.Goida.Refresh", ex);
                 SetGoidaStatusTextBlock(Localize("Lang.Goida.RefreshFailed"));
             }
+            finally
+            {
+                ScheduleRefreshGoidaNodesListBox();
+                goidaRefreshUiInProgress = false;
+                if (!goidaProbeUiInProgress)
+                    GoidaRefreshButton.IsEnabled = true;
+            }
         }
 
         private async void OnGoidaProbeClick(object? sender, RoutedEventArgs e)
@@ -1275,8 +1333,9 @@ namespace InvisibleGorillaXRay.Android.Views
 
             CaptureGoidaListSelectionFromControls();
 
-            int visibleCount = goidaHandler.Manager.GetVisibleNodes().Count;
-            if (goidaHandler.Manager.CountManualProbeTargets() == 0)
+            int? listFilter = GetGoidaActiveListFilter();
+            int visibleCount = goidaHandler.Manager.GetVisibleNodes(listFilter).Count;
+            if (goidaHandler.Manager.CountManualProbeTargets(listFilter) == 0)
             {
                 SetGoidaStatusTextBlock(visibleCount > 0
                     ? LocalizeFormat("Lang.Goida.ProbeNoTargets", visibleCount)
@@ -1290,13 +1349,13 @@ namespace InvisibleGorillaXRay.Android.Views
 
             goidaProbeUiInProgress = true;
             goidaProbeCurrent = 0;
-            goidaProbeTotal = Math.Max(1, goidaHandler.Manager.CountManualProbeTargets());
-            BeginGoidaProbeUi();
+            goidaProbeTotal = Math.Max(1, goidaHandler.Manager.CountManualProbeTargets(listFilter));
+            BeginGoidaProbeUi(listFilter);
 
             try
             {
                 GoidaProbeResult result = await goidaHandler.Manager
-                    .ProbeAsync(goidaProbeCts.Token, manual: true);
+                    .ProbeAsync(goidaProbeCts.Token, manual: true, listIdFilter: listFilter);
 
                 RefreshGoidaNodesListBox(forceLatencySort: true);
                 ShowGoidaProbeCompleteResult(result);
@@ -1322,20 +1381,23 @@ namespace InvisibleGorillaXRay.Android.Views
             }
         }
 
-        private void BeginGoidaProbeUi()
+        private void BeginGoidaProbeUi(int? listFilter)
         {
             GoidaRefreshButton.IsEnabled = false;
             SetGoidaProbeButtonLabel(Localize("Lang.Goida.CancelProbe"));
             GoidaProbeProgressBar.IsVisible = true;
             GoidaProbeProgressBar.Value = 0;
             GoidaProbeProgressBar.Maximum = Math.Max(1, goidaProbeTotal);
-            SetGoidaStatusTextBlock(Localize("Lang.Goida.Probing"));
+            SetGoidaStatusTextBlock(listFilter is int listId
+                ? LocalizeFormat("Lang.Goida.ProbingList", listId)
+                : Localize("Lang.Goida.Probing"));
         }
 
         private void EndGoidaProbeUi()
         {
             goidaProbeUiInProgress = false;
-            GoidaRefreshButton.IsEnabled = true;
+            if (!goidaRefreshUiInProgress)
+                GoidaRefreshButton.IsEnabled = true;
             SetGoidaProbeButtonLabel(Localize("Lang.Goida.ProbeAll"));
             GoidaProbeProgressBar.IsVisible = false;
         }
@@ -1347,7 +1409,7 @@ namespace InvisibleGorillaXRay.Android.Views
 
             if (result.Total == 0)
             {
-                SetGoidaStatusTextBlock(goidaHandler.Manager.CountManualProbeTargets() == 0
+                SetGoidaStatusTextBlock(goidaHandler.Manager.CountManualProbeTargets(GetGoidaActiveListFilter()) == 0
                     ? Localize("Lang.Goida.EmptyHint")
                     : Localize("Lang.Goida.ProbeBusy"));
                 UpdateGoidaStatusSummary();

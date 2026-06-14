@@ -45,7 +45,8 @@ namespace InvisibleGorillaXRay.Services.Goida
                 string nodeId = ComputeNodeId(listId, remark, sanitized);
                 string fileName = $"{listId}_{nodeId}.json";
                 string configPath = Path.Combine(nodesDirectory, fileName);
-                File.WriteAllText(configPath, sanitized);
+                if (!File.Exists(configPath))
+                    File.WriteAllText(configPath, sanitized);
 
                 nodesById[nodeId] = new GoidaNode
                 {

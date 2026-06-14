@@ -228,6 +228,7 @@
     <system:String x:Key="Lang.Goida.ActiveSummary">Active: {0} · {1}</system:String>
     <system:String x:Key="Lang.Goida.Loading">Loading node lists...</system:String>
     <system:String x:Key="Lang.Goida.Probing">Probing nodes...</system:String>
+    <system:String x:Key="Lang.Goida.ProbingList">Probing list {0}...</system:String>
     <system:String x:Key="Lang.Goida.EmptyHint">No nodes loaded yet. Check your network connection and click Refresh lists.</system:String>
     <system:String x:Key="Lang.Goida.NodesLoaded">{0} nodes loaded</system:String>
     <system:String x:Key="Lang.Goida.RefreshFailed">Failed to refresh lists. See diagnostic.log for details.</system:String>

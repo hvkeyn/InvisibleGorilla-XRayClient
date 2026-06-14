@@ -29,6 +29,16 @@ namespace InvisibleGorillaXRay.Services.Goida
             return GetVpnListIds(settings).Count > 0;
         }
 
+        public static int? ResolveActiveListFilter(string? filterText, GoidaProfileSettings settings)
+        {
+            string filter = filterText?.Trim() ?? string.Empty;
+            if (int.TryParse(filter, out int listId) && listId >= 1 && listId <= 26)
+                return listId;
+
+            List<int> enabled = GetVpnListIds(settings);
+            return enabled.Count == 1 ? enabled[0] : null;
+        }
+
         public static HashSet<int> GetEnabledListSet(GoidaProfileSettings settings)
         {
             return GetVpnListIds(settings).ToHashSet();
@@ -64,10 +74,10 @@ namespace InvisibleGorillaXRay.Services.Goida
 
         public IReadOnlyList<GoidaListMeta> Lists => GoidaSourceCatalog.AllLists;
 
-        public int CountManualProbeTargets()
+        public int CountManualProbeTargets(int? listIdFilter = null)
         {
             GoidaProfileSettings settings = getSettings().Clone();
-            return FilterProbeTargets(settings, store.GetNodes(), manual: true).Count();
+            return FilterProbeTargets(settings, store.GetNodes(), manual: true, listIdFilter).Count();
         }
 
         public int CountVerifyTargets(bool manual = true)
@@ -101,14 +111,18 @@ namespace InvisibleGorillaXRay.Services.Goida
             store.Load();
         }
 
-        public IReadOnlyList<GoidaNode> GetVisibleNodes()
+        public IReadOnlyList<GoidaNode> GetVisibleNodes(int? listIdFilter = null)
         {
             GoidaProfileSettings settings = getSettings().Clone();
             HashSet<int> enabledLists = GetEnabledListSet(settings);
 
-            return store.GetNodes()
-                .Where(node => enabledLists.Contains(node.ListId))
-                .ToList();
+            IEnumerable<GoidaNode> nodes = store.GetNodes()
+                .Where(node => enabledLists.Contains(node.ListId));
+
+            if (listIdFilter is int listId && listId >= 1 && listId <= 26)
+                nodes = nodes.Where(node => node.ListId == listId);
+
+            return nodes.ToList();
         }
 
         public int CountVisibleNodes()
@@ -150,14 +164,14 @@ namespace InvisibleGorillaXRay.Services.Goida
                 .ToList();
         }
 
-        public (int Ok, int Timeout, int Error, int Unknown) GetProbeSummary()
+        public (int Ok, int Timeout, int Error, int Unknown) GetProbeSummary(int? listIdFilter = null)
         {
             int ok = 0;
             int timeout = 0;
             int error = 0;
             int unknown = 0;
 
-            foreach (GoidaNode node in GetVisibleNodes())
+            foreach (GoidaNode node in GetVisibleNodes(listIdFilter))
             {
                 switch (node.Status)
                 {
@@ -306,7 +320,8 @@ namespace InvisibleGorillaXRay.Services.Goida
 
         public async Task<GoidaProbeResult> ProbeAsync(
             CancellationToken cancellationToken = default,
-            bool manual = false)
+            bool manual = false,
+            int? listIdFilter = null)
         {
             if (manual)
             {
@@ -315,7 +330,7 @@ namespace InvisibleGorillaXRay.Services.Goida
 
                 try
                 {
-                    return await ProbeAsyncCore(cancellationToken, manual: true).ConfigureAwait(false);
+                    return await ProbeAsyncCore(cancellationToken, manual: true, listIdFilter).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -348,13 +363,16 @@ namespace InvisibleGorillaXRay.Services.Goida
             }
         }
 
-        private async Task<GoidaProbeResult> ProbeAsyncCore(CancellationToken cancellationToken, bool manual)
+        private async Task<GoidaProbeResult> ProbeAsyncCore(
+            CancellationToken cancellationToken,
+            bool manual,
+            int? listIdFilter = null)
         {
             try
             {
                 GoidaProfileSettings settings = getSettings().Clone();
                 List<GoidaNode> targets = ResolveLiveProbeTargets(
-                    FilterProbeTargets(settings, store.GetNodes(), manual).ToList());
+                    FilterProbeTargets(settings, store.GetNodes(), manual, listIdFilter).ToList());
 
                 int maxVless = manual ? GoidaProfileSettings.MaxVerifiedNodes : MaxBackgroundVerifyBatch;
                 int earlyStopOk = manual
@@ -743,12 +761,21 @@ namespace InvisibleGorillaXRay.Services.Goida
         private IEnumerable<GoidaNode> FilterProbeTargets(
             GoidaProfileSettings settings,
             IReadOnlyList<GoidaNode> nodes,
-            bool manual = false)
+            bool manual = false,
+            int? listIdFilter = null)
         {
             int batchLimit = manual ? MaxManualProbeBatch : MaxBackgroundProbeBatch;
             HashSet<int> enabledLists = GetEnabledListSet(settings);
             IEnumerable<GoidaNode> filtered = nodes
                 .Where(node => enabledLists.Contains(node.ListId));
+
+            if (listIdFilter is int listId && listId >= 1 && listId <= 26)
+            {
+                if (!enabledLists.Contains(listId))
+                    return Enumerable.Empty<GoidaNode>();
+
+                filtered = filtered.Where(node => node.ListId == listId);
+            }
 
             // Never TCP-probe the live active node — it often times out while traffic
             // flows through it and would get wrongly marked failed / auto-replaced.

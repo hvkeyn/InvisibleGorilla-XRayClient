@@ -126,12 +126,22 @@ namespace InvisibleGorillaXRay.Mac.Views
             textBlockStatus.Text = text ?? string.Empty;
         }
 
+        private int? GetActiveListFilter()
+        {
+            if (getUserSettings == null)
+                return null;
+
+            return GoidaProfileManager.ResolveActiveListFilter(
+                textBoxFilterList.Text,
+                getUserSettings().GetGoidaSettings());
+        }
+
         private void UpdateStatusSummary()
         {
             if (goidaHandler == null)
                 return;
 
-            int count = goidaHandler.Manager.GetNodesSorted().Count;
+            int count = goidaHandler.Manager.GetVisibleNodes(GetActiveListFilter()).Count;
             SetStatusText(count == 0
                 ? Localize("Lang.Goida.EmptyHint")
                 : string.Format(Localize("Lang.Goida.NodesLoaded"), count));
@@ -199,8 +209,9 @@ namespace InvisibleGorillaXRay.Mac.Views
                 return;
 
             GoidaProfileSettings settings = getUserSettings().GetGoidaSettings();
-            string filter = textBoxFilterList.Text?.Trim() ?? string.Empty;
-            int? listFilter = int.TryParse(filter, out int listId) ? listId : null;
+            int? listFilter = int.TryParse(textBoxFilterList.Text?.Trim(), out int listId) && listId >= 1 && listId <= 26
+                ? listId
+                : null;
 
             List<NodeRow> rows = goidaHandler.Manager.GetNodesSorted()
                 .Where(node => listFilter == null || node.ListId == listFilter)
@@ -262,6 +273,7 @@ namespace InvisibleGorillaXRay.Mac.Views
         private void OnFilterChanged(object? sender, TextChangedEventArgs e)
         {
             RefreshList();
+            UpdateStatusSummary();
         }
 
         private async void OnRefreshClick(object? sender, RoutedEventArgs e)
@@ -287,10 +299,13 @@ namespace InvisibleGorillaXRay.Mac.Views
             if (goidaHandler == null)
                 return;
 
-            SetStatusText(Localize("Lang.Goida.Probing"));
+            int? listFilter = GetActiveListFilter();
+            SetStatusText(listFilter is int listId
+                ? string.Format(Localize("Lang.Goida.ProbingList"), listId)
+                : Localize("Lang.Goida.Probing"));
             try
             {
-                await goidaHandler.Manager.ProbeAsync(manual: true).ConfigureAwait(true);
+                await goidaHandler.Manager.ProbeAsync(manual: true, listIdFilter: listFilter).ConfigureAwait(true);
                 RefreshList();
                 UpdateStatusSummary();
             }

@@ -333,6 +333,7 @@
     <x:String x:Key="Lang.Goida.Signal.Offline">Offline</x:String>
     <x:String x:Key="Lang.Goida.Loading">Loading node lists...</x:String>
     <x:String x:Key="Lang.Goida.Probing">Probing nodes...</x:String>
+    <x:String x:Key="Lang.Goida.ProbingList">Probing list {0}...</x:String>
     <x:String x:Key="Lang.Goida.EmptyHint">No nodes loaded yet. Check your network connection and click Refresh lists.</x:String>
     <x:String x:Key="Lang.Goida.NodesLoaded">{0} nodes loaded</x:String>
     <x:String x:Key="Lang.Goida.RefreshFailed">Failed to refresh lists.</x:String>

@@ -333,6 +333,7 @@
     <x:String x:Key="Lang.Goida.Signal.Offline">Недоступен</x:String>
     <x:String x:Key="Lang.Goida.Loading">Загрузка списков узлов...</x:String>
     <x:String x:Key="Lang.Goida.Probing">Проверка узлов...</x:String>
+    <x:String x:Key="Lang.Goida.ProbingList">Проверка списка {0}...</x:String>
     <x:String x:Key="Lang.Goida.EmptyHint">Узлы не загружены. Проверьте интернет и нажмите «Обновить списки».</x:String>
     <x:String x:Key="Lang.Goida.NodesLoaded">Загружено узлов: {0}</x:String>
     <x:String x:Key="Lang.Goida.RefreshFailed">Не удалось обновить списки.</x:String>
