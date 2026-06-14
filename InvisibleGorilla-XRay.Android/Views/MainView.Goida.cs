@@ -276,7 +276,7 @@ namespace InvisibleGorillaXRay.Android.Views
             try
             {
                 HashSet<int> enabled = settingsHandler.UserSettings.GetGoidaSettings().EnabledListIds?
-                    .ToHashSet() ?? Enumerable.Range(1, 25).ToHashSet();
+                    .ToHashSet() ?? Enumerable.Range(1, 26).ToHashSet();
                 foreach (KeyValuePair<int, CheckBox> pair in goidaListCheckboxes)
                     pair.Value.IsChecked = enabled.Contains(pair.Key);
             }
@@ -333,6 +333,7 @@ namespace InvisibleGorillaXRay.Android.Views
             settings.EnabledListIds = selected;
             current.Goida = settings;
             settingsHandler.UpdateUserSettings(current);
+            goidaHandler.Manager.UpdateSettings(settings);
             goidaListSelectionDirty = false;
         }
 
@@ -1108,6 +1109,8 @@ namespace InvisibleGorillaXRay.Android.Views
             {
                 if (string.Equals(message, "refresh-failed", StringComparison.OrdinalIgnoreCase))
                     SetGoidaStatusTextBlock(Localize("Lang.Goida.RefreshFailed"));
+                else if (string.Equals(message, "refresh-no-vpn-lists", StringComparison.OrdinalIgnoreCase))
+                    SetGoidaStatusTextBlock(Localize("Lang.Goida.NoListsSelected"));
                 else if (string.Equals(message, "refresh-complete", StringComparison.OrdinalIgnoreCase))
                 {
                     RefreshGoidaNodesListBox();

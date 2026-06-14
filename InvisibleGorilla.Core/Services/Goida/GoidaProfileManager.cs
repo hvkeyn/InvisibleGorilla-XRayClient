@@ -20,7 +20,7 @@ namespace InvisibleGorillaXRay.Services.Goida
                 .Where(id => id >= 1 && id <= 26)
                 .Distinct()
                 .OrderBy(id => id)
-                .ToList() ?? Enumerable.Range(1, 25).ToList();
+                .ToList() ?? Enumerable.Range(1, 26).ToList();
         }
 
         public static bool HasVpnListsEnabled(GoidaProfileSettings settings)
@@ -444,40 +444,72 @@ namespace InvisibleGorillaXRay.Services.Goida
                 GoidaProfileSettings settings = getSettings().Clone();
                 store.EnsureDirectories();
 
+                List<int> fetchListIds = GetVpnListIds(settings);
+                if (fetchListIds.Count == 0)
+                {
+                    StatusMessage?.Invoke("refresh-no-vpn-lists");
+                    return;
+                }
+
+                HashSet<int> enabledLists = GetEnabledListSet(settings);
+
                 IReadOnlyDictionary<int, string> listData = await fetcher
-                    .FetchListsAsync(settings.EnabledListIds ?? Enumerable.Range(1, 26), cancellationToken)
+                    .FetchListsAsync(fetchListIds, cancellationToken)
                     .ConfigureAwait(false);
 
-                List<GoidaNode> merged = new();
+                HashSet<int> refreshedListIds = fetchListIds.ToHashSet();
+                Dictionary<string, GoidaNode> mergedById = store.GetNodes()
+                    .Where(node => enabledLists.Contains(node.ListId)
+                        && !refreshedListIds.Contains(node.ListId))
+                    .ToDictionary(node => node.Id, StringComparer.OrdinalIgnoreCase);
+
                 Dictionary<string, GoidaNode> existing = store.GetNodes()
                     .ToDictionary(node => node.Id, StringComparer.OrdinalIgnoreCase);
+                Dictionary<string, GoidaNode> existingByEndpoint = store.GetNodes()
+                    .Where(node => !string.IsNullOrWhiteSpace(node.Endpoint))
+                    .GroupBy(node => BuildEndpointKey(node.ListId, node.Endpoint),
+                        StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
 
                 foreach (KeyValuePair<int, string> pair in listData.OrderBy(entry => entry.Key))
                 {
                     try
                     {
+                        if (string.IsNullOrWhiteSpace(pair.Value))
+                            continue;
+
                         List<GoidaNode> parsed = parser.ParseList(pair.Key, pair.Value, store.NodesDirectory);
                         foreach (GoidaNode node in parsed)
                         {
-                            if (existing.TryGetValue(node.Id, out GoidaNode? previous))
+                            GoidaNode? previous = null;
+                            if (existing.TryGetValue(node.Id, out previous)
+                                || existingByEndpoint.TryGetValue(
+                                    BuildEndpointKey(node.ListId, node.Endpoint), out previous))
                             {
-                                node.LatencyMs = previous.LatencyMs;
-                                node.Status = previous.Status;
-                                node.LastCheckedUtc = previous.LastCheckedUtc;
-                                node.VlessVerified = previous.VlessVerified;
+                                CopyProbeState(previous, node);
                             }
 
-                            merged.Add(node);
+                            mergedById[node.Id] = node;
                         }
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        DiagnosticLog.WriteException($"Goida.RefreshList.{pair.Key}", ex);
                     }
                 }
 
-                store.ReplaceNodes(merged);
+                if (Interlocked.CompareExchange(ref probeInProgress, 0, 0) != 0)
+                {
+                    DiagnosticLog.Write("Goida.RefreshListsAsync",
+                        "Skipped ReplaceNodes because a probe is in progress");
+                    StatusMessage?.Invoke("refresh-deferred");
+                    return;
+                }
 
-                // Re-fetch settings: the user may have changed them while lists downloaded.
+                List<GoidaNode> merged = mergedById.Values.ToList();
+                store.ReplaceNodes(merged);
+                TryEnsureActiveNode();
+
                 GoidaProfileSettings latest = getSettings().Clone();
                 latest.LastRefreshUtc = DateTime.UtcNow;
                 saveSettings(latest);
@@ -486,8 +518,9 @@ namespace InvisibleGorillaXRay.Services.Goida
                 StatusMessage?.Invoke("refresh-complete");
                 NodesUpdated?.Invoke();
             }
-            catch
+            catch (Exception ex)
             {
+                DiagnosticLog.WriteException("Goida.RefreshListsAsync", ex);
                 StatusMessage?.Invoke("refresh-failed");
             }
             finally
@@ -749,6 +782,17 @@ namespace InvisibleGorillaXRay.Services.Goida
                     }
                 }
             }
+        }
+
+        private static string BuildEndpointKey(int listId, string endpoint) =>
+            $"{listId}|{endpoint.Trim()}";
+
+        private static void CopyProbeState(GoidaNode source, GoidaNode target)
+        {
+            target.LatencyMs = source.LatencyMs;
+            target.Status = source.Status;
+            target.LastCheckedUtc = source.LastCheckedUtc;
+            target.VlessVerified = source.VlessVerified;
         }
 
         private Task EvaluateAutoSwitchAsync(GoidaProfileSettings staleSnapshot)

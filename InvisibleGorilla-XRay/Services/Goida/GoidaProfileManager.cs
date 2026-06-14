@@ -21,7 +21,7 @@ namespace InvisibleGorillaXRay.Services.Goida
                 .Where(id => id >= 1 && id <= 26)
                 .Distinct()
                 .OrderBy(id => id)
-                .ToList() ?? Enumerable.Range(1, 25).ToList();
+                .ToList() ?? Enumerable.Range(1, 26).ToList();
         }
 
         public static bool HasVpnListsEnabled(GoidaProfileSettings settings)

@@ -36,7 +36,7 @@ namespace InvisibleGorillaXRay.Models
         public GoidaSelectionMode SelectionMode { get; set; } = GoidaSelectionMode.AutoBest;
 
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
-        public List<int> EnabledListIds { get; set; } = Enumerable.Range(1, 25).ToList();
+        public List<int> EnabledListIds { get; set; } = Enumerable.Range(1, 26).ToList();
 
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
         public string ActiveNodeId { get; set; } = string.Empty;
@@ -60,7 +60,7 @@ namespace InvisibleGorillaXRay.Models
                 ProbeIntervalSeconds = ProbeIntervalSeconds > 0 ? ProbeIntervalSeconds : DefaultProbeSeconds,
                 AutoSwitchLatencyMs = AutoSwitchLatencyMs > 0 ? AutoSwitchLatencyMs : DefaultAutoSwitchLatencyMs,
                 SelectionMode = SelectionMode,
-                EnabledListIds = EnabledListIds?.ToList() ?? Enumerable.Range(1, 25).ToList(),
+                EnabledListIds = EnabledListIds?.ToList() ?? Enumerable.Range(1, 26).ToList(),
                 ActiveNodeId = ActiveNodeId ?? string.Empty,
                 PinnedNodeId = PinnedNodeId ?? string.Empty,
                 ManualPoolNodeIds = ManualPoolNodeIds?.Where(id => !string.IsNullOrWhiteSpace(id)).ToList() ?? new List<string>(),
