@@ -45,6 +45,10 @@ namespace InvisibleGorillaXRay.Android.Views
         private bool goidaProbeUiInProgress;
         private bool goidaListSelectionDirty;
         private bool isRefreshingGoidaNodesList;
+        private int suppressGoidaNodesListRefresh;
+        private bool goidaNodesListRefreshPending;
+        private bool goidaNodesListRefreshPendingForceLatencySort;
+        private bool goidaApplyUiPending;
         private string? goidaPendingActiveNodeId;
         private CancellationTokenSource? goidaProbeCts;
         private int goidaProbeCurrent;
@@ -453,38 +457,48 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void RefreshGoidaNodesListBoxCore(bool forceLatencySort = false)
         {
-            GoidaProfileSettings settings = settingsHandler.UserSettings.GetGoidaSettings();
-            string filter = GoidaFilterListTextBox.Text?.Trim() ?? string.Empty;
-            int? listFilter = int.TryParse(filter, out int listId) ? listId : null;
+            try
+            {
+                GoidaProfileSettings settings = settingsHandler.UserSettings.GetGoidaSettings();
+                string filter = GoidaFilterListTextBox.Text?.Trim() ?? string.Empty;
+                int? listFilter = int.TryParse(filter, out int listId) ? listId : null;
 
-            List<GoidaNode> visible = goidaHandler.Manager.GetVisibleNodes()
-                .Where(node => listFilter == null || node.ListId == listFilter)
-                .ToList();
+                List<GoidaNode> visible = goidaHandler.Manager.GetVisibleNodes()
+                    .Where(node => listFilter == null || node.ListId == listFilter)
+                    .ToList();
 
-            GoidaSortMode sortMode = forceLatencySort || goidaProbeUiInProgress
-                ? GoidaSortMode.ByLatency
-                : GetSelectedGoidaSortMode();
+                GoidaSortMode sortMode = forceLatencySort || goidaProbeUiInProgress
+                    ? GoidaSortMode.ByLatency
+                    : GetSelectedGoidaSortMode();
 
-            List<GoidaNode> display = BuildGoidaDisplayNodes(visible, sortMode);
-            bool truncated = visible.Count > GoidaMaxDisplayRows;
-            HashSet<string> pool = settings.ManualPoolNodeIds?
-                .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                List<GoidaNode> display = BuildGoidaDisplayNodes(visible, sortMode);
+                bool truncated = visible.Count > GoidaMaxDisplayRows;
+                HashSet<string> pool = settings.ManualPoolNodeIds?
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            string effectiveActiveId = !string.IsNullOrWhiteSpace(goidaPendingActiveNodeId)
-                ? goidaPendingActiveNodeId!
-                : settings.ActiveNodeId;
+                string effectiveActiveId = !string.IsNullOrWhiteSpace(goidaPendingActiveNodeId)
+                    ? goidaPendingActiveNodeId!
+                    : settings.ActiveNodeId;
 
-            List<GoidaNodeRow> rows = display
-                .Select(node => ToGoidaNodeRow(node, effectiveActiveId, pool))
-                .ToList();
+                List<GoidaNodeRow> rows = display
+                    .Select(node => ToGoidaNodeRow(node, effectiveActiveId, pool))
+                    .ToList();
 
-            GoidaNodesListBox.ItemsSource = rows;
+                // Reset virtualization state before replacing a large list; otherwise
+                // VirtualizingStackPanel can throw ArgumentException on Confirm/Apply.
+                GoidaNodesListBox.ItemsSource = null;
+                GoidaNodesListBox.ItemsSource = rows;
 
-            if (truncated && !goidaProbeUiInProgress)
-                SetGoidaStatusTextBlock(LocalizeFormat(
-                    "Lang.Goida.ShowingLimited",
-                    rows.Count,
-                    visible.Count));
+                if (truncated && !goidaProbeUiInProgress)
+                    SetGoidaStatusTextBlock(LocalizeFormat(
+                        "Lang.Goida.ShowingLimited",
+                        rows.Count,
+                        visible.Count));
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.Goida.RefreshNodesList", ex);
+            }
         }
 
         private static List<GoidaNode> BuildGoidaDisplayNodes(List<GoidaNode> visible, GoidaSortMode sortMode)
@@ -839,6 +853,45 @@ namespace InvisibleGorillaXRay.Android.Views
             }
         }
 
+        private bool IsGoidaNodesListRefreshSuppressed => suppressGoidaNodesListRefresh > 0;
+
+        private void WithGoidaNodesListRefreshSuppressed(Action action)
+        {
+            suppressGoidaNodesListRefresh++;
+            try
+            {
+                action();
+            }
+            finally
+            {
+                suppressGoidaNodesListRefresh--;
+                FlushPendingGoidaNodesListRefresh();
+            }
+        }
+
+        private void RequestGoidaNodesListRefresh(bool forceLatencySort = false)
+        {
+            if (IsGoidaNodesListRefreshSuppressed)
+            {
+                goidaNodesListRefreshPending = true;
+                goidaNodesListRefreshPendingForceLatencySort |= forceLatencySort;
+                return;
+            }
+
+            RefreshGoidaNodesListBox(forceLatencySort);
+        }
+
+        private void FlushPendingGoidaNodesListRefresh()
+        {
+            if (!goidaNodesListRefreshPending || IsGoidaNodesListRefreshSuppressed)
+                return;
+
+            bool forceLatencySort = goidaNodesListRefreshPendingForceLatencySort;
+            goidaNodesListRefreshPending = false;
+            goidaNodesListRefreshPendingForceLatencySort = false;
+            RefreshGoidaNodesListBox(forceLatencySort);
+        }
+
         private void HandleGoidaActiveNodeChanged(GoidaNode node)
         {
             if (node == null || string.IsNullOrWhiteSpace(node.ConfigPath))
@@ -878,7 +931,12 @@ namespace InvisibleGorillaXRay.Android.Views
             {
                 if (GoidaSectionScroll.IsVisible || isGoidaSectionInitialized)
                 {
-                    RefreshGoidaNodesListBoxThrottled();
+                    if (!goidaApplyUiPending)
+                        RefreshGoidaNodesListBoxThrottled();
+
+                    if (IsGoidaNodesListRefreshSuppressed || goidaApplyUiPending)
+                        return;
+
                     if (!goidaProbeUiInProgress)
                     {
                         SafeRefreshGoidaSummary();
@@ -921,6 +979,12 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void RefreshGoidaNodesListBoxThrottled(bool force = false)
         {
+            if (IsGoidaNodesListRefreshSuppressed)
+            {
+                RequestGoidaNodesListRefresh(forceLatencySort: goidaProbeUiInProgress);
+                return;
+            }
+
             if (!force && goidaProbeUiInProgress
                 && (DateTime.UtcNow - goidaLastGridRefreshUtc).TotalMilliseconds < 350)
                 return;
@@ -1361,35 +1425,65 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void OnGoidaApplyClick(object? sender, RoutedEventArgs e)
         {
-            if (goidaListSelectionDirty)
-                PersistGoidaListSelection();
-
-            CaptureGoidaSettingsFromControls();
-
-            if (!string.IsNullOrWhiteSpace(goidaPendingActiveNodeId)
-                && !string.Equals(
-                    goidaPendingActiveNodeId,
-                    settingsHandler.UserSettings.GetGoidaSettings().ActiveNodeId,
-                    StringComparison.OrdinalIgnoreCase))
+            try
             {
-                UserSettings current = settingsHandler.UserSettings;
-                GoidaProfileSettings settings = current.GetGoidaSettings().Clone();
-                settings.Enabled = true;
-                settings.ActiveNodeId = goidaPendingActiveNodeId!;
-                if (settings.SelectionMode == GoidaSelectionMode.ManualFixed)
-                    settings.PinnedNodeId = goidaPendingActiveNodeId!;
-                current.Goida = settings;
-                settingsHandler.UpdateUserSettings(current);
-                goidaHandler.Manager.UpdateSettings(settings);
-                goidaHandler.Manager.SetActiveNode(goidaPendingActiveNodeId!);
-                goidaPendingActiveNodeId = null;
-            }
+                goidaApplyUiPending = true;
+                WithGoidaNodesListRefreshSuppressed(() =>
+                {
+                    if (goidaListSelectionDirty)
+                        PersistGoidaListSelection();
 
-            ApplyGoidaSettingsToControls();
-            RefreshGoidaNodesListBox();
-            RefreshGoidaSummary();
-            UpdateGoidaStatusSummary();
-            SetGoidaStatusTextBlock(Localize("Lang.Goida.ConfirmHint"));
+                    CaptureGoidaSettingsFromControls();
+
+                    if (!string.IsNullOrWhiteSpace(goidaPendingActiveNodeId)
+                        && !string.Equals(
+                            goidaPendingActiveNodeId,
+                            settingsHandler.UserSettings.GetGoidaSettings().ActiveNodeId,
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        UserSettings current = settingsHandler.UserSettings;
+                        GoidaProfileSettings settings = current.GetGoidaSettings().Clone();
+                        settings.Enabled = true;
+                        settings.ActiveNodeId = goidaPendingActiveNodeId!;
+                        if (settings.SelectionMode == GoidaSelectionMode.ManualFixed)
+                            settings.PinnedNodeId = goidaPendingActiveNodeId!;
+                        current.Goida = settings;
+                        settingsHandler.UpdateUserSettings(current);
+                        goidaHandler.Manager.UpdateSettings(settings);
+                        goidaHandler.Manager.SetActiveNode(goidaPendingActiveNodeId!);
+                        goidaPendingActiveNodeId = null;
+                    }
+
+                    ApplyGoidaSettingsToControls();
+                });
+
+                goidaNodesListRefreshPending = false;
+                goidaNodesListRefreshPendingForceLatencySort = false;
+
+                Dispatcher.UIThread.Post(() =>
+                {
+                    try
+                    {
+                        RefreshGoidaNodesListBox();
+                        RefreshGoidaSummary();
+                        UpdateGoidaStatusSummary();
+                        SetGoidaStatusTextBlock(Localize("Lang.Goida.ConfirmHint"));
+                    }
+                    catch (Exception ex)
+                    {
+                        DiagnosticLog.WriteException("MainView.Goida.ApplyUi", ex);
+                    }
+                    finally
+                    {
+                        goidaApplyUiPending = false;
+                    }
+                }, DispatcherPriority.Background);
+            }
+            catch (Exception ex)
+            {
+                goidaApplyUiPending = false;
+                DiagnosticLog.WriteException("MainView.Goida.Apply", ex);
+            }
         }
     }
 }
