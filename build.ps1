@@ -1001,6 +1001,24 @@ function Get-TorBundle {
 
 # ─── Шаг 4: Сборка .NET приложения ───────────────────────────────────────────
 
+function Remove-PublishUserArtifacts {
+    param([string]$PublishDir)
+
+    if ([string]::IsNullOrWhiteSpace($PublishDir) -or -not (Test-Path $PublishDir)) {
+        return
+    }
+
+    foreach ($relativePath in @("Settings.json", "Configs", "Logs")) {
+        $artifactPath = Join-Path $PublishDir $relativePath
+        if (-not (Test-Path $artifactPath)) {
+            continue
+        }
+
+        Remove-Item $artifactPath -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Info "Removed user runtime artifact from publish output: $relativePath"
+    }
+}
+
 function Stop-RunningWindowsAppForBuild {
     param(
         [string]$Configuration,
@@ -1133,6 +1151,7 @@ function Build-DotNetApp {
                 Write-Err "dotnet publish: ошибка (код: $LASTEXITCODE)"
                 exit $LASTEXITCODE
             }
+            Remove-PublishUserArtifacts -PublishDir $absOutput
             Write-Success "Опубликовано в: $absOutput"
         }
         else {

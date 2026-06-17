@@ -27,6 +27,18 @@
 /publish-windows
 /dist
 
+# User runtime data (must never ship in release archives)
+/Settings.json
+/Configs/
+/Logs/
+publish-windows-v*/
+publish-android-v*/
+publish-linux-v*/
+publish-macos-*/
+InvisibleGorilla-XRay-v*.zip
+InvisibleGorilla-XRay-v*.tar.gz
+InvisibleGorilla-XRay-v*.apk
+
 # Bundled Tor binaries + geoip (fetched by build scripts, not committed)
 /InvisibleGorilla-XRay/Tor/
 /InvisibleGorilla-XRay.Linux/Tor/
