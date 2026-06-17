@@ -45,18 +45,34 @@ namespace InvisibleGorillaXRay.Services
 
     public sealed class ConnectionInfoService
     {
-        private const string PrimaryEndpoint = "https://ipinfo.io/json";
-        private const string FallbackEndpoint = "https://ifconfig.co/json";
+        private static readonly string[] LookupEndpoints =
+        {
+            "https://ipinfo.io/json",
+            "https://ifconfig.co/json",
+            "https://api.ipify.org?format=json",
+            "https://ipwho.is/",
+            "https://ipapi.co/json/"
+        };
+
         private const string UserAgent = "InvisibleGorilla-XRay";
 
         public async Task<ConnectionInfo> LookupAsync(IWebProxy proxy = null, CancellationToken token = default)
         {
-            ConnectionInfo primary = await TryLookupAsync(PrimaryEndpoint, proxy, token).ConfigureAwait(false);
-            if (primary.Ok || token.IsCancellationRequested)
-                return primary;
+            ConnectionInfo lastFailure = new ConnectionInfo { Ok = false, Error = "all endpoints failed" };
 
-            ConnectionInfo fallback = await TryLookupAsync(FallbackEndpoint, proxy, token).ConfigureAwait(false);
-            return fallback.Ok ? fallback : primary;
+            foreach (string endpoint in LookupEndpoints)
+            {
+                if (token.IsCancellationRequested)
+                    return lastFailure;
+
+                ConnectionInfo result = await TryLookupAsync(endpoint, proxy, token).ConfigureAwait(false);
+                if (result.Ok)
+                    return result;
+
+                lastFailure = result;
+            }
+
+            return lastFailure;
         }
 
         /// <summary>
@@ -106,8 +122,8 @@ namespace InvisibleGorillaXRay.Services
                 if (string.IsNullOrWhiteSpace(ip))
                     return new ConnectionInfo { Ok = false, Error = "No IP in response" };
 
-                string countryCode = FirstNonEmpty(root, "country_iso", "country");
-                string countryName = FirstNonEmpty(root, "country_name");
+                string countryCode = FirstNonEmpty(root, "country_iso", "country_code", "country");
+                string countryName = FirstNonEmpty(root, "country_name", "country");
                 if (countryCode.Length > 2)
                 {
                     countryName = string.IsNullOrWhiteSpace(countryName) ? countryCode : countryName;

@@ -28,10 +28,13 @@ namespace InvisibleGorillaXRay
         private bool isConnected;
         private string baselineIp;
 
-        // null = not checked yet / VPN idle, true = tunnel passes traffic, false = tunnel dead.
+        // null = not checked yet / VPN idle, true = tunnel passes traffic, false = confirmed IP leak.
         private bool? lastTunnelCheckOk;
         private int consecutiveTunnelFailures;
+        private int connectionInfoFailureRetries;
+        private const int ConnectionInfoMaxFailureRetries = 4;
         private DateTime goidaSwitchGraceUntil = DateTime.MinValue;
+        private DateTime connectionCheckGraceUntil = DateTime.MinValue;
 
         private Func<bool> isNeedToShowPolicyWindow;
         private Func<bool> shouldStartHidden;
@@ -678,6 +681,8 @@ namespace InvisibleGorillaXRay
 
             isConnected = true;
             consecutiveTunnelFailures = 0;
+            connectionInfoFailureRetries = 0;
+            connectionCheckGraceUntil = DateTime.UtcNow.AddSeconds(15);
             if (IsGoidaProfileActive())
                 goidaSwitchGraceUntil = DateTime.UtcNow.AddSeconds(20);
             connectionInfoTimer.Interval = IsGoidaProfileActive()
@@ -774,17 +779,33 @@ namespace InvisibleGorillaXRay
 
             if (!info.Ok)
             {
+                // A failed lookup (SSL timeout, ipinfo down, etc.) is not proof the tunnel
+                // is broken. Retry with backoff; never tear down a live session for this.
+                if (connected
+                    && !string.Equals(info.Error, "canceled", StringComparison.OrdinalIgnoreCase)
+                    && connectionInfoFailureRetries < ConnectionInfoMaxFailureRetries)
+                {
+                    connectionInfoFailureRetries++;
+                    textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Checking");
+                    textInfoVerdict.Foreground = Brushes.Gray;
+                    infoStatusDot.Fill = Brushes.Gray;
+                    ApplyGoidaSummary();
+                    ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(4));
+                    return;
+                }
+
                 textInfoIp.Text = Loc("Lang.ConnectionInfo.Unknown");
                 ClearConnectionInfoDetails();
-                textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Error");
+                textInfoVerdict.Text = string.IsNullOrWhiteSpace(info.Error)
+                    ? Loc("Lang.ConnectionInfo.Error")
+                    : $"{Loc("Lang.ConnectionInfo.Error")} ({info.Error})";
                 textInfoVerdict.Foreground = Brushes.Gray;
                 infoStatusDot.Fill = Brushes.Gray;
-                lastTunnelCheckOk = connected ? false : (bool?)null;
                 ApplyGoidaSummary();
-                if (connected)
-                    RegisterTunnelFailure();
                 return;
             }
+
+            connectionInfoFailureRetries = 0;
 
             textInfoIp.Text = info.Ip;
             ApplyConnectionInfoDetails(info);
@@ -792,7 +813,7 @@ namespace InvisibleGorillaXRay
             ApplyVerdict(connected, info.Ip);
             ApplyGoidaSummary();
 
-            if (isConnected && lastTunnelCheckOk != true)
+            if (isConnected && lastTunnelCheckOk == false)
                 RegisterTunnelFailure();
             else
                 consecutiveTunnelFailures = 0;
@@ -828,6 +849,12 @@ namespace InvisibleGorillaXRay
 
         private void RegisterTunnelFailure()
         {
+            if (DateTime.UtcNow < connectionCheckGraceUntil)
+            {
+                consecutiveTunnelFailures = 0;
+                return;
+            }
+
             if (IsGoidaProfileActive() && DateTime.UtcNow < goidaSwitchGraceUntil)
             {
                 consecutiveTunnelFailures = 0;

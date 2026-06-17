@@ -2622,9 +2622,6 @@ namespace InvisibleGorillaXRay.Android.Views
                 ConnectionInfoLocationText.Text = string.Empty;
                 ConnectionInfoOrgText.Text = string.Empty;
                 ConnectionInfoVerdictText.Text = LocalizeFormat("Lang.ConnectionInfo.Error", info.Error);
-                lastTunnelCheckOk = isConnectionInfoConnected ? false : null;
-                if (isConnectionInfoConnected)
-                    RegisterTunnelFailure();
                 return;
             }
 
