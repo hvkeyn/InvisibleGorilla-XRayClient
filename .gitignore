@@ -39,6 +39,17 @@ InvisibleGorilla-XRay-v*.zip
 InvisibleGorilla-XRay-v*.tar.gz
 InvisibleGorilla-XRay-v*.apk
 
+# Local release/upload helper artifacts (never commit)
+/_*
+/_release-staging-*/
+/_dev*.png
+/_emu*
+/_device-logcat.txt
+/_merge-*.json
+/_pr-*.json
+/_release-*.json
+/_release-*.md
+
 # Bundled Tor binaries + geoip (fetched by build scripts, not committed)
 /InvisibleGorilla-XRay/Tor/
 /InvisibleGorilla-XRay.Linux/Tor/
