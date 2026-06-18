@@ -52,6 +52,13 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.1
+
+- **Linux TUN:** batched `pkexec`/`sudo` (1–2 prompts per connect/disconnect); optional polkit rule (`scripts/linux/install-tun-policy.sh`).
+- **Linux app rules:** async app list, no freeze on template rename; saving rules does not reconnect VPN.
+- **Simply Linux 11.1 guide:** [docs/linux-simply-linux.md](docs/linux-simply-linux.md).
+- **Release hygiene:** Linux/Windows publish bundles strip `Settings.json`, `Configs/`, `Logs/`, Goida caches before packaging.
+
 ## What's new in v3.6.0
 
 - **Linux TUN: one pkexec per phase** — `ip`/`resolvectl` commands are batched; connect/disconnect needs 1–2 password prompts instead of ~10 (optional polkit rule for zero prompts: [Simply Linux guide](docs/linux-simply-linux.md)).

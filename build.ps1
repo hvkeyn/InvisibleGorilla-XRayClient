@@ -1008,7 +1008,7 @@ function Remove-PublishUserArtifacts {
         return
     }
 
-    foreach ($relativePath in @("Settings.json", "Configs", "Logs")) {
+    foreach ($relativePath in @("Settings.json", "Configs", "Logs", "Goida")) {
         $artifactPath = Join-Path $PublishDir $relativePath
         if (-not (Test-Path $artifactPath)) {
             continue
@@ -1017,6 +1017,18 @@ function Remove-PublishUserArtifacts {
         Remove-Item $artifactPath -Recurse -Force -ErrorAction SilentlyContinue
         Write-Info "Removed user runtime artifact from publish output: $relativePath"
     }
+
+    Get-ChildItem -Path $PublishDir -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Name -eq '__GoidaProfile__.json' -or
+            $_.Name -like '*-nodes-cache.json' -or
+            $_.Name -like '*-goida-cache.json' -or
+            $_.Name -eq 'linux-transparent-proxy-config.json'
+        } |
+        ForEach-Object {
+            Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+            Write-Info "Removed user runtime artifact from publish output: $($_.Name)"
+        }
 }
 
 function Stop-RunningWindowsAppForBuild {
@@ -1176,7 +1188,7 @@ $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
 Write-Host ""
 Write-Host "  Invisible Gorilla - XRay Client :: Build Script" -ForegroundColor Magenta
-Write-Host "  v3.6.0.0" -ForegroundColor DarkGray
+Write-Host "  v3.6.1.0" -ForegroundColor DarkGray
 Write-Host ""
 
 Test-Prerequisites -BuildStep $Step

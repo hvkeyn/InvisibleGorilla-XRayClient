@@ -34,7 +34,7 @@ set -euo pipefail
 
 # ─── Settings ─────────────────────────────────────────────────────────────────
 
-readonly APP_VERSION="3.6.0.0"
+readonly APP_VERSION="3.6.1.0"
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly WRAPPER_DIR="$SCRIPT_DIR/XRay-Wrapper"
 readonly LINUX_DIR="$SCRIPT_DIR/InvisibleGorilla-XRay.Linux"
@@ -617,6 +617,8 @@ build_dotnet_app() {
         exit 1
     fi
 
+    remove_publish_user_artifacts "$abs_output"
+
     chmod +x "$app_binary"
     ok "Published to: $abs_output"
     ok "Linux binary: $app_binary ($(format_size "$(stat -c%s "$app_binary")"))"
@@ -624,6 +626,26 @@ build_dotnet_app() {
 }
 
 # ─── Step 5: Bundle ───────────────────────────────────────────────────────────
+
+remove_publish_user_artifacts() {
+    local root="$1"
+    [[ -d "$root" ]] || return 0
+
+    local rel
+    for rel in Settings.json Configs Logs Goida; do
+        if [[ -e "$root/$rel" ]]; then
+            rm -rf "$root/$rel"
+            ok "Removed user runtime artifact from bundle: $rel"
+        fi
+    done
+
+    find "$root" -type f \( \
+        -name '__GoidaProfile__.json' -o \
+        -name '*-nodes-cache.json' -o \
+        -name '*-goida-cache.json' -o \
+        -name 'linux-transparent-proxy-config.json' \
+    \) -delete 2>/dev/null || true
+}
 
 generate_png_icon() {
     local out_png="$1"
@@ -680,6 +702,7 @@ package_bundle() {
     chmod +x "$app_binary"
 
     cp -R "$publish_dir/"* "$stage/bin/"
+    remove_publish_user_artifacts "$stage/bin"
     chmod +x "$stage/bin/$APP_BINARY_NAME"
     ok "Bundled: Avalonia GUI binary"
 

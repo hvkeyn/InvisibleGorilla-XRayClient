@@ -31,7 +31,7 @@ chmod +x build.sh
 ## 3. Запуск без установки
 
 ```bash
-cd dist-linux/InvisibleGorilla-XRay-Linux-linux-x64-v3.6.0.0
+cd dist-linux/InvisibleGorilla-XRay-Linux-linux-x64-v3.6.1.0
 chmod +x run-igxray
 ./run-igxray
 ```
@@ -39,7 +39,7 @@ chmod +x run-igxray
 ## 4. Установка в систему (рекомендуется)
 
 ```bash
-cd dist-linux/InvisibleGorilla-XRay-Linux-linux-x64-v3.6.0.0
+cd dist-linux/InvisibleGorilla-XRay-Linux-linux-x64-v3.6.1.0
 chmod +x install.sh
 ./install.sh
 ```
@@ -54,7 +54,7 @@ igxray
 
 ## 5. Один раз настроить права для TUN (без пароля на каждый чих)
 
-Начиная с **v3.6.0**, команды `ip` / `resolvectl` выполняются **пакетом** (1–2 запроса pkexec на подключение вместо ~10). Чтобы **вообще не спрашивать пароль** при каждом подключении/отключении:
+Начиная с **v3.6.1**, команды `ip` / `resolvectl` выполняются **пакетом** (1–2 запроса pkexec на подключение вместо ~10). Чтобы **вообще не спрашивать пароль** при каждом подключении/отключении:
 
 ```bash
 cd InvisibleGorilla-XRayClient   # корень репозитория
@@ -101,10 +101,10 @@ curl -4 ifconfig.me
 
 | Симптом | Решение |
 |--------|---------|
-| Много запросов пароля | Обновитесь до v3.6.0+, установите polkit rule (раздел 5) |
+| Много запросов пароля | Обновитесь до v3.6.1+, установите polkit rule (раздел 5) |
 | `Neither pkexec nor sudo` | `sudo apt-get install polkit` |
 | `tun2socks binary not found` | Пересоберите `./build.sh --step tun2socks` |
-| Зависание в «Правила приложений» | Обновитесь до v3.6.0+ (фоновая загрузка списка приложений) |
+| Зависание в «Правила приложений» | Обновитесь до v3.6.1+ (фоновая загрузка списка приложений) |
 | Нет .NET 8 | Установите SDK 8 или соберите на машине с `./build.sh` |
 
 Логи: каталог данных приложения рядом с бинарником (см. `Settings.json` / diagnostic log в UI).
