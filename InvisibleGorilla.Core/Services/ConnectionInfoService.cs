@@ -54,25 +54,47 @@ namespace InvisibleGorillaXRay.Services
             "https://ipapi.co/json/"
         };
 
+        // While the tunnel is live, keep probes light: one SOCKS connection at a time,
+        // fewer endpoints, shorter timeouts — avoids FD exhaustion on Linux TUN.
+        private static readonly string[] TunnelLookupEndpoints =
+        {
+            "https://api.ipify.org?format=json",
+            "https://ipinfo.io/json"
+        };
+
+        private static readonly SemaphoreSlim LookupGate = new(1, 1);
+
         private const string UserAgent = "InvisibleGorilla-XRay";
 
         public async Task<ConnectionInfo> LookupAsync(IWebProxy proxy = null, CancellationToken token = default)
         {
-            ConnectionInfo lastFailure = new ConnectionInfo { Ok = false, Error = "all endpoints failed" };
-
-            foreach (string endpoint in LookupEndpoints)
+            await LookupGate.WaitAsync(token).ConfigureAwait(false);
+            try
             {
-                if (token.IsCancellationRequested)
-                    return lastFailure;
+                bool throughTunnel = proxy != null;
+                string[] endpoints = throughTunnel ? TunnelLookupEndpoints : LookupEndpoints;
+                int timeoutSeconds = throughTunnel ? 6 : 12;
+                ConnectionInfo lastFailure = new ConnectionInfo { Ok = false, Error = "all endpoints failed" };
 
-                ConnectionInfo result = await TryLookupAsync(endpoint, proxy, token).ConfigureAwait(false);
-                if (result.Ok)
-                    return result;
+                foreach (string endpoint in endpoints)
+                {
+                    if (token.IsCancellationRequested)
+                        return lastFailure;
 
-                lastFailure = result;
+                    ConnectionInfo result = await TryLookupAsync(endpoint, proxy, timeoutSeconds, token)
+                        .ConfigureAwait(false);
+                    if (result.Ok)
+                        return result;
+
+                    lastFailure = result;
+                }
+
+                return lastFailure;
             }
-
-            return lastFailure;
+            finally
+            {
+                LookupGate.Release();
+            }
         }
 
         /// <summary>
@@ -93,20 +115,26 @@ namespace InvisibleGorillaXRay.Services
             return LookupAsync(proxy, token);
         }
 
-        private static async Task<ConnectionInfo> TryLookupAsync(string url, IWebProxy proxy, CancellationToken token)
+        private static async Task<ConnectionInfo> TryLookupAsync(
+            string url,
+            IWebProxy proxy,
+            int timeoutSeconds,
+            CancellationToken token)
         {
+            TimeSpan timeout = TimeSpan.FromSeconds(Math.Clamp(timeoutSeconds, 3, 30));
             using SocketsHttpHandler handler = new SocketsHttpHandler
             {
                 UseProxy = proxy != null,
                 Proxy = proxy,
                 PreAuthenticate = proxy != null,
                 AllowAutoRedirect = true,
-                ConnectTimeout = TimeSpan.FromSeconds(12)
+                ConnectTimeout = timeout,
+                MaxConnectionsPerServer = proxy != null ? 1 : 4
             };
 
-            using HttpClient client = new HttpClient(handler)
+            using HttpClient client = new HttpClient(handler, disposeHandler: true)
             {
-                Timeout = TimeSpan.FromSeconds(12)
+                Timeout = timeout
             };
             client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
 

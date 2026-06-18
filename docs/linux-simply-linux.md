@@ -105,6 +105,7 @@ curl -4 ifconfig.me
 | `Neither pkexec nor sudo` | `sudo apt-get install polkit` |
 | `tun2socks binary not found` | Пересоберите `./build.sh --step tun2socks` |
 | Зависание в «Правила приложений» | Обновитесь до v3.6.1+ (фоновая загрузка списка приложений) |
+| Падение / `too many open files` при TUN | Обновитесь до сборки с фиксом connection-info; запускайте через `./run-igxray` (поднимает `ulimit -n`) |
 | Нет .NET 8 | Установите SDK 8 или соберите на машине с `./build.sh` |
 
 Логи: каталог данных приложения рядом с бинарником (см. `Settings.json` / diagnostic log в UI).

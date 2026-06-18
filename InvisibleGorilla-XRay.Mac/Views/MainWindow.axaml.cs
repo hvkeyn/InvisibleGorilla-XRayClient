@@ -27,6 +27,13 @@ namespace InvisibleGorillaXRay.Mac.Views
         private readonly ConnectionInfoService connectionInfoService = new();
         private DispatcherTimer connectionInfoTimer;
         private CancellationTokenSource connectionInfoCancellation;
+        private CancellationTokenSource scheduledRefreshCts;
+        private readonly SemaphoreSlim connectionInfoRefreshGate = new(1, 1);
+        private int connectionInfoFailureRetries;
+        private int connectionInfoProxyWaitRetries;
+        private const int ConnectionInfoMaxFailureRetries = 4;
+        private const int ConnectionInfoMaxProxyWaitRetries = 8;
+        private DateTime connectionCheckGraceUntil = DateTime.MinValue;
         private string baselineIp = string.Empty;
         private bool isConnected;
 
@@ -53,6 +60,7 @@ namespace InvisibleGorillaXRay.Mac.Views
         private Action onBugReportingClick;
         private Action<string> onCustomLinkClick;
         private Func<InvisibleGorillaXRay.Services.Goida.GoidaMainPresentation> getGoidaPresentation;
+        private Func<IWebProxy> createActiveProbeProxy;
 
         private LocalizationService LocalizationService => ServiceLocator.Get<LocalizationService>();
         private AnalyticsService AnalyticsService => ServiceLocator.Get<AnalyticsService>();
@@ -87,7 +95,8 @@ namespace InvisibleGorillaXRay.Mac.Views
             Action onGitHubClick,
             Action onBugReportingClick,
             Action<string> onCustomLinkClick,
-            Func<InvisibleGorillaXRay.Services.Goida.GoidaMainPresentation> getGoidaPresentation = null)
+            Func<InvisibleGorillaXRay.Services.Goida.GoidaMainPresentation> getGoidaPresentation = null,
+            Func<IWebProxy> createActiveProbeProxy = null)
         {
             this.isNeedToShowPolicyWindow = isNeedToShowPolicyWindow;
             this.shouldStartHidden = shouldStartHidden;
@@ -112,6 +121,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             this.onBugReportingClick = onBugReportingClick;
             this.onCustomLinkClick = onCustomLinkClick;
             this.getGoidaPresentation = getGoidaPresentation;
+            this.createActiveProbeProxy = createActiveProbeProxy;
 
             UpdateUI();
         }
@@ -437,6 +447,9 @@ namespace InvisibleGorillaXRay.Mac.Views
         private void ShowRunStatus()
         {
             isConnected = true;
+            connectionInfoFailureRetries = 0;
+            connectionInfoProxyWaitRetries = 0;
+            connectionCheckGraceUntil = DateTime.UtcNow.AddSeconds(20);
             statusRun.IsVisible = true;
             statusStop.IsVisible = false;
             statusWaitForRun.IsVisible = false;
@@ -444,12 +457,15 @@ namespace InvisibleGorillaXRay.Mac.Views
             buttonStop.IsVisible = true;
             buttonCancel.IsVisible = false;
             buttonRun.IsVisible = false;
-            ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(3));
+            ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(12));
         }
 
         private void ShowStopStatus()
         {
             isConnected = false;
+            connectionInfoFailureRetries = 0;
+            connectionInfoProxyWaitRetries = 0;
+            connectionCheckGraceUntil = DateTime.MinValue;
             statusStop.IsVisible = true;
             statusRun.IsVisible = false;
             statusWaitForRun.IsVisible = false;
@@ -478,7 +494,7 @@ namespace InvisibleGorillaXRay.Mac.Views
 
             connectionInfoTimer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromSeconds(45)
+                Interval = TimeSpan.FromSeconds(60)
             };
             connectionInfoTimer.Tick += (_, _) => _ = RefreshConnectionInfoAsync();
             connectionInfoTimer.Start();
@@ -487,12 +503,19 @@ namespace InvisibleGorillaXRay.Mac.Views
 
         private void ScheduleConnectionInfoRefresh(TimeSpan delay)
         {
+            scheduledRefreshCts?.Cancel();
+            scheduledRefreshCts = new CancellationTokenSource();
+            CancellationToken token = scheduledRefreshCts.Token;
+
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    await Task.Delay(delay).ConfigureAwait(false);
+                    await Task.Delay(delay, token).ConfigureAwait(false);
                     await RefreshConnectionInfoAsync().ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
                 }
                 catch
                 {
@@ -502,43 +525,99 @@ namespace InvisibleGorillaXRay.Mac.Views
 
         private async Task RefreshConnectionInfoAsync()
         {
-            connectionInfoCancellation?.Cancel();
-            connectionInfoCancellation = new CancellationTokenSource();
-            CancellationToken token = connectionInfoCancellation.Token;
-
-            bool connected = isConnected;
-
-            // Mirror real traffic: probe through the local xray listener in proxy mode, or
-            // directly in TUN/disconnected. A direct request would ignore a SOCKS proxy and
-            // always report the real ISP IP even while the tunnel works.
-            IWebProxy probeProxy = null;
-            string modeText = string.Empty;
-            UserSettings settings = getUserSettings?.Invoke();
-            if (settings != null)
-            {
-                probeProxy = ConnectionProbe.BuildExitProxy(connected, settings.GetMode(), settings.GetProtocol(), settings.GetProxyPort());
-                string outbound = ConnectionProbe.DetectOutboundProtocol(getConfig?.Invoke()?.Path);
-                modeText = ConnectionProbe.DescribeMode(settings.GetMode(), settings.GetProtocol(), settings.GetTorSettings(), outbound);
-            }
-
-            Dispatcher.UIThread.Post(() =>
-            {
-                infoStatusDot.Fill = Brushes.Gray;
-                textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Checking");
-                SetModeBadge(connected, modeText);
-            });
-
-            ConnectionInfo info = await connectionInfoService.LookupAsync(probeProxy, token).ConfigureAwait(false);
-            if (token.IsCancellationRequested)
+            if (!await connectionInfoRefreshGate.WaitAsync(0).ConfigureAwait(false))
                 return;
 
-            Dispatcher.UIThread.Post(() => ApplyConnectionInfo(info));
+            try
+            {
+                connectionInfoCancellation?.Cancel();
+                connectionInfoCancellation = new CancellationTokenSource();
+                CancellationToken token = connectionInfoCancellation.Token;
+
+                bool connected = isConnected;
+
+                if (connected && DateTime.UtcNow < connectionCheckGraceUntil)
+                {
+                    TimeSpan wait = connectionCheckGraceUntil - DateTime.UtcNow + TimeSpan.FromSeconds(2);
+                    ScheduleConnectionInfoRefresh(wait);
+                    return;
+                }
+
+                IWebProxy probeProxy = null;
+                string modeText = string.Empty;
+                UserSettings settings = getUserSettings?.Invoke();
+                if (settings != null)
+                {
+                    if (connected)
+                        probeProxy = createActiveProbeProxy?.Invoke();
+
+                    if (probeProxy == null)
+                    {
+                        probeProxy = ConnectionProbe.BuildExitProxy(
+                            connected,
+                            settings.GetMode(),
+                            settings.GetProtocol(),
+                            settings.GetProxyPort());
+                    }
+
+                    string outbound = ConnectionProbe.DetectOutboundProtocol(getConfig?.Invoke()?.Path);
+                    modeText = ConnectionProbe.DescribeMode(
+                        settings.GetMode(),
+                        settings.GetProtocol(),
+                        settings.GetTorSettings(),
+                        outbound);
+                }
+
+                if (connected && probeProxy == null)
+                {
+                    if (connectionInfoProxyWaitRetries < ConnectionInfoMaxProxyWaitRetries)
+                    {
+                        connectionInfoProxyWaitRetries++;
+                        ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(3));
+                        return;
+                    }
+
+                    connectionInfoProxyWaitRetries = 0;
+                }
+                else
+                {
+                    connectionInfoProxyWaitRetries = 0;
+                }
+
+                Dispatcher.UIThread.Post(() =>
+                {
+                    infoStatusDot.Fill = Brushes.Gray;
+                    textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Checking");
+                    SetModeBadge(connected, modeText);
+                });
+
+                ConnectionInfo info = await connectionInfoService.LookupAsync(probeProxy, token).ConfigureAwait(false);
+                if (token.IsCancellationRequested)
+                    return;
+
+                Dispatcher.UIThread.Post(() => ApplyConnectionInfo(info));
+            }
+            finally
+            {
+                connectionInfoRefreshGate.Release();
+            }
         }
 
         private void ApplyConnectionInfo(ConnectionInfo info)
         {
             if (!info.Ok)
             {
+                if (isConnected
+                    && !string.Equals(info.Error, "Canceled", StringComparison.OrdinalIgnoreCase)
+                    && connectionInfoFailureRetries < ConnectionInfoMaxFailureRetries)
+                {
+                    connectionInfoFailureRetries++;
+                    infoStatusDot.Fill = Brushes.Gray;
+                    textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Checking");
+                    ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(5));
+                    return;
+                }
+
                 infoStatusDot.Fill = Brushes.IndianRed;
                 textInfoIp.Text = Loc("Lang.ConnectionInfo.Unknown");
                 textInfoFlag.Text = "🌐";
@@ -548,6 +627,8 @@ namespace InvisibleGorillaXRay.Mac.Views
                 textInfoVerdict.Text = string.Format(Loc("Lang.ConnectionInfo.Error"), info.Error);
                 return;
             }
+
+            connectionInfoFailureRetries = 0;
 
             if (string.IsNullOrWhiteSpace(baselineIp) && !isConnected)
                 baselineIp = info.Ip;

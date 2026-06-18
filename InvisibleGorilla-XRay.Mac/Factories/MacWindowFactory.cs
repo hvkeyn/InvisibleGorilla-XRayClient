@@ -101,7 +101,8 @@ namespace InvisibleGorillaXRay.Mac.Factories
                 onGitHubClick: linkHandler.OpenGitHubRepositoryLink,
                 onBugReportingClick: linkHandler.OpenBugReportingLink,
                 onCustomLinkClick: linkHandler.OpenCustomLink,
-                getGoidaPresentation: BuildGoidaPresentation
+                getGoidaPresentation: BuildGoidaPresentation,
+                createActiveProbeProxy: core.CreateActiveProbeProxy
             );
 
             return mainWindow;

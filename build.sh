@@ -709,6 +709,8 @@ package_bundle() {
     cat > "$stage/$APP_RUNNER_NAME" <<'RUNNER'
 #!/usr/bin/env bash
 set -euo pipefail
+# TUN mode can open many sockets via tun2socks; raise the soft FD limit when possible.
+ulimit -n 65535 2>/dev/null || ulimit -n 8192 2>/dev/null || true
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 exec "$SCRIPT_DIR/bin/InvisibleGorilla-XRay.Linux" "$@"
 RUNNER
