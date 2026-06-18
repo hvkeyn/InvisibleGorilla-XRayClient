@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -62,7 +63,6 @@ namespace InvisibleGorillaXRay.Mac.Views
             workingBindings.AddRange(settings.GetAppRuleTemplateBindings());
 
             discoveredMacApps.Clear();
-            discoveredMacApps.AddRange(MacInstalledAppDiscovery.GetApps());
 
             textBlockCurrentConfig.Text = string.IsNullOrWhiteSpace(currentConfigPath)
                 ? Localize("Lang.AppRules.NoConfigSelected")
@@ -71,6 +71,56 @@ namespace InvisibleGorillaXRay.Mac.Views
 
             string selectedTemplateId = settings.GetBoundAppRuleTemplateId(currentConfigPath);
             PopulateTemplateSelector(selectedTemplateId);
+            BeginLoadInstalledApps();
+        }
+
+        private async void BeginLoadInstalledApps()
+        {
+            await LoadInstalledAppsAsync();
+            if (!isReady)
+                return;
+
+            RenderDiscoveredApps(GetTemplateById(activeTemplateId));
+        }
+
+        private async Task LoadInstalledAppsAsync()
+        {
+            textBlockNoApps.IsVisible = true;
+            panelAppItems.Children.Clear();
+            appRuleToggles.Clear();
+
+            IReadOnlyList<MacInstalledAppInfo> apps = await Task.Run(() => MacInstalledAppDiscovery.GetApps());
+            discoveredMacApps.Clear();
+            discoveredMacApps.AddRange(apps);
+        }
+
+        private void UpdateTemplateComboDisplayName(string templateId, string displayName)
+        {
+            if (comboBoxTemplate.ItemsSource is not IEnumerable<TemplateComboItem> items)
+                return;
+
+            List<TemplateComboItem> updatedItems = items.ToList();
+            for (int i = 0; i < updatedItems.Count; i++)
+            {
+                if (!string.Equals(updatedItems[i].Id, templateId, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                updatedItems[i] = new TemplateComboItem
+                {
+                    Id = updatedItems[i].Id,
+                    Name = displayName
+                };
+                break;
+            }
+
+            TemplateComboItem? selectedItem = updatedItems.FirstOrDefault(item =>
+                string.Equals(item.Id, activeTemplateId, StringComparison.OrdinalIgnoreCase));
+
+            isApplyingTemplate = true;
+            comboBoxTemplate.ItemsSource = updatedItems;
+            if (selectedItem != null)
+                comboBoxTemplate.SelectedItem = selectedItem;
+            isApplyingTemplate = false;
         }
 
         private void PopulateTemplateSelector(string preferredTemplateId)
@@ -308,7 +358,7 @@ namespace InvisibleGorillaXRay.Mac.Views
 
             CaptureActiveTemplateState();
             GetTemplateById(activeTemplateId).Name = textBoxTemplateName.Text?.Trim() ?? string.Empty;
-            PopulateTemplateSelector(activeTemplateId);
+            UpdateTemplateComboDisplayName(activeTemplateId, GetTemplateDisplayName(GetTemplateById(activeTemplateId)));
         }
 
         private void OnModeChanged(object? sender, RoutedEventArgs e)
@@ -328,12 +378,11 @@ namespace InvisibleGorillaXRay.Mac.Views
             RenderDiscoveredApps(GetTemplateById(activeTemplateId));
         }
 
-        private void OnRefreshAppsClick(object? sender, RoutedEventArgs e)
+        private async void OnRefreshAppsClick(object? sender, RoutedEventArgs e)
         {
             CaptureActiveTemplateState();
 
-            discoveredMacApps.Clear();
-            discoveredMacApps.AddRange(MacInstalledAppDiscovery.GetApps());
+            await LoadInstalledAppsAsync();
             RenderDiscoveredApps(GetTemplateById(activeTemplateId));
         }
 

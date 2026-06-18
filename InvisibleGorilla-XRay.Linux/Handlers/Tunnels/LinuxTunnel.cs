@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
@@ -14,9 +15,8 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
     /// <summary>
     /// Linux TUN implementation using xjasonlyu/tun2socks.
     /// Routes all traffic through a tun device to the local SOCKS5 listener.
-    /// Requires CAP_NET_ADMIN — the build script ships a small pkexec-friendly
-    /// invocation. Privileged commands are run via pkexec when available, with
-    /// sudo as a fallback. Without privileges, returns an actionable error.
+    /// Requires CAP_NET_ADMIN — privileged commands are batched into one pkexec/sudo
+    /// invocation per setup/teardown phase.
     /// </summary>
     public class LinuxTunnel : ITunnel
     {
@@ -38,7 +38,7 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
                     $"tun2socks binary not found at {CorePath.TUN_EXE}. Run ./build.sh to fetch and bundle it.");
             }
 
-            string privileged = ResolvePrivilegedFront();
+            string privileged = LinuxPrivilegedRunner.ResolvePrivilegedFront();
             if (string.IsNullOrEmpty(privileged))
             {
                 return new Status(
@@ -55,7 +55,13 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
 
                 SaveOriginalRoutes();
 
-                CreateTunDevice(privileged, ip);
+                string user = Environment.UserName;
+                LinuxPrivilegedRunner.RunBatch(new[]
+                {
+                    $"ip tuntap add dev {TUN_DEVICE} mode tun user {user}",
+                    $"ip addr add {ip}/24 dev {TUN_DEVICE}",
+                    $"ip link set dev {TUN_DEVICE} up"
+                }, privileged);
 
                 StartTun2Socks(ip, port, localProxyCredentials);
 
@@ -64,10 +70,21 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
 
                 Thread.Sleep(1500);
 
-                ConfigureRoutes(privileged, ip, server);
+                List<string> routeCommands = new();
+                if (!string.IsNullOrEmpty(originalGateway) && !string.IsNullOrEmpty(server))
+                    routeCommands.Add($"ip route add {server}/32 via {originalGateway}");
 
-                if (!string.IsNullOrEmpty(dns))
-                    ConfigureDns(privileged, dns);
+                routeCommands.Add($"ip route add 0.0.0.0/1 dev {TUN_DEVICE}");
+                routeCommands.Add($"ip route add 128.0.0.0/1 dev {TUN_DEVICE}");
+                LinuxPrivilegedRunner.RunBatch(routeCommands, privileged);
+
+                if (!string.IsNullOrEmpty(dns) && CommandExists("resolvectl"))
+                {
+                    LinuxPrivilegedRunner.RunBatch(new[]
+                    {
+                        $"resolvectl dns {TUN_DEVICE} {dns}"
+                    }, privileged);
+                }
 
                 return new Status(Code.SUCCESS, SubCode.SUCCESS, null);
             }
@@ -80,12 +97,30 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
 
         public void Disable()
         {
-            string privileged = ResolvePrivilegedFront();
+            string privileged = LinuxPrivilegedRunner.ResolvePrivilegedFront();
 
             try { StopTun2Socks(); } catch { }
-            try { RestoreRoutes(privileged); } catch { }
-            try { RestoreDns(privileged); } catch { }
-            try { DestroyTunDevice(privileged); } catch { }
+
+            if (!string.IsNullOrEmpty(privileged))
+            {
+                List<string> cleanupCommands = new()
+                {
+                    "ip route del 0.0.0.0/1",
+                    "ip route del 128.0.0.0/1",
+                    $"ip link set dev {TUN_DEVICE} down",
+                    $"ip tuntap del dev {TUN_DEVICE} mode tun"
+                };
+
+                if (CommandExists("resolvectl"))
+                    cleanupCommands.Insert(2, $"resolvectl revert {TUN_DEVICE}");
+
+                try
+                {
+                    LinuxPrivilegedRunner.RunBatch(cleanupCommands, privileged, continueOnError: true);
+                }
+                catch { }
+            }
+
             try { LinuxAppRulesBridge.Clear(); } catch { }
         }
 
@@ -100,28 +135,6 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
             SettingsHandler settingsHandler = new(() => new LinuxStartup());
             UserSettings settings = settingsHandler.UserSettings;
             return LinuxAppRulesBridge.Prepare(settings, socksPort, tunnelAddress, dns, localProxyCredentials);
-        }
-
-        private static string ResolvePrivilegedFront()
-        {
-            if (CommandExists("pkexec")) return "pkexec";
-            if (CommandExists("sudo")) return "sudo --non-interactive";
-            return string.Empty;
-        }
-
-        private void CreateTunDevice(string privileged, string ip)
-        {
-            string user = Environment.UserName;
-            RunPrivileged(privileged, "ip", $"tuntap add dev {TUN_DEVICE} mode tun user {user}");
-            RunPrivileged(privileged, "ip", $"addr add {ip}/24 dev {TUN_DEVICE}");
-            RunPrivileged(privileged, "ip", $"link set dev {TUN_DEVICE} up");
-        }
-
-        private void DestroyTunDevice(string privileged)
-        {
-            if (string.IsNullOrEmpty(privileged)) return;
-            RunPrivileged(privileged, "ip", $"link set dev {TUN_DEVICE} down");
-            RunPrivileged(privileged, "ip", $"tuntap del dev {TUN_DEVICE} mode tun");
         }
 
         private void StartTun2Socks(string tunIp, int socksPort, LocalProxyCredentials localProxyCredentials)
@@ -172,34 +185,6 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
             }
         }
 
-        private void ConfigureRoutes(string privileged, string tunIp, string serverAddress)
-        {
-            if (!string.IsNullOrEmpty(originalGateway) && !string.IsNullOrEmpty(serverAddress))
-                RunPrivileged(privileged, "ip", $"route add {serverAddress}/32 via {originalGateway}");
-
-            RunPrivileged(privileged, "ip", $"route add 0.0.0.0/1 dev {TUN_DEVICE}");
-            RunPrivileged(privileged, "ip", $"route add 128.0.0.0/1 dev {TUN_DEVICE}");
-        }
-
-        private void RestoreRoutes(string privileged)
-        {
-            if (string.IsNullOrEmpty(privileged)) return;
-            RunPrivileged(privileged, "ip", "route del 0.0.0.0/1");
-            RunPrivileged(privileged, "ip", "route del 128.0.0.0/1");
-        }
-
-        private void ConfigureDns(string privileged, string dns)
-        {
-            if (CommandExists("resolvectl"))
-                RunPrivileged(privileged, "resolvectl", $"dns {TUN_DEVICE} {dns}");
-        }
-
-        private void RestoreDns(string privileged)
-        {
-            if (CommandExists("resolvectl"))
-                RunPrivileged(privileged, "resolvectl", $"revert {TUN_DEVICE}");
-        }
-
         private static bool CommandExists(string name)
         {
             try
@@ -217,33 +202,6 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
                 return p.ExitCode == 0;
             }
             catch { return false; }
-        }
-
-        private void RunPrivileged(string privileged, string command, string args)
-        {
-            string fullArgs = string.IsNullOrEmpty(privileged)
-                ? args
-                : $"{(privileged == "pkexec" ? "" : privileged.Substring("sudo ".Length))} {command} {args}".Trim();
-
-            string fileName = privileged == "pkexec" ? "pkexec" : "sudo";
-            string finalArgs = privileged == "pkexec"
-                ? $"{command} {args}"
-                : $"--non-interactive {command} {args}";
-
-            try
-            {
-                var p = Process.Start(new ProcessStartInfo
-                {
-                    FileName = fileName,
-                    Arguments = finalArgs,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                });
-                p?.WaitForExit(8000);
-            }
-            catch { }
         }
 
         private string RunCommandOutput(string command, string args)

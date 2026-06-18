@@ -39,8 +39,9 @@ Linux support is **GNOME-first** and build-script driven.
 - The Linux head reuses the macOS Avalonia views and adds Linux-specific handlers for proxy, TUN, notifications, startup, deep links, and app rules metadata.
 - `./build.sh` is the main Linux entry point. It detects common distro families, installs/fetches required dependencies where possible, builds the Go wrapper as `libXRayCore.so`, downloads `tun2socks` and geo databases, publishes a self-contained Linux GUI, and creates a distributable bundle.
 - The generated bundle includes `run-igxray` for direct launch after unpacking, plus `install.sh` for system installation. After install, the app can be launched from the menu or with `invisible-gorilla-xray` / `igxray`.
-- GNOME system proxy mode uses `gsettings`; TUN mode uses `tun2socks` with privileged `ip`/DNS steps through `pkexec` or `sudo`.
+- GNOME system proxy mode uses `gsettings`; TUN mode uses `tun2socks` with privileged `ip`/DNS steps batched into one `pkexec`/`sudo` call per phase (v3.6.0).
 - Linux app-rules support currently persists the shared app-rules contract as a JSON bridge for future kernel-level enforcement.
+- **Simply Linux 11.1 / ALT Linux:** see [docs/linux-simply-linux.md](docs/linux-simply-linux.md) for build, install, and one-time polkit setup (no repeated root password prompts).
 
 ## Current Android Status
 
@@ -50,6 +51,14 @@ Android support is **experimental**.
 - Shared config handling, local Xray listener startup, config import, and Android app-private storage setup are implemented.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
+
+## What's new in v3.6.0
+
+- **Linux TUN: one pkexec per phase** — `ip`/`resolvectl` commands are batched; connect/disconnect needs 1–2 password prompts instead of ~10 (optional polkit rule for zero prompts: [Simply Linux guide](docs/linux-simply-linux.md)).
+- **Linux app rules UI** — app list loads in background; renaming templates no longer freezes the window; saving rules does not force VPN reconnect on Linux.
+- **Connection info hardening** — tunnel stays up when external IP-check services fail.
+- **Android Goida / connection info** — tunnel failover, live IP checks, safer virtualized node list.
+- **Windows build/publish** — user runtime data stripped from release output; auto-install GCC (w64devkit) and download progress in `build.ps1`.
 
 ## What's new in v3.5.9
 

@@ -1,0 +1,21 @@
+// One-time polkit rule for Invisible Gorilla XRay TUN mode.
+// Allows pkexec to run batched ip/resolvectl setup scripts without a password
+// for users in the "users" group. Install with scripts/linux/install-tun-policy.sh
+polkit.addRule(function(action, subject) {
+    if (action.id != "org.freedesktop.policykit.exec")
+        return polkit.Result.NOT_HANDLED;
+
+    var program = action.lookup("program") || "";
+    var cmdline = action.lookup("command_line") || "";
+
+    if (program != "/bin/sh" && program != "/usr/bin/sh")
+        return polkit.Result.NOT_HANDLED;
+
+    if (cmdline.indexOf("igxray-priv-") === -1)
+        return polkit.Result.NOT_HANDLED;
+
+    if (subject.isInGroup("users"))
+        return polkit.Result.YES;
+
+    return polkit.Result.NOT_HANDLED;
+});

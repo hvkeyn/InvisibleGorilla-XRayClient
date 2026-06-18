@@ -266,7 +266,6 @@ namespace InvisibleGorillaXRay.Linux.Factories
                 localizationHandler.TryApplyCurrentLanguage();
                 notifyHandler.InitializeNotifyIcon();
                 notifyHandler.CheckModeItem();
-                GetMainWindow()?.TryDisableModeAndRerun();
             }
         }
 
