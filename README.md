@@ -52,6 +52,11 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.4
+
+- **Linux: do not run with sudo** — starting via `sudo ./run-igxray` broke TUN setup (pkexec fails under root), Xray stopped, but the UI stayed on "Running" with `Connection refused (127.0.0.1:10801)`. Privileged `ip`/`resolvectl` commands now run directly when already root; the launcher warns against sudo; tunnel setup errors reset the UI and show a desktop notification.
+- **Linux TUN setup validation** — creating the tun interface is now checked; a failed setup aborts with a clear message instead of a half-enabled state.
+
 ## What's new in v3.6.3
 
 - **Fixed Linux/macOS routing loop (socket storm / OOM)** — the VPN server now always keeps a direct, non-TUN route. The server address is resolved to its IP (Reality configs can use a hostname) and pinned to the real uplink before the TUN default routes are installed. Previously, if the bypass route was skipped, xray's own outbound to the server re-entered the tunnel and looped, spawning thousands of sockets (`too many open files` → `Out of memory`). If a safe bypass can't be set up, the client now refuses to enable TUN with a clear error instead of looping.

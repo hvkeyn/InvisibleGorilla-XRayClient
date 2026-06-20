@@ -34,7 +34,7 @@ set -euo pipefail
 
 # ─── Settings ─────────────────────────────────────────────────────────────────
 
-readonly APP_VERSION="3.6.3.0"
+readonly APP_VERSION="3.6.4.0"
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly WRAPPER_DIR="$SCRIPT_DIR/XRay-Wrapper"
 readonly LINUX_DIR="$SCRIPT_DIR/InvisibleGorilla-XRay.Linux"
@@ -709,6 +709,12 @@ package_bundle() {
     cat > "$stage/$APP_RUNNER_NAME" <<'RUNNER'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "$(id -u)" -eq 0 ]]; then
+  echo "WARNING: Do not run Invisible Gorilla XRay as root." >&2
+  echo "Start as your normal user: ./run-igxray" >&2
+  echo "TUN mode will ask for privileges via pkexec when needed." >&2
+  echo >&2
+fi
 # TUN mode can open many sockets via tun2socks; raise the soft FD limit when possible.
 ulimit -n 65535 2>/dev/null || ulimit -n 8192 2>/dev/null || true
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

@@ -233,7 +233,8 @@ namespace InvisibleGorillaXRay.Core
             {
                 DiagnosticLog.Write("Run", $"Server thread threw exception, aborting: {serverException.Message}");
                 if (torEnabled) torManager.Stop();
-                return;
+                throw new InvalidOperationException(
+                    serverException.Message ?? LocalizationService.GetTerm(Localization.CANT_TUNNEL_SYSTEM));
             }
 
             if (!serverThread.IsAlive)
@@ -241,7 +242,8 @@ namespace InvisibleGorillaXRay.Core
                 DiagnosticLog.Write("Run", "WARNING: Server thread is no longer alive! xray-core likely failed to start.");
                 DiagnosticLog.Write("Run", "Skipping proxy enable since server is not running.");
                 if (torEnabled) torManager.Stop();
-                return;
+                throw new InvalidOperationException(
+                    LocalizationService.GetTerm(Localization.CANT_TUNNEL_SYSTEM));
             }
 
             if (!portActive)

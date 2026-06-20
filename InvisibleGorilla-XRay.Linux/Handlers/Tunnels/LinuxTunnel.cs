@@ -60,13 +60,22 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
 
                 SaveOriginalRoutes();
 
-                string user = Environment.UserName;
-                LinuxPrivilegedRunner.RunBatch(new[]
+                string user = ResolveTunOwnerUser();
+                int tunSetupExit = LinuxPrivilegedRunner.RunBatchChecked(new[]
                 {
                     $"ip tuntap add dev {TUN_DEVICE} mode tun user {user}",
                     $"ip addr add {ip}/24 dev {TUN_DEVICE}",
                     $"ip link set dev {TUN_DEVICE} up"
                 }, privileged);
+
+                if (tunSetupExit != 0)
+                {
+                    Disable();
+                    return new Status(
+                        Code.ERROR,
+                        SubCode.CANT_TUNNEL,
+                        "Failed to create the TUN interface. Do not start the app with sudo — run ./run-igxray as your normal user; TUN will request privileges via pkexec.");
+                }
 
                 StartTun2Socks(ip, port, localProxyCredentials);
 
@@ -320,6 +329,21 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
                 return $"dev {dev}";
 
             return string.Empty;
+        }
+
+        // When launched via sudo, Environment.UserName is "root" but the desktop session
+        // belongs to SUDO_USER — assign the tun fd to that user so tun2socks can open it.
+        private static string ResolveTunOwnerUser()
+        {
+            string user = Environment.UserName;
+            if (string.Equals(user, "root", StringComparison.OrdinalIgnoreCase))
+            {
+                string? sudoUser = Environment.GetEnvironmentVariable("SUDO_USER");
+                if (!string.IsNullOrWhiteSpace(sudoUser) && !string.Equals(sudoUser, "root", StringComparison.OrdinalIgnoreCase))
+                    return sudoUser;
+            }
+
+            return user;
         }
 
         private static bool CommandExists(string name)

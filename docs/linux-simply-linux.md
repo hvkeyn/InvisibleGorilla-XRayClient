@@ -31,15 +31,17 @@ chmod +x build.sh
 ## 3. Запуск без установки
 
 ```bash
-cd dist-linux/InvisibleGorilla-XRay-Linux-linux-x64-v3.6.3.0
+cd dist-linux/InvisibleGorilla-XRay-Linux-linux-x64-v3.6.4.0
 chmod +x run-igxray
 ./run-igxray
 ```
 
+**Не запускайте через `sudo`.** Приложение должно работать от обычного пользователя; для TUN один раз появится окно pkexec (или установите правило polkit из раздела 5).
+
 ## 4. Установка в систему (рекомендуется)
 
 ```bash
-cd dist-linux/InvisibleGorilla-XRay-Linux-linux-x64-v3.6.3.0
+cd dist-linux/InvisibleGorilla-XRay-Linux-linux-x64-v3.6.4.0
 chmod +x install.sh
 ./install.sh
 ```

@@ -52,6 +52,7 @@ namespace InvisibleGorillaXRay.Mac.Views
         private Func<PolicyWindow> openPolicyWindow;
         private Func<string> getServerDisplayText;
         private Action<string> onRunServer;
+        private Action<string> onRunFailed;
         private Action onCancelServer;
         private Action onStopServer;
         private Action onDisableMode;
@@ -96,7 +97,8 @@ namespace InvisibleGorillaXRay.Mac.Views
             Action onBugReportingClick,
             Action<string> onCustomLinkClick,
             Func<InvisibleGorillaXRay.Services.Goida.GoidaMainPresentation> getGoidaPresentation = null,
-            Func<IWebProxy> createActiveProbeProxy = null)
+            Func<IWebProxy> createActiveProbeProxy = null,
+            Action<string> onRunFailed = null)
         {
             this.isNeedToShowPolicyWindow = isNeedToShowPolicyWindow;
             this.shouldStartHidden = shouldStartHidden;
@@ -112,6 +114,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             this.openPolicyWindow = openPolicyWindow;
             this.getServerDisplayText = getServerDisplayText;
             this.onRunServer = onRunServer;
+            this.onRunFailed = onRunFailed;
             this.onCancelServer = onCancelServer;
             this.onStopServer = onStopServer;
             this.enableMode = enableMode;
@@ -264,7 +267,20 @@ namespace InvisibleGorillaXRay.Mac.Views
 
                     Dispatcher.UIThread.InvokeAsync(ShowRunStatus);
 
-                    onRunServer.Invoke(configStatus.Content.ToString());
+                    try
+                    {
+                        onRunServer.Invoke(configStatus.Content.ToString());
+                    }
+                    catch (Exception ex)
+                    {
+                        Dispatcher.UIThread.InvokeAsync(() =>
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Run server error: {ex.Message}");
+                            onRunFailed?.Invoke(ex.Message);
+                            ShowStopStatus();
+                        });
+                        return;
+                    }
 
                     Dispatcher.UIThread.InvokeAsync(ShowStopStatus);
                 }

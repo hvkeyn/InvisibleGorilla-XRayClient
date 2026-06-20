@@ -76,14 +76,27 @@ namespace InvisibleGorillaXRay.Linux.Managers
 
             static string ResolveDataRoot()
             {
+                string home = ResolveHomeDirectory();
                 string dataHome = Environment.GetEnvironmentVariable("XDG_DATA_HOME") ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(dataHome))
-                {
-                    string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
                     dataHome = Path.Combine(home, ".local", "share");
-                }
 
                 return Path.Combine(dataHome, "InvisibleGorilla-XRay");
+            }
+
+            static string ResolveHomeDirectory()
+            {
+                string sudoUser = Environment.GetEnvironmentVariable("SUDO_USER") ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(sudoUser)
+                    && !string.Equals(sudoUser, "root", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(Environment.UserName, "root", StringComparison.OrdinalIgnoreCase))
+                {
+                    string sudoHome = $"/home/{sudoUser}";
+                    if (Directory.Exists(sudoHome))
+                        return sudoHome;
+                }
+
+                return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             }
         }
 

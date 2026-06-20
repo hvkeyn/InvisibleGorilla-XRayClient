@@ -31,7 +31,7 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
                 .Where(command => !string.IsNullOrWhiteSpace(command))
                 .ToList();
 
-            if (commandList.Count == 0 || string.IsNullOrEmpty(privilegedFront))
+            if (commandList.Count == 0)
                 return 0;
 
             StringBuilder script = new();
@@ -50,6 +50,14 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
 
             try
             {
+                // When the whole app was started with sudo, pkexec often fails (no polkit
+                // session for root) even though we already have CAP_NET_ADMIN. Run directly.
+                if (IsEffectiveRoot())
+                    return StartAndWait("/bin/sh", scriptPath);
+
+                if (string.IsNullOrEmpty(privilegedFront))
+                    return -1;
+
                 if (privilegedFront == "pkexec")
                     return StartAndWait("pkexec", $"/bin/sh \"{scriptPath}\"");
 
@@ -63,9 +71,38 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
 
         public static string ResolvePrivilegedFront()
         {
+            if (IsEffectiveRoot())
+                return "direct";
+
             if (CommandExists("pkexec")) return "pkexec";
             if (CommandExists("sudo")) return "sudo";
             return string.Empty;
+        }
+
+        private static bool IsEffectiveRoot()
+        {
+            try
+            {
+                using Process process = Process.Start(new ProcessStartInfo
+                {
+                    FileName = "/usr/bin/id",
+                    Arguments = "-u",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                })!;
+
+                process.WaitForExit(2000);
+                if (process.ExitCode != 0)
+                    return false;
+
+                return process.StandardOutput.ReadToEnd().Trim() == "0";
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static int StartAndWait(string fileName, string arguments)

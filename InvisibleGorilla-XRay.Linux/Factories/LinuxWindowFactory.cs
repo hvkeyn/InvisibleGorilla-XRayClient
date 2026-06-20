@@ -105,7 +105,8 @@ namespace InvisibleGorillaXRay.Linux.Factories
                 onBugReportingClick: linkHandler.OpenBugReportingLink,
                 onCustomLinkClick: linkHandler.OpenCustomLink,
                 getGoidaPresentation: BuildGoidaPresentation,
-                createActiveProbeProxy: core.CreateActiveProbeProxy
+                createActiveProbeProxy: core.CreateActiveProbeProxy,
+                onRunFailed: message => LinuxNotifyHandler.TrySendNotification("Invisible Gorilla XRay", message)
             );
 
             return mainWindow;
