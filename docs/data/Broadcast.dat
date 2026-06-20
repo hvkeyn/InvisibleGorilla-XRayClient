@@ -1,4 +1,4 @@
 ﻿{
-  "Text": "Invisible Gorilla XRay v3.6.4 — Linux TUN fix: do not use sudo; pkexec/root setup and UI stuck on Running fixed.",
-  "Url": "https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/tag/v3.6.4"
+  "Text": "Invisible Gorilla XRay v3.6.5 — Linux fix: DOTNET_BUNDLE_EXTRACT_BASE_DIR for Simply Linux startup.",
+  "Url": "https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/tag/v3.6.5"
 }

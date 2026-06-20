@@ -52,6 +52,10 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.5
+
+- **Linux: fix "Failure processing application bundle"** — `run-igxray` now sets `DOTNET_BUNDLE_EXTRACT_BASE_DIR` to a writable cache (`~/.cache`, bundle folder, or `/tmp`) so single-file .NET can extract on Simply Linux and similar desktops where the default cache path is unavailable.
+
 ## What's new in v3.6.4
 
 - **Linux: do not run with sudo** — starting via `sudo ./run-igxray` broke TUN setup (pkexec fails under root), Xray stopped, but the UI stayed on "Running" with `Connection refused (127.0.0.1:10801)`. Privileged `ip`/`resolvectl` commands now run directly when already root; the launcher warns against sudo; tunnel setup errors reset the UI and show a desktop notification.

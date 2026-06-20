@@ -34,7 +34,7 @@ set -euo pipefail
 
 # ─── Settings ─────────────────────────────────────────────────────────────────
 
-readonly APP_VERSION="3.6.4.0"
+readonly APP_VERSION="3.6.5.0"
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly WRAPPER_DIR="$SCRIPT_DIR/XRay-Wrapper"
 readonly LINUX_DIR="$SCRIPT_DIR/InvisibleGorilla-XRay.Linux"
@@ -718,6 +718,30 @@ fi
 # TUN mode can open many sockets via tun2socks; raise the soft FD limit when possible.
 ulimit -n 65535 2>/dev/null || ulimit -n 8192 2>/dev/null || true
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Single-file .NET bundles must extract native libs to a writable cache directory.
+# Some desktops (e.g. Simply Linux) have no usable default cache path for the bundle host.
+if [[ -z "${DOTNET_BUNDLE_EXTRACT_BASE_DIR:-}" ]]; then
+  _uid="${UID:-$(id -u)}"
+  for _dir in \
+    "${XDG_CACHE_HOME:+"${XDG_CACHE_HOME}/invisible-gorilla-xray/bundle"}" \
+    "${HOME:+"${HOME}/.cache/invisible-gorilla-xray/bundle"}" \
+    "$SCRIPT_DIR/.dotnet-bundle-cache" \
+    "/tmp/invisible-gorilla-xray-${_uid}/bundle"
+  do
+    [[ -z "$_dir" ]] && continue
+    if mkdir -p "$_dir" 2>/dev/null && [[ -w "$_dir" ]]; then
+      export DOTNET_BUNDLE_EXTRACT_BASE_DIR="$_dir"
+      break
+    fi
+  done
+  unset _dir _uid
+fi
+if [[ -z "${DOTNET_BUNDLE_EXTRACT_BASE_DIR:-}" ]] || [[ ! -w "${DOTNET_BUNDLE_EXTRACT_BASE_DIR}" ]]; then
+  echo "ERROR: Cannot create a writable .NET bundle cache directory." >&2
+  echo "Set DOTNET_BUNDLE_EXTRACT_BASE_DIR to a writable folder and retry, e.g.:" >&2
+  echo "  export DOTNET_BUNDLE_EXTRACT_BASE_DIR=\"\$HOME/.cache/igxray-bundle\"" >&2
+  exit 1
+fi
 exec "$SCRIPT_DIR/bin/InvisibleGorilla-XRay.Linux" "$@"
 RUNNER
     chmod +x "$stage/$APP_RUNNER_NAME"
@@ -727,6 +751,21 @@ RUNNER
 #!/usr/bin/env bash
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [[ -z "${DOTNET_BUNDLE_EXTRACT_BASE_DIR:-}" ]]; then
+  _uid="${UID:-$(id -u)}"
+  for _dir in \
+    "${XDG_CACHE_HOME:+"${XDG_CACHE_HOME}/invisible-gorilla-xray/bundle"}" \
+    "${HOME:+"${HOME}/.cache/invisible-gorilla-xray/bundle"}" \
+    "/tmp/invisible-gorilla-xray-${_uid}/bundle"
+  do
+    [[ -z "$_dir" ]] && continue
+    if mkdir -p "$_dir" 2>/dev/null && [[ -w "$_dir" ]]; then
+      export DOTNET_BUNDLE_EXTRACT_BASE_DIR="$_dir"
+      break
+    fi
+  done
+  unset _dir _uid
+fi
 exec "$SCRIPT_DIR/InvisibleGorilla-XRay.Linux" "$@"
 COMMAND
     chmod +x "$stage/bin/$APP_COMMAND_NAME"
