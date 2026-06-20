@@ -1,4 +1,4 @@
 {
-  "Text": "Invisible Gorilla XRay v3.6.1 — Linux TUN pkexec batching, app rules fixes, Simply Linux guide.",
-  "Url": "https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/tag/v3.6.1"
+  "Text": "Invisible Gorilla XRay v3.6.3 — fixes Linux/macOS routing loop (socket storm/OOM) and slow Windows first start.",
+  "Url": "https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/tag/v3.6.3"
 }

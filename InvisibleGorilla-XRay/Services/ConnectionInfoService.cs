@@ -72,20 +72,36 @@ namespace InvisibleGorillaXRay.Services
         public async Task<ConnectionInfo> LookupAsync(IWebProxy proxy, CancellationToken token = default)
         {
             ConnectionInfo lastFailure = new ConnectionInfo { Ok = false, Error = "all endpoints failed" };
+            ConnectionInfo ipOnlyFallback = null;
 
             foreach (string endpoint in LookupEndpoints)
             {
                 if (token.IsCancellationRequested)
-                    return lastFailure;
+                    return ipOnlyFallback ?? lastFailure;
 
                 ConnectionInfo result = await TryLookupAsync(endpoint, proxy, token).ConfigureAwait(false);
                 if (result.Ok)
-                    return result;
+                {
+                    // Keep probing for full geo/provider data; a bare IP is only a fallback.
+                    if (HasGeo(result))
+                        return result;
+
+                    ipOnlyFallback ??= result;
+                    continue;
+                }
 
                 lastFailure = result;
             }
 
-            return lastFailure;
+            return ipOnlyFallback ?? lastFailure;
+        }
+
+        private static bool HasGeo(ConnectionInfo info)
+        {
+            return !string.IsNullOrWhiteSpace(info.CountryCode)
+                || !string.IsNullOrWhiteSpace(info.CountryName)
+                || !string.IsNullOrWhiteSpace(info.City)
+                || !string.IsNullOrWhiteSpace(info.Org);
         }
 
         private static async Task<ConnectionInfo> TryLookupAsync(string url, IWebProxy proxy, CancellationToken token)

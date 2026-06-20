@@ -220,7 +220,12 @@ namespace InvisibleGorillaXRay.Core
 
             DiagnosticLog.Write("Run", $"Server thread started (ID={serverThread.ManagedThreadId}), waiting for port {proxyPort}...");
 
-            bool portActive = WaitForPortActive(proxyPort, maxWaitMs: 5000);
+            // 5s was too tight on a fresh install: the first launch of the freshly extracted
+            // self-contained build is often slowed by on-access AV scanning of the large binary
+            // and native core, so the local SOCKS listener can need >5s to come up. A premature
+            // timeout surfaced as "The application can't tunnel the system". 15s is forgiving
+            // without making a genuine startup failure feel hung.
+            bool portActive = WaitForPortActive(proxyPort, maxWaitMs: 15000);
 
             DiagnosticLog.Write("Run", $"WaitForPortActive result: portActive={portActive}");
 

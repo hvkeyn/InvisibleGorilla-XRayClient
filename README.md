@@ -52,6 +52,18 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.3
+
+- **Fixed Linux/macOS routing loop (socket storm / OOM)** — the VPN server now always keeps a direct, non-TUN route. The server address is resolved to its IP (Reality configs can use a hostname) and pinned to the real uplink before the TUN default routes are installed. Previously, if the bypass route was skipped, xray's own outbound to the server re-entered the tunnel and looped, spawning thousands of sockets (`too many open files` → `Out of memory`). If a safe bypass can't be set up, the client now refuses to enable TUN with a clear error instead of looping.
+- **Connection info reliability on Linux** — with the loop gone, the local SOCKS listener no longer gets exhausted, so the live IP/location check stops failing with `Cannot assign requested address`.
+- **Windows first-launch fix** — the wait for the local proxy listener was raised from 5s to 15s so a slow first start (on-access AV scanning the freshly extracted build) no longer surfaces as `The application can't tunnel the system`.
+
+## What's new in v3.6.2
+
+- **Connection info shows full data over the tunnel** — geo-capable lookups (`ipinfo.io`, `ipwho.is`) are queried first so Location/Provider populate instead of just a bare IP (Android/Linux/macOS); IP-only services stay as a last-resort fallback.
+- **Windows layout fix** — the main window content is vertically balanced; the status icon no longer slips under the header and the connection card is pinned to the bottom.
+- **Steadier probing** — lookups remain serialized (one at a time) with the post-connect grace period, so there is no request storm right after connect.
+
 ## What's new in v3.6.1
 
 - **Linux TUN:** batched `pkexec`/`sudo` (1–2 prompts per connect/disconnect); optional polkit rule (`scripts/linux/install-tun-policy.sh`).

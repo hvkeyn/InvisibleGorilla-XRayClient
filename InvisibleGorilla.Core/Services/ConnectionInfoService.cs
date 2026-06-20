@@ -56,10 +56,13 @@ namespace InvisibleGorillaXRay.Services
 
         // While the tunnel is live, keep probes light: one SOCKS connection at a time,
         // fewer endpoints, shorter timeouts — avoids FD exhaustion on Linux TUN.
+        // Geo-capable endpoints come first so the widget shows location/provider, not just
+        // a bare IP; ipify (IP-only) stays as a last-resort fallback.
         private static readonly string[] TunnelLookupEndpoints =
         {
-            "https://api.ipify.org?format=json",
-            "https://ipinfo.io/json"
+            "https://ipinfo.io/json",
+            "https://ipwho.is/",
+            "https://api.ipify.org?format=json"
         };
 
         private static readonly SemaphoreSlim LookupGate = new(1, 1);
@@ -75,19 +78,31 @@ namespace InvisibleGorillaXRay.Services
                 string[] endpoints = throughTunnel ? TunnelLookupEndpoints : LookupEndpoints;
                 int timeoutSeconds = throughTunnel ? 6 : 12;
                 ConnectionInfo lastFailure = new ConnectionInfo { Ok = false, Error = "all endpoints failed" };
+                ConnectionInfo ipOnlyFallback = null;
 
                 foreach (string endpoint in endpoints)
                 {
                     if (token.IsCancellationRequested)
-                        return lastFailure;
+                        return ipOnlyFallback ?? lastFailure;
 
                     ConnectionInfo result = await TryLookupAsync(endpoint, proxy, timeoutSeconds, token)
                         .ConfigureAwait(false);
                     if (result.Ok)
-                        return result;
+                    {
+                        // A bare IP (no geo/provider) is better than nothing, but keep probing
+                        // the remaining endpoints so the widget can show full location data.
+                        if (HasGeo(result))
+                            return result;
+
+                        ipOnlyFallback ??= result;
+                        continue;
+                    }
 
                     lastFailure = result;
                 }
+
+                if (ipOnlyFallback != null)
+                    return ipOnlyFallback;
 
                 return lastFailure;
             }
@@ -179,6 +194,14 @@ namespace InvisibleGorillaXRay.Services
             {
                 return new ConnectionInfo { Ok = false, Error = ex.Message };
             }
+        }
+
+        private static bool HasGeo(ConnectionInfo info)
+        {
+            return !string.IsNullOrWhiteSpace(info.CountryCode)
+                || !string.IsNullOrWhiteSpace(info.CountryName)
+                || !string.IsNullOrWhiteSpace(info.City)
+                || !string.IsNullOrWhiteSpace(info.Org);
         }
 
         private static string FirstNonEmpty(JObject root, params string[] keys)

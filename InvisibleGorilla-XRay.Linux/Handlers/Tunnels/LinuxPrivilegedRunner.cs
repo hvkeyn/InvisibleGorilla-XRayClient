@@ -15,12 +15,24 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
     {
         public static void RunBatch(IEnumerable<string> commands, string privilegedFront, bool continueOnError = false)
         {
+            RunBatchChecked(commands, privilegedFront, continueOnError);
+        }
+
+        /// <summary>
+        /// Runs a privileged batch and returns the script exit code (0 = success).
+        /// With <paramref name="continueOnError"/> false the script uses <c>set -e</c>,
+        /// so a failing command aborts the rest — callers can detect a partial setup
+        /// (e.g. a server-bypass route that did not install) and refuse to continue
+        /// instead of leaving a routing loop in place.
+        /// </summary>
+        public static int RunBatchChecked(IEnumerable<string> commands, string privilegedFront, bool continueOnError = false)
+        {
             List<string> commandList = commands
                 .Where(command => !string.IsNullOrWhiteSpace(command))
                 .ToList();
 
             if (commandList.Count == 0 || string.IsNullOrEmpty(privilegedFront))
-                return;
+                return 0;
 
             StringBuilder script = new();
             script.AppendLine("#!/bin/sh");
@@ -39,9 +51,9 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
             try
             {
                 if (privilegedFront == "pkexec")
-                    StartAndWait("pkexec", $"/bin/sh \"{scriptPath}\"");
-                else
-                    StartAndWait("sudo", $"--non-interactive /bin/sh \"{scriptPath}\"");
+                    return StartAndWait("pkexec", $"/bin/sh \"{scriptPath}\"");
+
+                return StartAndWait("sudo", $"--non-interactive /bin/sh \"{scriptPath}\"");
             }
             finally
             {
@@ -56,7 +68,7 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
             return string.Empty;
         }
 
-        private static void StartAndWait(string fileName, string arguments)
+        private static int StartAndWait(string fileName, string arguments)
         {
             Process? process = Process.Start(new ProcessStartInfo
             {
@@ -68,7 +80,16 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
                 CreateNoWindow = true
             });
 
-            process?.WaitForExit(30000);
+            if (process == null)
+                return -1;
+
+            if (!process.WaitForExit(30000))
+            {
+                try { process.Kill(); } catch { }
+                return -1;
+            }
+
+            return process.ExitCode;
         }
 
         private static bool CommandExists(string name)

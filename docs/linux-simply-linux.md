@@ -31,7 +31,7 @@ chmod +x build.sh
 ## 3. Запуск без установки
 
 ```bash
-cd dist-linux/InvisibleGorilla-XRay-Linux-linux-x64-v3.6.1.0
+cd dist-linux/InvisibleGorilla-XRay-Linux-linux-x64-v3.6.3.0
 chmod +x run-igxray
 ./run-igxray
 ```
@@ -39,7 +39,7 @@ chmod +x run-igxray
 ## 4. Установка в систему (рекомендуется)
 
 ```bash
-cd dist-linux/InvisibleGorilla-XRay-Linux-linux-x64-v3.6.1.0
+cd dist-linux/InvisibleGorilla-XRay-Linux-linux-x64-v3.6.3.0
 chmod +x install.sh
 ./install.sh
 ```

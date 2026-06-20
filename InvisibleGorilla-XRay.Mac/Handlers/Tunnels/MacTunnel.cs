@@ -1,10 +1,15 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Sockets;
 using System.Threading;
 
 namespace InvisibleGorillaXRay.Mac.Handlers.Tunnels
 {
+    using InvisibleGorillaXRay.Core;
     using InvisibleGorillaXRay.Mac.Handlers.Settings;
     using InvisibleGorillaXRay.Handlers.Tunnels;
     using InvisibleGorillaXRay.Handlers;
@@ -23,6 +28,7 @@ namespace InvisibleGorillaXRay.Mac.Handlers.Tunnels
         private bool isCancelled;
         private string? originalGateway;
         private string? originalInterface;
+        private readonly List<string> excludedServerRoutes = new();
         private const string TUN_DEVICE = "utun9";
 
         public Status Enable(string ip, int port, string address, string server, string dns, LocalProxyCredentials localProxyCredentials)
@@ -52,7 +58,15 @@ namespace InvisibleGorillaXRay.Mac.Handlers.Tunnels
 
                 Thread.Sleep(1500);
 
-                ConfigureRoutes(ip, server);
+                if (!ConfigureRoutes(ip, server))
+                {
+                    Disable();
+                    return new Status(
+                        Code.ERROR,
+                        SubCode.CANT_TUNNEL,
+                        $"Could not pin a direct route to the VPN server ({server}). " +
+                        "Refusing to enable TUN to avoid a routing loop that exhausts sockets.");
+                }
 
                 if (!string.IsNullOrEmpty(dns))
                     ConfigureDns(dns);
@@ -132,19 +146,115 @@ namespace InvisibleGorillaXRay.Mac.Handlers.Tunnels
             }
         }
 
-        private void ConfigureRoutes(string tunIp, string serverAddress)
+        // The VPN server must keep a direct (non-TUN) route, otherwise xray's own outbound to the
+        // server re-enters the utun device, loops back through tun2socks -> local SOCKS -> xray and
+        // spawns endless sockets (socket storm -> out of memory). Returns false when no direct
+        // route to the server could be installed, so the caller can refuse to bring up the TUN.
+        private bool ConfigureRoutes(string tunIp, string serverAddress)
         {
-            if (!string.IsNullOrEmpty(originalGateway))
-                RunCommand("route", $"add -host {serverAddress} {originalGateway}");
+            List<string> serverIps = ResolveServerIps(serverAddress);
+            excludedServerRoutes.Clear();
+
+            foreach (string serverIp in serverIps)
+            {
+                (string? gateway, string? iface) = ResolveDirectPath(serverIp);
+
+                if (!string.IsNullOrEmpty(gateway))
+                    RunCommand("route", $"add -host {serverIp} {gateway}");
+                else if (!string.IsNullOrEmpty(iface))
+                    RunCommand("route", $"add -host {serverIp} -interface {iface}");
+                else
+                    continue;
+
+                excludedServerRoutes.Add(serverIp);
+            }
+
+            if (excludedServerRoutes.Count == 0)
+                return false;
 
             RunCommand("route", $"add -net 0.0.0.0/1 {tunIp}");
             RunCommand("route", $"add -net 128.0.0.0/1 {tunIp}");
+            return true;
         }
 
         private void RestoreRoutes()
         {
             RunCommand("route", "delete -net 0.0.0.0/1");
             RunCommand("route", "delete -net 128.0.0.0/1");
+
+            foreach (string serverIp in excludedServerRoutes)
+                RunCommand("route", $"delete -host {serverIp}");
+
+            excludedServerRoutes.Clear();
+        }
+
+        private static List<string> ResolveServerIps(string server)
+        {
+            List<string> ips = new();
+            if (string.IsNullOrWhiteSpace(server))
+                return ips;
+
+            string host = server.Trim();
+
+            int colon = host.LastIndexOf(':');
+            if (colon > 0 && host.IndexOf(':') == colon && !host.Contains('/'))
+                host = host.Substring(0, colon);
+
+            if (IPAddress.TryParse(host, out IPAddress? direct)
+                && direct.AddressFamily == AddressFamily.InterNetwork)
+            {
+                ips.Add(direct.ToString());
+                return ips;
+            }
+
+            try
+            {
+                foreach (IPAddress addr in Dns.GetHostAddresses(host))
+                {
+                    if (addr.AddressFamily == AddressFamily.InterNetwork)
+                        ips.Add(addr.ToString());
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MacTunnel.ResolveServerIps", ex);
+            }
+
+            return ips.Distinct().ToList();
+        }
+
+        // Ask the routing table how it currently reaches the server (before the TUN default routes
+        // hijack it) and reuse that gateway/interface for the bypass route.
+        private (string? gateway, string? iface) ResolveDirectPath(string serverIp)
+        {
+            string output = RunCommandOutput("route", $"-n get {serverIp}");
+            string? gateway = null;
+            string? iface = null;
+
+            foreach (string line in output.Split('\n'))
+            {
+                string trimmed = line.Trim();
+                if (trimmed.StartsWith("gateway:"))
+                    gateway = trimmed.Split(':')[1].Trim();
+                else if (trimmed.StartsWith("interface:"))
+                    iface = trimmed.Split(':')[1].Trim();
+            }
+
+            if (string.Equals(iface, TUN_DEVICE, StringComparison.Ordinal))
+            {
+                gateway = null;
+                iface = null;
+            }
+
+            if (string.IsNullOrEmpty(gateway) && string.IsNullOrEmpty(iface))
+            {
+                gateway = originalGateway;
+                iface = string.Equals(originalInterface, TUN_DEVICE, StringComparison.Ordinal)
+                    ? null
+                    : originalInterface;
+            }
+
+            return (gateway, iface);
         }
 
         private void ConfigureDns(string dns)
