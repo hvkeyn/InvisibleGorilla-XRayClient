@@ -68,6 +68,7 @@ namespace InvisibleGorillaXRay.Linux.Managers
 
             InvisibleGorillaXRay.Values.Directory.ConfigureRoots(dataRoot, runtimeRoot);
             InvisibleGorillaXRay.Values.Directory.EnsureWritableDirectories();
+            LinuxDataDirectoryGuard.ValidateAtStartup();
 
             Environment.CurrentDirectory = runtimeRoot;
             DiagnosticLog.Write(

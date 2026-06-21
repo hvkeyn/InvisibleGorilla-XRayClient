@@ -1,4 +1,4 @@
 ﻿{
-  "Text": "Invisible Gorilla XRay v3.6.5 — Linux fix: DOTNET_BUNDLE_EXTRACT_BASE_DIR for Simply Linux startup.",
-  "Url": "https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/tag/v3.6.5"
+  "Text": "Invisible Gorilla XRay v3.6.6 — Linux: TUN works when data folder owned by root after sudo; chown hint on startup.",
+  "Url": "https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/tag/v3.6.6"
 }

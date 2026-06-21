@@ -52,6 +52,10 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.6
+
+- **Linux: TUN no longer aborts on app-rules file permission errors** — `linux-transparent-proxy-config.json` is optional metadata; write failures (e.g. data folder owned by root after `sudo ./run-igxray`) no longer block VLESS/TUN. Startup notifies with `chown` fix command; fallback write to `$XDG_RUNTIME_DIR` or `/tmp`.
+
 ## What's new in v3.6.5
 
 - **Linux: fix "Failure processing application bundle"** — `run-igxray` now sets `DOTNET_BUNDLE_EXTRACT_BASE_DIR` to a writable cache (`~/.cache`, bundle folder, or `/tmp`) so single-file .NET can extract on Simply Linux and similar desktops where the default cache path is unavailable.

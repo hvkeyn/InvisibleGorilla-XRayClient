@@ -56,7 +56,11 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
             {
                 Status appRulesStatus = PrepareAppRulesBridge(port, address, dns, localProxyCredentials);
                 if (appRulesStatus.Code == Code.ERROR)
-                    return appRulesStatus;
+                {
+                    DiagnosticLog.Write(
+                        "LinuxTunnel",
+                        $"App rules descriptor skipped: {appRulesStatus.Content}");
+                }
 
                 SaveOriginalRoutes();
 

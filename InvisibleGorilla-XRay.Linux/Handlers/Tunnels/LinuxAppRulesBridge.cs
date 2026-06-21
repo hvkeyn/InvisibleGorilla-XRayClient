@@ -60,18 +60,87 @@ namespace InvisibleGorillaXRay.Linux.Handlers.Tunnels
                     AppIds = appIds
                 };
 
-                File.WriteAllText(ConfigPath, JsonConvert.SerializeObject(config, Formatting.Indented));
+                string json = JsonConvert.SerializeObject(config, Formatting.Indented);
+                string writtenPath = TryWriteConfig(json);
                 DiagnosticLog.Write(
                     "LinuxAppRulesBridge",
-                    $"Prepared transparent proxy descriptor with mode={mode} and {appIds.Count} app ids at {ConfigPath}");
+                    $"Prepared transparent proxy descriptor with mode={mode} and {appIds.Count} app ids at {writtenPath}");
 
                 return new Status(Code.SUCCESS, SubCode.SUCCESS, null);
             }
             catch (Exception ex)
             {
+                // Optional metadata for a future cgroup helper — must not block basic TUN/VLESS.
                 DiagnosticLog.WriteException("LinuxAppRulesBridge.Prepare", ex);
-                return new Status(Code.ERROR, SubCode.CANT_TUNNEL, $"Failed to prepare Linux app rules: {ex.Message}");
+                DiagnosticLog.Write(
+                    "LinuxAppRulesBridge",
+                    "Continuing without app-rules descriptor (TUN will still work for all apps).");
+                return new Status(Code.SUCCESS, SubCode.SUCCESS, null);
             }
+        }
+
+        private static string TryWriteConfig(string json)
+        {
+            foreach (string path in EnumerateCandidatePaths())
+            {
+                try
+                {
+                    string? dir = Path.GetDirectoryName(path);
+                    if (!string.IsNullOrEmpty(dir))
+                        Directory.CreateDirectory(dir);
+
+                    if (File.Exists(path))
+                    {
+                        try
+                        {
+                            using (FileStream stream = File.Open(path, FileMode.Open, FileAccess.Write, FileShare.None)) { }
+                        }
+                        catch (UnauthorizedAccessException)
+                        {
+                            try { File.Delete(path); }
+                            catch { continue; }
+                        }
+                    }
+
+                    File.WriteAllText(path, json);
+                    return path;
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    continue;
+                }
+                catch (IOException)
+                {
+                    continue;
+                }
+            }
+
+            throw new UnauthorizedAccessException(
+                $"Cannot write linux-transparent-proxy-config.json under {Values.Directory.DATA_TUN}. " +
+                "If you previously ran the app with sudo, fix ownership: " +
+                $"sudo chown -R \"{Environment.UserName}\" \"{Values.Directory.DATA_ROOT}\"");
+        }
+
+        private static IEnumerable<string> EnumerateCandidatePaths()
+        {
+            yield return ConfigPath;
+
+            string runtime = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR") ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(runtime))
+            {
+                yield return Path.Combine(
+                    runtime,
+                    "InvisibleGorilla-XRay",
+                    "TUN",
+                    "linux-transparent-proxy-config.json");
+            }
+
+            yield return Path.Combine(
+                Path.GetTempPath(),
+                "InvisibleGorilla-XRay",
+                Environment.UserName,
+                "TUN",
+                "linux-transparent-proxy-config.json");
         }
 
         public static void Clear()
