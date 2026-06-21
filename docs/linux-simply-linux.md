@@ -31,20 +31,26 @@ chmod +x build.sh
 ## 3. Запуск без установки
 
 ```bash
-cd dist-linux/InvisibleGorilla-XRay-Linux-linux-x64-v3.6.6.0
+cd dist-linux/InvisibleGorilla-XRay-Linux-linux-x64-v3.6.7.0
 chmod +x run-igxray
 ./run-igxray
 ```
 
 **Не запускайте через `sudo`.** Приложение должно работать от обычного пользователя; для TUN один раз появится окно pkexec (или установите правило polkit из раздела 5).
 
-Если при `./run-igxray` появляется `Access denied` для `~/.local/share/InvisibleGorilla-XRay/TUN/` — каталог остался от root после `sudo`. Исправление:
+Если при `./run-igxray` появляется `Access denied` для `~/.local/share/InvisibleGorilla-XRay/` — каталог остался от root после `sudo`. Исправление:
 `sudo chown -R "$USER" ~/.local/share/InvisibleGorilla-XRay`
+
+Чтобы pkexec не спрашивал пароль **на каждое** подключение TUN (один раз):
+```bash
+./scripts/linux/install-tun-policy.sh
+# перелогиньтесь
+```
 
 ## 4. Установка в систему (рекомендуется)
 
 ```bash
-cd dist-linux/InvisibleGorilla-XRay-Linux-linux-x64-v3.6.6.0
+cd dist-linux/InvisibleGorilla-XRay-Linux-linux-x64-v3.6.7.0
 chmod +x install.sh
 ./install.sh
 ```

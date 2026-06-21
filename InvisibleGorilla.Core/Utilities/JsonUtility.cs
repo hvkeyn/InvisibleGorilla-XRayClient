@@ -60,6 +60,49 @@ namespace InvisibleGorillaXRay.Utilities
             }
         }
 
+        /// <summary>
+        /// Reads the remote host from the first real proxy outbound (VLESS/VMess/Trojan/etc.).
+        /// The native runtime config often omits or reshapes fields, so callers should fall
+        /// back to the on-disk user config when this returns empty.
+        /// </summary>
+        public static string ExtractOutboundServerAddress(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+                return string.Empty;
+
+            try
+            {
+                if (JToken.Parse(json) is not JObject root)
+                    return string.Empty;
+
+                if (root["outbounds"] is not JArray outbounds)
+                    return string.Empty;
+
+                foreach (JToken outbound in outbounds)
+                {
+                    string protocol = outbound["protocol"]?.ToString()?.Trim().ToLowerInvariant() ?? string.Empty;
+                    if (protocol is "freedom" or "blackhole" or "direct" or "dns" or "loopback")
+                        continue;
+
+                    JToken? settings = outbound["settings"];
+                    if (settings == null)
+                        continue;
+
+                    string? address = settings["vnext"]?[0]?["address"]?.ToString()
+                        ?? settings["servers"]?[0]?["address"]?.ToString()
+                        ?? settings["address"]?.ToString();
+
+                    if (!string.IsNullOrWhiteSpace(address))
+                        return address.Trim();
+                }
+            }
+            catch
+            {
+            }
+
+            return string.Empty;
+        }
+
         public static string SanitizeRuntimeManagedSections(string json)
         {
             if (string.IsNullOrWhiteSpace(json))

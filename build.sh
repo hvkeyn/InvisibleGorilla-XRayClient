@@ -34,7 +34,7 @@ set -euo pipefail
 
 # ─── Settings ─────────────────────────────────────────────────────────────────
 
-readonly APP_VERSION="3.6.6.0"
+readonly APP_VERSION="3.6.7.0"
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly WRAPPER_DIR="$SCRIPT_DIR/XRay-Wrapper"
 readonly LINUX_DIR="$SCRIPT_DIR/InvisibleGorilla-XRay.Linux"
@@ -706,6 +706,14 @@ package_bundle() {
     chmod +x "$stage/bin/$APP_BINARY_NAME"
     ok "Bundled: Avalonia GUI binary"
 
+    if [[ -d "$SCRIPT_DIR/scripts/linux" ]]; then
+        mkdir -p "$stage/scripts/linux"
+        cp "$SCRIPT_DIR/scripts/linux/install-tun-policy.sh" "$stage/scripts/linux/"
+        cp "$SCRIPT_DIR/scripts/linux/50-invisible-gorilla-xray-tun.rules" "$stage/scripts/linux/"
+        chmod +x "$stage/scripts/linux/install-tun-policy.sh"
+        ok "Bundled: scripts/linux/install-tun-policy.sh (one-time pkexec password fix)"
+    fi
+
     cat > "$stage/$APP_RUNNER_NAME" <<'RUNNER'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -842,6 +850,13 @@ Run without installing:
 
 Install system-wide:
   ./install.sh
+
+One-time: stop pkexec password on every TUN connect/disconnect:
+  ./scripts/linux/install-tun-policy.sh
+  (then log out and back in)
+
+If the app crashes or cannot save settings after running with sudo:
+  sudo chown -R "$USER" ~/.local/share/InvisibleGorilla-XRay
 
 After install you can start it from the application menu or by command:
   $APP_COMMAND_NAME

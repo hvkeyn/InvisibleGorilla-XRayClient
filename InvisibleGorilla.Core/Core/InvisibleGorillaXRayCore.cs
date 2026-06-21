@@ -442,11 +442,16 @@ namespace InvisibleGorillaXRay.Core
             if (configStatus.Code == Code.ERROR)
                 return configStatus;
 
-            string server = JsonUtility.Find(
-                key: "address",
-                parent: "outbounds",
-                jsonString: configStatus.Content.ToString()
-            );
+            string server = ResolveTunnelServerAddress(configStatus.Content?.ToString());
+            if (string.IsNullOrWhiteSpace(server))
+            {
+                DiagnosticLog.Write("EnableTunnel", "Failed to resolve outbound server address for TUN bypass route.");
+                return new Status(
+                    Code.ERROR,
+                    SubCode.CANT_TUNNEL,
+                    "Could not determine the VPN server address from the active config.");
+            }
+
             int proxyPort = getProxyPort.Invoke();
             string address = getTunIp.Invoke();
             string dns = getDns.Invoke();
@@ -467,15 +472,56 @@ namespace InvisibleGorillaXRay.Core
                 // When Tor rewrote the runtime config (Tor-only has no file on disk), use it
                 // directly so server-address extraction / bypass routing still works.
                 if (!string.IsNullOrEmpty(currentRuntimeConfig))
-                    return new Status(Code.SUCCESS, SubCode.SUCCESS, currentRuntimeConfig.ToLower());
+                    return new Status(Code.SUCCESS, SubCode.SUCCESS, currentRuntimeConfig);
 
                 Config config = getConfig.Invoke();
 
                 if (config == null)
                     return new Status(Code.ERROR, SubCode.NO_CONFIG, LocalizationService.GetTerm(Localization.NO_CONFIGS_FOUND));
                 
-                return new Status(Code.SUCCESS, SubCode.SUCCESS, System.IO.File.ReadAllText(config.Path).ToLower());
+                return new Status(Code.SUCCESS, SubCode.SUCCESS, System.IO.File.ReadAllText(config.Path));
             }
+        }
+
+        private string ResolveTunnelServerAddress(string? runtimeConfig)
+        {
+            string server = JsonUtility.ExtractOutboundServerAddress(runtimeConfig);
+            if (string.IsNullOrWhiteSpace(server))
+            {
+                server = JsonUtility.Find(key: "address", parent: "outbounds", jsonString: runtimeConfig);
+            }
+
+            if (!string.IsNullOrWhiteSpace(server))
+            {
+                DiagnosticLog.Write("EnableTunnel", $"Resolved bypass server address='{server}' from runtime config.");
+                return server.Trim();
+            }
+
+            Config? config = getConfig.Invoke();
+            if (config == null || !System.IO.File.Exists(config.Path))
+                return string.Empty;
+
+            try
+            {
+                string userConfig = System.IO.File.ReadAllText(config.Path);
+                server = JsonUtility.ExtractOutboundServerAddress(userConfig);
+                if (string.IsNullOrWhiteSpace(server))
+                {
+                    server = JsonUtility.Find(key: "address", parent: "outbounds", jsonString: userConfig);
+                }
+
+                if (!string.IsNullOrWhiteSpace(server))
+                {
+                    DiagnosticLog.Write("EnableTunnel", "Resolved bypass server from original config file.");
+                    return server.Trim();
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("EnableTunnel.ResolveTunnelServerAddress", ex);
+            }
+
+            return string.Empty;
         }
 
         private void DisableTunnel()

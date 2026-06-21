@@ -9,6 +9,7 @@ namespace InvisibleGorillaXRay.Handlers
     using Values;
     using Utilities;
     using Settings.Startup;
+    using InvisibleGorillaXRay.Core;
 
     public class SettingsHandler : Handler
     {
@@ -113,9 +114,16 @@ namespace InvisibleGorillaXRay.Handlers
 
         private void SaveUserSettings()
         {
-            Values.Directory.EnsureWritableDirectories();
-            string rawSettings = JsonConvert.SerializeObject(userSettings);
-            FileUtility.WriteAllTextAtomic(Path.USER_SETTINGS, rawSettings);
+            try
+            {
+                Values.Directory.EnsureWritableDirectories();
+                string rawSettings = JsonConvert.SerializeObject(userSettings);
+                FileUtility.WriteAllTextAtomic(Path.USER_SETTINGS, rawSettings);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("SettingsHandler.SaveUserSettings", ex);
+            }
         }
 
         private static string NormalizePath(string path, string fallback)

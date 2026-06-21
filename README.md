@@ -52,6 +52,12 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.7
+
+- **Linux: crash on profile select** — `Settings.json` save no longer crashes when the data folder is root-owned; startup tries `pkexec chown` once to repair permissions.
+- **Linux: empty VPN server address** — TUN bypass route now reads the server host from the on-disk VLESS config (`settings.vnext[0].address`), not only the native runtime JSON (which often omits it).
+- **Linux: pkexec every connect** — `scripts/linux/install-tun-policy.sh` is bundled in the tarball for one-time polkit setup.
+
 ## What's new in v3.6.6
 
 - **Linux: TUN no longer aborts on app-rules file permission errors** — `linux-transparent-proxy-config.json` is optional metadata; write failures (e.g. data folder owned by root after `sudo ./run-igxray`) no longer block VLESS/TUN. Startup notifies with `chown` fix command; fallback write to `$XDG_RUNTIME_DIR` or `/tmp`.
