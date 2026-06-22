@@ -52,6 +52,10 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.8
+
+- **Windows TUN:** fix traffic not tunneling — resolve the physical default gateway before the virtual adapter is addressed, bind `tun2socks` to the uplink NIC (requires InvisibleGorilla-TUN v0.3.9+).
+
 ## What's new in v3.6.7
 
 - **Linux: crash on profile select** — `Settings.json` save no longer crashes when the data folder is root-owned; startup tries `pkexec chown` once to repair permissions.
