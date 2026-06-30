@@ -211,7 +211,12 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
         {
             DiagnosticLog.Write("WindowsTunnel", "Disable requested");
             isCanceled = false;
-            ExecuteCommand(command: $"-command=disable");
+            Status status = ExecuteCommand(command: $"-command=disable");
+            if (status.Code == Code.ERROR)
+            {
+                DiagnosticLog.Write("WindowsTunnel", "Primary disable command failed; trying stale TUN cleanup fallback.");
+                WindowsStaleTunCleanup.TryDisableStaleTunnel();
+            }
         }
 
         public void Cancel()

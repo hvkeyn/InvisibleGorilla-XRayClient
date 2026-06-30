@@ -38,6 +38,7 @@ namespace InvisibleGorillaXRay.Core
             }
 
             [DllImport(Path.XRAY_CORE_DLL, EntryPoint = "IsFileExists")]
+            [return: MarshalAs(UnmanagedType.I1)]
             static extern bool IsFileExistsNative(IntPtr pathPtr);
         }
 
@@ -101,7 +102,15 @@ namespace InvisibleGorillaXRay.Core
             }
 
             [DllImport(Path.XRAY_CORE_DLL, EntryPoint = "StartServer")]
-            static extern void StartServerNative(string config, int port, string logLevel, IntPtr logPathPtr, bool isSocks, bool isUdpEnabled, IntPtr usernamePtr, IntPtr passwordPtr);
+            static extern void StartServerNative(
+                string config,
+                int port,
+                string logLevel,
+                IntPtr logPathPtr,
+                [MarshalAs(UnmanagedType.I1)] bool isSocks,
+                [MarshalAs(UnmanagedType.I1)] bool isUdpEnabled,
+                IntPtr usernamePtr,
+                IntPtr passwordPtr);
         }
 
         public static void StopServer()

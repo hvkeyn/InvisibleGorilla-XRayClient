@@ -533,7 +533,11 @@ namespace InvisibleGorillaXRay.Core
             if (mode != Mode.TUN || !isSocks)
                 return LocalProxyCredentials.None;
 
-            return LocalProxyCredentials.CreateSessionScoped();
+            // Windows TUN captures all local traffic and stale WinHTTP/WinINet proxy
+            // state can still hit 127.0.0.1:10801 directly. Requiring random SOCKS
+            // credentials turns that into a flood of auth failures inside native Xray.
+            // The listener is localhost-only, so keep Windows TUN unauthenticated.
+            return LocalProxyCredentials.None;
         }
 
         private bool ShouldChangeSystemProxy() => getSystemProxyUsed.Invoke();

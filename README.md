@@ -55,6 +55,9 @@ Android support is **experimental**.
 ## What's new in v3.6.8
 
 - **Windows TUN:** fix traffic not tunneling — resolve the physical default gateway before the virtual adapter is addressed, bind `tun2socks` to the uplink NIC (requires InvisibleGorilla-TUN v0.3.9+).
+- **Windows: fixed random `XRayCore.dll` crash** — native `bool` parameters are marshaled correctly for the cgo DLL, removing a likely cause of `0xc0000005` access violations.
+- **Windows: TUN cleanup is safer** — shutdown and crash cleanup now disable TUN/routes before stopping native Xray, and startup tries to disable stale TUN state left by an older crashed build.
+- **Windows: quieter TUN SOCKS listener** — local TUN SOCKS auth is disabled on localhost to avoid storms of `invalid username or password` from stale system proxy state.
 
 ## What's new in v3.6.7
 

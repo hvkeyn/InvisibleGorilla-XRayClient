@@ -422,8 +422,10 @@ namespace InvisibleGorillaXRay
                 {
                     System.Threading.Tasks.Task stopTask = System.Threading.Tasks.Task.Run(() =>
                     {
-                        onStopServer.Invoke();
+                        // Always tear down OS routing before touching native Xray. StopServer
+                        // can block/crash inside XRayCore.dll; routes must not be left behind.
                         onDisableMode.Invoke();
+                        onStopServer.Invoke();
                     });
 
                     if (!stopTask.Wait(TimeSpan.FromSeconds(10)))
@@ -465,7 +467,11 @@ namespace InvisibleGorillaXRay
                 return;
 
             isRerunRequest = true;
-            System.Threading.Tasks.Task.Run(() => onStopServer.Invoke());
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try { onDisableMode.Invoke(); } catch (Exception ex) { DiagnosticLog.WriteException("MainWindow.TryRerun.DisableMode", ex); }
+                try { onStopServer.Invoke(); } catch (Exception ex) { DiagnosticLog.WriteException("MainWindow.TryRerun.StopServer", ex); }
+            });
         }
 
         public void TryDisableModeAndRerun()
@@ -476,8 +482,8 @@ namespace InvisibleGorillaXRay
             isRerunRequest = true;
             System.Threading.Tasks.Task.Run(() =>
             {
-                onStopServer.Invoke();
                 onDisableMode.Invoke();
+                onStopServer.Invoke();
             });
         }
 
@@ -491,6 +497,7 @@ namespace InvisibleGorillaXRay
                 return false;
 
             resumeServerAfterNativeTest = true;
+            onDisableMode.Invoke();
             onStopServer.Invoke();
 
             for (int attempt = 0; attempt < 60 && runWorker.IsBusy; attempt++)
@@ -531,7 +538,11 @@ namespace InvisibleGorillaXRay
                 ShowWaitForRunStatus();
                 System.Threading.Tasks.Task.Run(() =>
                 {
-                    try { onStopServer.Invoke(); }
+                    try
+                    {
+                        onDisableMode.Invoke();
+                        onStopServer.Invoke();
+                    }
                     catch (Exception ex) { DiagnosticLog.WriteException("MainWindow.OnRunButtonClick", ex); }
                 });
                 return;
@@ -552,8 +563,8 @@ namespace InvisibleGorillaXRay
             {
                 try
                 {
-                    onStopServer.Invoke();
                     onDisableMode.Invoke();
+                    onStopServer.Invoke();
                 }
                 catch (Exception ex)
                 {

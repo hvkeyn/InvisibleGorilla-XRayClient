@@ -7,6 +7,7 @@ namespace InvisibleGorillaXRay
     using Managers;
     using Handlers;
     using Factories;
+    using Handlers.Tunnels;
 
     public partial class App : Application
     {
@@ -19,6 +20,7 @@ namespace InvisibleGorillaXRay
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            WindowsStaleTunCleanup.TryDisableStaleTunnel();
             InitializeAppManager();
             InitializeNotifyIcon();
             InitializeWindowFactory();
@@ -104,8 +106,11 @@ namespace InvisibleGorillaXRay
                 // Never block shutdown on the native stop call.
                 System.Threading.Tasks.Task stopTask = System.Threading.Tasks.Task.Run(() =>
                 {
-                    try { appManager?.Core?.Stop(); } catch { }
+                    // On crash/exit, routes must be removed first. Native StopServer can
+                    // hang or crash inside XRayCore.dll, and then TUN would be left active.
                     try { appManager?.Core?.DisableMode(); } catch { }
+                    try { WindowsStaleTunCleanup.TryDisableStaleTunnel(); } catch { }
+                    try { appManager?.Core?.Stop(); } catch { }
                 });
                 stopTask.Wait(TimeSpan.FromSeconds(5));
             }

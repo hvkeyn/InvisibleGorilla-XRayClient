@@ -73,6 +73,7 @@ namespace InvisibleGorillaXRay.Core
             }
 
             [DllImport(LIB_NAME, EntryPoint = "IsFileExists")]
+            [return: MarshalAs(UnmanagedType.I1)]
             static extern bool IsFileExistsNative(IntPtr pathPtr);
         }
 
@@ -129,7 +130,15 @@ namespace InvisibleGorillaXRay.Core
             }
 
             [DllImport(LIB_NAME, EntryPoint = "StartServer")]
-            static extern void StartServerNative(string config, int port, string logLevel, IntPtr logPathPtr, bool isSocks, bool isUdpEnabled, IntPtr usernamePtr, IntPtr passwordPtr);
+            static extern void StartServerNative(
+                string config,
+                int port,
+                string logLevel,
+                IntPtr logPathPtr,
+                [MarshalAs(UnmanagedType.I1)] bool isSocks,
+                [MarshalAs(UnmanagedType.I1)] bool isUdpEnabled,
+                IntPtr usernamePtr,
+                IntPtr passwordPtr);
         }
 
         public static void StopServer()
@@ -177,7 +186,12 @@ namespace InvisibleGorillaXRay.Core
             }
 
             [DllImport(LIB_NAME, EntryPoint = "StartAndroidTun2Socks")]
-            static extern IntPtr StartAndroidTunnelNative(int fileDescriptor, int proxyPort, bool isUdpEnabled, IntPtr usernamePtr, IntPtr passwordPtr);
+            static extern IntPtr StartAndroidTunnelNative(
+                int fileDescriptor,
+                int proxyPort,
+                [MarshalAs(UnmanagedType.I1)] bool isUdpEnabled,
+                IntPtr usernamePtr,
+                IntPtr passwordPtr);
         }
 
         public static void StopAndroidTunnel()
@@ -193,6 +207,7 @@ namespace InvisibleGorillaXRay.Core
             return IsAndroidTunnelRunningNative();
 
             [DllImport(LIB_NAME, EntryPoint = "IsAndroidTun2SocksRunning")]
+            [return: MarshalAs(UnmanagedType.I1)]
             static extern bool IsAndroidTunnelRunningNative();
         }
 
