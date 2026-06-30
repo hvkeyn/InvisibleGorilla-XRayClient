@@ -20,9 +20,9 @@
 
     <Copyright>Copyright (C) 2025 Invisible Gorilla</Copyright>
 
-    <Version>3.6.8.0</Version>
+    <Version>3.6.9.0</Version>
 
-    <AssemblyVersion>3.6.8.0</AssemblyVersion>
+    <AssemblyVersion>3.6.9.0</AssemblyVersion>
 
     <Nullable>enable</Nullable>
 
