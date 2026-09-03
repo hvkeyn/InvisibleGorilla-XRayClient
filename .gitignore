@@ -83,3 +83,8 @@ memory-bank/systemPatterns.md
 /memory-bank
 /memory-bank
 InvisibleGorilla-XRay/TUN/InvisibleGorilla-TUN.pdb
+
+# Local extra build trees and leftover logs
+/InvisibleGorilla-XRay/bin-*/
+build-*.log
+InvisibleGorilla-XRay-Windows-*.zip

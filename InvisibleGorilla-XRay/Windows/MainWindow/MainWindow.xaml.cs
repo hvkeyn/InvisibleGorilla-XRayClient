@@ -331,7 +331,6 @@ namespace InvisibleGorillaXRay
             TryStartHidden();
             TryAutoConnect();
 
-            connectionInfoTimer.Start();
             RefreshConnectionInfo();
 
             AnalyticsService.SendEvent(new AppOpenedEvent());
@@ -382,13 +381,22 @@ namespace InvisibleGorillaXRay
                 latencyText = string.Empty;
             }
 
-            Brush statusBrush = (Brush)new BrushConverter().ConvertFromString(colorHex)!;
+            Brush statusBrush = Brushes.Gray;
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(colorHex))
+                    statusBrush = (Brush)new BrushConverter().ConvertFromString(colorHex) ?? Brushes.Gray;
+            }
+            catch
+            {
+                statusBrush = Brushes.Gray;
+            }
 
             textGoidaSummary.Text = presentation.Summary;
             textGoidaSignalLabel.Text = Loc(qualityLabel);
             textGoidaSignalLabel.Foreground = statusBrush;
             textGoidaLatency.Text = latencyText;
-            wifiGoidaSignal.SetSignal(signalLevel, statusBrush);
+            wifiGoidaSignal?.SetSignal(signalLevel, statusBrush);
             panelGoidaDetails.Visibility = Visibility.Visible;
         }
 
@@ -717,7 +725,7 @@ namespace InvisibleGorillaXRay
 
             isConnected = false;
             consecutiveTunnelFailures = 0;
-            connectionInfoTimer.Interval = TimeSpan.FromSeconds(20);
+            connectionInfoTimer.Stop();
             ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(1));
         }
 
@@ -750,6 +758,9 @@ namespace InvisibleGorillaXRay
 
         private async void RefreshConnectionInfo()
         {
+            if (shutdownRequested || !IsLoaded || textInfoIp == null || infoStatusDot == null)
+                return;
+
             connectionInfoCts?.Cancel();
             connectionInfoCts = new CancellationTokenSource();
             CancellationToken token = connectionInfoCts.Token;

@@ -65,6 +65,7 @@ namespace InvisibleGorillaXRay
 
                 AppDomain.CurrentDomain.ProcessExit += processExitHandler;
                 AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
+                DispatcherUnhandledException += OnDispatcherUnhandledException;
                 SystemEvents.SessionEnded += sessionEndedHandler;
             }
 
@@ -77,6 +78,7 @@ namespace InvisibleGorillaXRay
 
             AppDomain.CurrentDomain.ProcessExit -= processExitHandler;
             AppDomain.CurrentDomain.UnhandledException -= OnUnhandledException;
+            DispatcherUnhandledException -= OnDispatcherUnhandledException;
             SystemEvents.SessionEnded -= sessionEndedHandler;
 
             base.OnExit(e);
@@ -84,7 +86,28 @@ namespace InvisibleGorillaXRay
 
         private void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
         {
+            try
+            {
+                if (e.ExceptionObject is Exception ex)
+                    Core.DiagnosticLog.WriteException("App.UnhandledException", ex);
+                else
+                    Core.DiagnosticLog.Write("App.UnhandledException", e.ExceptionObject?.ToString() ?? "unknown");
+            }
+            catch { }
+
             CleanupBeforeExit();
+        }
+
+        private void OnDispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
+        {
+            try
+            {
+                Core.DiagnosticLog.WriteException("App.DispatcherUnhandledException", e.Exception);
+            }
+            catch { }
+
+            // Keep the idle UI alive when a lookup/probe throws on the dispatcher.
+            e.Handled = true;
         }
 
         private void CleanupBeforeExit()

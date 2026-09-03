@@ -52,6 +52,12 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.10
+
+- **Windows: crash while idle** — background Goida checks no longer call native `XRayCore.dll` when the proxy is disconnected.
+- **Windows: lighter idle UI** — the public-IP timer runs only while connected, and dispatcher exceptions no longer kill the app.
+- **Windows: faster IP lookup** — disconnected probes reuse one `HttpClient` instead of opening a new connection for every endpoint.
+
 ## What's new in v3.6.9
 
 - **Windows hotfix over v3.6.8** — keeps the TUN v0.3.9 routing fix and adds native crash hardening plus stale TUN cleanup after abnormal exits.

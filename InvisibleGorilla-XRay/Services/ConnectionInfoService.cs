@@ -69,6 +69,26 @@ namespace InvisibleGorillaXRay.Services
 
         private const string UserAgent = "InvisibleGorilla-XRay";
 
+        private static readonly HttpClient DirectClient = CreateDirectClient();
+
+        private static HttpClient CreateDirectClient()
+        {
+            SocketsHttpHandler handler = new SocketsHttpHandler
+            {
+                UseProxy = false,
+                AllowAutoRedirect = true,
+                ConnectTimeout = TimeSpan.FromSeconds(12),
+                PooledConnectionLifetime = TimeSpan.FromMinutes(5)
+            };
+
+            HttpClient client = new HttpClient(handler)
+            {
+                Timeout = TimeSpan.FromSeconds(12)
+            };
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
+            return client;
+        }
+
         public async Task<ConnectionInfo> LookupAsync(IWebProxy proxy, CancellationToken token = default)
         {
             ConnectionInfo lastFailure = new ConnectionInfo { Ok = false, Error = "all endpoints failed" };
@@ -106,20 +126,26 @@ namespace InvisibleGorillaXRay.Services
 
         private static async Task<ConnectionInfo> TryLookupAsync(string url, IWebProxy proxy, CancellationToken token)
         {
-            SocketsHttpHandler handler = new SocketsHttpHandler
+            HttpClient ownedClient = null;
+            HttpClient client = DirectClient;
+            if (proxy != null)
             {
-                UseProxy = proxy != null,
-                Proxy = proxy,
-                PreAuthenticate = proxy != null,
-                AllowAutoRedirect = true,
-                ConnectTimeout = TimeSpan.FromSeconds(12)
-            };
+                SocketsHttpHandler handler = new SocketsHttpHandler
+                {
+                    UseProxy = true,
+                    Proxy = proxy,
+                    PreAuthenticate = true,
+                    AllowAutoRedirect = true,
+                    ConnectTimeout = TimeSpan.FromSeconds(12)
+                };
 
-            using HttpClient client = new HttpClient(handler)
-            {
-                Timeout = TimeSpan.FromSeconds(12)
-            };
-            client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
+                ownedClient = new HttpClient(handler)
+                {
+                    Timeout = TimeSpan.FromSeconds(12)
+                };
+                ownedClient.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
+                client = ownedClient;
+            }
 
             try
             {
@@ -166,6 +192,10 @@ namespace InvisibleGorillaXRay.Services
             {
                 DiagnosticLog.Write("ConnectionInfo", $"Lookup {url} failed: {ex.Message}");
                 return new ConnectionInfo { Ok = false, Error = ex.Message };
+            }
+            finally
+            {
+                ownedClient?.Dispose();
             }
         }
 

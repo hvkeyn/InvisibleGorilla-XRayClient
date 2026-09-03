@@ -374,10 +374,12 @@ namespace InvisibleGorillaXRay.Services.Goida
                 List<GoidaNode> targets = ResolveLiveProbeTargets(
                     FilterProbeTargets(settings, store.GetNodes(), manual, listIdFilter).ToList());
 
-                int maxVless = manual ? GoidaProfileSettings.MaxVerifiedNodes : MaxBackgroundVerifyBatch;
+                // Idle background scans stay TCP-only. Native TestConnection in XRayCore.dll
+                // can take the whole process down; keep it for explicit/manual checks.
+                int maxVless = manual ? GoidaProfileSettings.MaxVerifiedNodes : 0;
                 int earlyStopOk = manual
                     ? GoidaProfileSettings.DefaultAutoPoolSize
-                    : Math.Min(5, MaxBackgroundVerifyBatch);
+                    : 0;
 
                 bool paused = false;
                 if (isVpnSessionActive?.Invoke() == true)

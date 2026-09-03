@@ -629,10 +629,10 @@ namespace InvisibleGorillaXRay.Services.Goida
                 {
                     MaxVlessTests = manual
                         ? GoidaProfileSettings.MaxManualVerifyNodes
-                        : Math.Min(GoidaProfileSettings.MaxVerifiedNodes, MaxProbeBatch),
+                        : 0,
                     EarlyStopOkCount = manual
                         ? GoidaProfileSettings.MaxManualVerifyNodes
-                        : Math.Min(5, MaxProbeBatch),
+                        : 0,
                     MaxTcpLatencyForVlessMs = settings.AutoSwitchLatencyMs,
                     OnFirstVlessOk = () => _ = EvaluateAutoSwitchAsync(getSettings().Clone())
                 };
