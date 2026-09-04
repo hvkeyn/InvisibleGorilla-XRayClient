@@ -103,8 +103,9 @@ namespace InvisibleGorillaXRay.Services.Goida
                 return "-";
 
             string lower = configJson.ToLowerInvariant();
+            bool xhttp = lower.Contains("\"xhttp\"") || lower.Contains("type=xhttp");
             if (lower.Contains("\"vless\"") || lower.Contains("vless://"))
-                return "VLESS";
+                return xhttp ? "VLESS/XHTTP" : "VLESS";
             if (lower.Contains("\"vmess\"") || lower.Contains("vmess://"))
                 return "VMess";
             if (lower.Contains("\"trojan\"") || lower.Contains("trojan://"))

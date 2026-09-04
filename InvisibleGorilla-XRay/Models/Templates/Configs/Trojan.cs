@@ -87,6 +87,18 @@ namespace InvisibleGorillaXRay.Models.Templates.Configs
                         adapter.path = HttpUtility.UrlDecode(data.query["serviceName"] ?? "");
                         adapter.headerType = HttpUtility.UrlDecode(data.query["mode"] ?? "gun");
                         break;
+                    case "xhttp":
+                    case "splithttp":
+                        adapter.streamNetwork = Global.StreamNetwork.XHTTP;
+                        adapter.requestHost = HttpUtility.UrlDecode(data.query["host"] ?? "");
+                        adapter.path = HttpUtility.UrlDecode(data.query["path"] ?? "/");
+                        adapter.headerType = HttpUtility.UrlDecode(data.query["mode"] ?? "auto");
+                        break;
+                    case "httpupgrade":
+                        adapter.streamNetwork = Global.StreamNetwork.HTTPUPGRADE;
+                        adapter.requestHost = HttpUtility.UrlDecode(data.query["host"] ?? "");
+                        adapter.path = HttpUtility.UrlDecode(data.query["path"] ?? "/");
+                        break;
                     default:
                         break;
                 }

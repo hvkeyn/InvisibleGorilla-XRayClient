@@ -8,6 +8,8 @@
             public const string H2 = "h2";
             public const string QUIC = "quic";
             public const string GRPC = "grpc";
+            public const string XHTTP = "xhttp";
+            public const string HTTPUPGRADE = "httpupgrade";
         }
 
         public static class StreamSecurity

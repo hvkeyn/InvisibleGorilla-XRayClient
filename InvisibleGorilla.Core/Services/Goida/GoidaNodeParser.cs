@@ -13,6 +13,8 @@ namespace InvisibleGorillaXRay.Services.Goida
 {
     public sealed class GoidaNodeParser
     {
+        public const int MaxNodesPerList = 2500;
+
         private readonly Func<string, Status> convertConfigLinkToV2Ray;
 
         public GoidaNodeParser(Func<string, Status> convertConfigLinkToV2Ray)
@@ -27,7 +29,7 @@ namespace InvisibleGorillaXRay.Services.Goida
                 return new List<GoidaNode>();
 
             Directory.CreateDirectory(nodesDirectory);
-            List<string[]> v2RayList = ConvertRawToV2RayList(rawData);
+            List<string[]> v2RayList = ConvertRawToV2RayList(GoidaSubscriptionNormalizer.Normalize(rawData));
             Dictionary<string, GoidaNode> nodesById = new(StringComparer.OrdinalIgnoreCase);
 
             foreach (string[] entry in v2RayList)
@@ -45,8 +47,7 @@ namespace InvisibleGorillaXRay.Services.Goida
                 string nodeId = ComputeNodeId(listId, remark, sanitized);
                 string fileName = $"{listId}_{nodeId}.json";
                 string configPath = Path.Combine(nodesDirectory, fileName);
-                if (!File.Exists(configPath))
-                    File.WriteAllText(configPath, sanitized);
+                File.WriteAllText(configPath, sanitized);
 
                 nodesById[nodeId] = new GoidaNode
                 {
@@ -60,6 +61,9 @@ namespace InvisibleGorillaXRay.Services.Goida
                     LatencyMs = Values.Availability.NOT_CHECKED,
                     Status = GoidaNodeStatus.Unknown
                 };
+
+                if (nodesById.Count >= MaxNodesPerList)
+                    break;
             }
 
             return nodesById.Values.ToList();
@@ -108,7 +112,7 @@ namespace InvisibleGorillaXRay.Services.Goida
                             ?? outbound?.settings?.servers?[0]?.port
                             ?? outbound?.settings?.port;
                         if (!string.IsNullOrWhiteSpace(address?.ToString()))
-                            return $"{address}:{port}";
+                            return FormatEndpoint(address.ToString(), port?.ToString());
                     }
                 }
             }
@@ -117,6 +121,14 @@ namespace InvisibleGorillaXRay.Services.Goida
             }
 
             return remark;
+        }
+
+        private static string FormatEndpoint(string address, string? port)
+        {
+            if (address.Contains(':') && !address.StartsWith('['))
+                address = $"[{address}]";
+
+            return string.IsNullOrWhiteSpace(port) ? address : $"{address}:{port}";
         }
     }
 }

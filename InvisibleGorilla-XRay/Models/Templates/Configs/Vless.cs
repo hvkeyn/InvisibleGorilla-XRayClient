@@ -24,7 +24,18 @@ namespace InvisibleGorillaXRay.Models.Templates.Configs
 
         public override Status FetchDataFromLink(string link) 
         {
-            data = new Data(link);
+            try
+            {
+                data = new Data(link);
+            }
+            catch
+            {
+                return new Status(
+                    code: Code.ERROR,
+                    subCode: SubCode.INVALID_CONFIG,
+                    content: LocalizationService.GetTerm(Localization.INVALID_CONFIG)
+                );
+            }
 
             if (IsInvalidLink())
                 return new Status(
@@ -35,7 +46,11 @@ namespace InvisibleGorillaXRay.Models.Templates.Configs
 
             return new Status(Code.SUCCESS, SubCode.SUCCESS, null);
 
-            bool IsInvalidLink() => data.query.Count == 0;
+            bool IsInvalidLink() =>
+                data?.uri == null
+                || string.IsNullOrWhiteSpace(data.uri.IdnHost)
+                || data.uri.Port <= 0
+                || string.IsNullOrWhiteSpace(data.uri.UserInfo);
         }
 
         protected override Adapter Adapter
@@ -89,6 +104,18 @@ namespace InvisibleGorillaXRay.Models.Templates.Configs
                     case "grpc":
                         adapter.path = HttpUtility.UrlDecode(data.query["serviceName"] ?? "");
                         adapter.headerType = HttpUtility.UrlDecode(data.query["mode"] ?? "gun");
+                        break;
+                    case "xhttp":
+                    case "splithttp":
+                        adapter.streamNetwork = Global.StreamNetwork.XHTTP;
+                        adapter.requestHost = HttpUtility.UrlDecode(data.query["host"] ?? "");
+                        adapter.path = HttpUtility.UrlDecode(data.query["path"] ?? "/");
+                        adapter.headerType = HttpUtility.UrlDecode(data.query["mode"] ?? "auto");
+                        break;
+                    case "httpupgrade":
+                        adapter.streamNetwork = Global.StreamNetwork.HTTPUPGRADE;
+                        adapter.requestHost = HttpUtility.UrlDecode(data.query["host"] ?? "");
+                        adapter.path = HttpUtility.UrlDecode(data.query["path"] ?? "/");
                         break;
                     default:
                         break;

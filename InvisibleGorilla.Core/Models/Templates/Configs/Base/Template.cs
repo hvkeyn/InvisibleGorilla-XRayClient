@@ -59,6 +59,8 @@
                     grpcSettings = GrpcSettings,
                     tcpSettings = TcpSettings,
                     realitySettings = RealitySettings,
+                    xhttpSettings = XhttpSettings,
+                    httpupgradeSettings = HttpUpgradeSettings,
                 }
             }
         };
@@ -242,6 +244,37 @@
                     request = request.Replace("$requestPath$", $"\"{httpPath}\"");
                     return JsonUtility.ConvertFromJson<object>(request);
                 }
+            }
+        }
+
+        private V2Ray.StreamSettings.XhttpSettings XhttpSettings
+        {
+            get
+            {
+                if (Adapter.streamNetwork != Global.StreamNetwork.XHTTP)
+                    return null;
+
+                return new V2Ray.StreamSettings.XhttpSettings
+                {
+                    path = string.IsNullOrWhiteSpace(Adapter.path) ? "/" : Adapter.path,
+                    host = Adapter.requestHost,
+                    mode = string.IsNullOrWhiteSpace(Adapter.headerType) ? "auto" : Adapter.headerType
+                };
+            }
+        }
+
+        private V2Ray.StreamSettings.HttpUpgradeSettings HttpUpgradeSettings
+        {
+            get
+            {
+                if (Adapter.streamNetwork != Global.StreamNetwork.HTTPUPGRADE)
+                    return null;
+
+                return new V2Ray.StreamSettings.HttpUpgradeSettings
+                {
+                    path = string.IsNullOrWhiteSpace(Adapter.path) ? "/" : Adapter.path,
+                    host = Adapter.requestHost
+                };
             }
         }
 

@@ -9,7 +9,7 @@ namespace InvisibleGorillaXRay.Services.Goida
     public static class GoidaEndpointProbe
     {
         private static readonly Regex HostPortRegex = new(
-            @"^(?<host>[^:]+):(?<port>\d{1,5})$",
+            @"^(?<host>\[[^\]]+\]|[^:]+):(?<port>\d{1,5})$",
             RegexOptions.Compiled);
 
         public static int ProbeTcp(string endpoint, int timeoutMs = 1500)
@@ -53,6 +53,8 @@ namespace InvisibleGorillaXRay.Services.Goida
                 return false;
 
             host = match.Groups["host"].Value.Trim();
+            if (host.StartsWith("[") && host.EndsWith("]") && host.Length > 2)
+                host = host.Substring(1, host.Length - 2);
             if (!int.TryParse(match.Groups["port"].Value, out port) || port is < 1 or > 65535)
                 return false;
 

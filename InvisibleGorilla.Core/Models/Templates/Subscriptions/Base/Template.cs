@@ -42,9 +42,14 @@ namespace InvisibleGorillaXRay.Models.Templates.Subscriptions
                 {
                     try
                     {
-                        data = Encoding.UTF8.GetString(
-                            bytes: System.Convert.FromBase64String(Data)
-                        );
+                        string compact = Data.Replace("\r", string.Empty)
+                            .Replace("\n", string.Empty)
+                            .Replace(" ", string.Empty);
+                        int pad = compact.Length % 4;
+                        if (pad > 0)
+                            compact += new string('=', 4 - pad);
+
+                        data = Encoding.UTF8.GetString(Convert.FromBase64String(compact));
                     }
                     catch
                     {

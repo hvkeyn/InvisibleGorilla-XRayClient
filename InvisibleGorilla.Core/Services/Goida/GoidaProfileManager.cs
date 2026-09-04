@@ -473,10 +473,8 @@ namespace InvisibleGorillaXRay.Services.Goida
                     .FetchListsAsync(fetchListIds, cancellationToken)
                     .ConfigureAwait(false);
 
-                HashSet<int> refreshedListIds = fetchListIds.ToHashSet();
                 Dictionary<string, GoidaNode> mergedById = store.GetNodes()
-                    .Where(node => enabledLists.Contains(node.ListId)
-                        && !refreshedListIds.Contains(node.ListId))
+                    .Where(node => enabledLists.Contains(node.ListId))
                     .ToDictionary(node => node.Id, StringComparer.OrdinalIgnoreCase);
 
                 Dictionary<string, GoidaNode> existing = store.GetNodes()
@@ -499,11 +497,17 @@ namespace InvisibleGorillaXRay.Services.Goida
                         {
                             DiagnosticLog.Write(
                                 "Goida.RefreshList",
-                                $"List {pair.Key}: empty fetch body");
+                                $"List {pair.Key}: empty fetch, keeping previous nodes");
                             continue;
                         }
 
                         List<GoidaNode> parsed = parser.ParseList(pair.Key, pair.Value, store.NodesDirectory);
+                        List<string> staleIds = mergedById
+                            .Where(entry => entry.Value.ListId == pair.Key)
+                            .Select(entry => entry.Key)
+                            .ToList();
+                        foreach (string staleId in staleIds)
+                            mergedById.Remove(staleId);
                         DiagnosticLog.Write(
                             "Goida.RefreshList",
                             $"List {pair.Key}: fetched {pair.Value.Length} bytes, parsed {parsed.Count} nodes");
@@ -625,14 +629,19 @@ namespace InvisibleGorillaXRay.Services.Goida
                 if (targets.Count == 0)
                     return new GoidaProbeResult();
 
+                bool vpnActive = isVpnSessionActive?.Invoke() == true;
                 GoidaTcpVlessProbeOptions probeOptions = new()
                 {
-                    MaxVlessTests = manual
-                        ? GoidaProfileSettings.MaxManualVerifyNodes
-                        : 0,
-                    EarlyStopOkCount = manual
-                        ? GoidaProfileSettings.MaxManualVerifyNodes
-                        : 0,
+                    MaxVlessTests = vpnActive
+                        ? 0
+                        : manual
+                            ? GoidaProfileSettings.MaxManualVerifyNodes
+                            : 8,
+                    EarlyStopOkCount = vpnActive
+                        ? 0
+                        : manual
+                            ? GoidaProfileSettings.MaxManualVerifyNodes
+                            : 3,
                     MaxTcpLatencyForVlessMs = settings.AutoSwitchLatencyMs,
                     OnFirstVlessOk = () => _ = EvaluateAutoSwitchAsync(getSettings().Clone())
                 };
@@ -778,7 +787,7 @@ namespace InvisibleGorillaXRay.Services.Goida
             }
 
             DateTime lastRefresh = DateTime.UtcNow;
-            DateTime lastProbe = DateTime.UtcNow;
+            DateTime lastProbe = DateTime.MinValue;
 
             while (!cancellationToken.IsCancellationRequested)
             {

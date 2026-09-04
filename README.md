@@ -52,6 +52,12 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.11
+
+- **Goida lists stay current** — fetch from several mirrors if `raw.githubusercontent.com` is blocked, keep the previous list when a download fails, and normalize Base64 / glued URIs the same way AvenCores does.
+- **xhttp / httpupgrade configs work** — new VLESS transports from [goida-vpn-configs](https://github.com/AvenCores/goida-vpn-configs) now convert to valid Xray JSON.
+- **Idle connection check** — while disconnected, Goida runs TCP on the list plus a small native VLESS sample so working nodes show real latency.
+
 ## What's new in v3.6.10
 
 - **Windows: crash while idle** — background Goida checks no longer call native `XRayCore.dll` when the proxy is disconnected.

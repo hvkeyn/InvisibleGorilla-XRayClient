@@ -248,10 +248,8 @@ namespace InvisibleGorillaXRay.Services.Goida
                     .FetchListsAsync(fetchListIds, cancellationToken)
                     .ConfigureAwait(false);
 
-                HashSet<int> refreshedListIds = fetchListIds.ToHashSet();
                 Dictionary<string, GoidaNode> mergedById = store.GetNodes()
-                    .Where(node => enabledLists.Contains(node.ListId)
-                        && !refreshedListIds.Contains(node.ListId))
+                    .Where(node => enabledLists.Contains(node.ListId))
                     .ToDictionary(node => node.Id, StringComparer.OrdinalIgnoreCase);
 
                 Dictionary<string, GoidaNode> existing = store.GetNodes()
@@ -267,9 +265,22 @@ namespace InvisibleGorillaXRay.Services.Goida
                     try
                     {
                         if (string.IsNullOrWhiteSpace(pair.Value))
+                        {
+                            DiagnosticLog.Write("Goida.RefreshList",
+                                $"List {pair.Key}: empty fetch, keeping previous nodes");
                             continue;
+                        }
 
                         List<GoidaNode> parsed = parser.ParseList(pair.Key, pair.Value, store.NodesDirectory);
+                        List<string> staleIds = mergedById
+                            .Where(entry => entry.Value.ListId == pair.Key)
+                            .Select(entry => entry.Key)
+                            .ToList();
+                        foreach (string staleId in staleIds)
+                            mergedById.Remove(staleId);
+
+                        DiagnosticLog.Write("Goida.RefreshList",
+                            $"List {pair.Key}: fetched {pair.Value.Length} bytes, parsed {parsed.Count} nodes");
                         foreach (GoidaNode node in parsed)
                         {
                             GoidaNode? previous = null;
@@ -374,12 +385,12 @@ namespace InvisibleGorillaXRay.Services.Goida
                 List<GoidaNode> targets = ResolveLiveProbeTargets(
                     FilterProbeTargets(settings, store.GetNodes(), manual, listIdFilter).ToList());
 
-                // Idle background scans stay TCP-only. Native TestConnection in XRayCore.dll
-                // can take the whole process down; keep it for explicit/manual checks.
-                int maxVless = manual ? GoidaProfileSettings.MaxVerifiedNodes : 0;
+                // Idle: TCP every target, then a small native VLESS sample so the UI
+                // gets real working nodes. Connected: TCP-only — native core is busy.
+                int maxVless = manual ? GoidaProfileSettings.MaxVerifiedNodes : 8;
                 int earlyStopOk = manual
                     ? GoidaProfileSettings.DefaultAutoPoolSize
-                    : 0;
+                    : 3;
 
                 bool paused = false;
                 if (isVpnSessionActive?.Invoke() == true)
@@ -870,7 +881,7 @@ namespace InvisibleGorillaXRay.Services.Goida
             }
 
             DateTime lastRefresh = DateTime.UtcNow;
-            DateTime lastProbe = DateTime.UtcNow;
+            DateTime lastProbe = DateTime.MinValue;
 
             while (!cancellationToken.IsCancellationRequested)
             {

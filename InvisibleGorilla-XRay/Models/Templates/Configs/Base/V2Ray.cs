@@ -144,6 +144,8 @@ namespace InvisibleGorillaXRay.Models.Templates.Configs
             public TlsSettings xtlsSettings;
             public GrpcSettings grpcSettings;
             public RealitySettings realitySettings;
+            public XhttpSettings xhttpSettings;
+            public HttpUpgradeSettings httpupgradeSettings;
 
             public class TlsSettings
             {
@@ -216,6 +218,19 @@ namespace InvisibleGorillaXRay.Models.Templates.Configs
                 public string publicKey;
                 public string shortId;
                 public string spiderX;
+            }
+
+            public class XhttpSettings
+            {
+                public string path;
+                public string host;
+                public string mode;
+            }
+
+            public class HttpUpgradeSettings
+            {
+                public string path;
+                public string host;
             }
         }
 
