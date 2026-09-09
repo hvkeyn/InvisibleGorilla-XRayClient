@@ -1,7 +1,10 @@
 using System;
 using System.Linq;
 using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 
 namespace InvisibleGorillaXRay.Handlers.Tunnels
 {
@@ -16,6 +19,7 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
     {
         private const int ServiceStartTimeoutMs = 10000;
         private const int ServicePortTimeoutMs = 10000;
+        private const int InterfaceReadyTimeoutMs = 20000;
 
         private bool isCanceled;
         private Scheduler scheduler;
@@ -52,6 +56,7 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
 
         public Status Enable(string ip, int port, string address, string server, string dns, LocalProxyCredentials localProxyCredentials)
         {
+            isCanceled = false;
             DiagnosticLog.Write(
                 "WindowsTunnel",
                 $"Enable requested: proxy={ip}:{port}, address={address}, server={server}, dns={dns}, authEnabled={localProxyCredentials?.HasValue == true}");
@@ -96,17 +101,17 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
                 if (connectingStatus.Code == Code.ERROR)
                     return connectingStatus;
 
-                Status enablingCommandStatus = ExecuteCommand(
-                    command:
-                        $"-command=enable " +
-                        $"-device={NETWORK_INTERFACE_NAME} " +
-                        $"-proxy={proxyArgument} " +
-                        $"-address={address} " +
-                        $"-server={server} " + 
-                        $"-dns={dns}" +
-                        BuildAppRulesCommandSuffix()
-                );
+                string enableCommand =
+                    $"-command=enable " +
+                    $"-device={NETWORK_INTERFACE_NAME} " +
+                    $"-proxy={proxyArgument} " +
+                    $"-address={address} " +
+                    $"-server={server} " +
+                    $"-dns={dns}" +
+                    BuildAppRulesCommandSuffix();
+
                 DiagnosticLog.Write("WindowsTunnel", "Sending enable command to TUN service");
+                Status enablingCommandStatus = ExecuteCommand(command: enableCommand);
                 
                 if(enablingCommandStatus.Code == Code.ERROR)
                 {
@@ -114,6 +119,22 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
                         "WindowsTunnel",
                         $"Enable command failed: code={enablingCommandStatus.Code}, subCode={enablingCommandStatus.SubCode}");
                     return enablingCommandStatus;
+                }
+
+                if (!WaitUntilTunInterfaceReady(address))
+                {
+                    DiagnosticLog.Write("WindowsTunnel", "TUN interface not ready after first enable; retrying command");
+                    enablingCommandStatus = ExecuteCommand(command: enableCommand);
+                    if (enablingCommandStatus.Code == Code.ERROR
+                        || !WaitUntilTunInterfaceReady(address))
+                    {
+                        Disable();
+                        return new Status(
+                            code: Code.ERROR,
+                            subCode: SubCode.CANT_TUNNEL,
+                            content: LocalizationService.GetTerm(Localization.CANT_TUNNEL_SYSTEM)
+                        );
+                    }
                 }
                 
                 DiagnosticLog.Write(
@@ -143,7 +164,10 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
             void FetchServerIP()
             {
                 Uri serverUri = new UriBuilder(server).Uri;
-                server = Dns.GetHostAddresses(serverUri.Host)[0].ToString();
+                IPAddress[] addresses = Dns.GetHostAddresses(serverUri.Host);
+                IPAddress? ipv4 = addresses.FirstOrDefault(item =>
+                    item.AddressFamily == AddressFamily.InterNetwork);
+                server = (ipv4 ?? addresses[0]).ToString();
             }
 
             static string BuildTunnelProxyArgument(string host, int localPort, LocalProxyCredentials credentials)
@@ -237,6 +261,62 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
         }
 
         private Status ExecuteCommand(string command) => executeCommand.Invoke(command);
+
+        private bool WaitUntilTunInterfaceReady(string address)
+        {
+            int elapsed = 0;
+            const int sliceMs = 200;
+            while (elapsed < InterfaceReadyTimeoutMs)
+            {
+                if (isCanceled)
+                    return false;
+
+                if (IsTunInterfaceReady(address))
+                {
+                    DiagnosticLog.Write("WindowsTunnel", $"TUN interface ready after {elapsed}ms");
+                    Thread.Sleep(300);
+                    return true;
+                }
+
+                Thread.Sleep(sliceMs);
+                elapsed += sliceMs;
+            }
+
+            DiagnosticLog.Write("WindowsTunnel", $"TUN interface not ready after {InterfaceReadyTimeoutMs}ms");
+            return false;
+        }
+
+        private static bool IsTunInterfaceReady(string address)
+        {
+            try
+            {
+                string expectedPrefix = address?.Split('/')[0]?.Trim() ?? string.Empty;
+                foreach (NetworkInterface nic in NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (!string.Equals(nic.Name, NETWORK_INTERFACE_NAME, StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(nic.Description, NETWORK_INTERFACE_NAME, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    if (nic.OperationalStatus is not (OperationalStatus.Up or OperationalStatus.Dormant))
+                        continue;
+
+                    if (string.IsNullOrWhiteSpace(expectedPrefix))
+                        return true;
+
+                    foreach (UnicastIPAddressInformation unicast in nic.GetIPProperties().UnicastAddresses)
+                    {
+                        if (string.Equals(unicast.Address.ToString(), expectedPrefix, StringComparison.OrdinalIgnoreCase))
+                            return true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("WindowsTunnel.IsTunInterfaceReady", ex);
+            }
+
+            return false;
+        }
 
         private static string BuildAppRulesCommandSuffix()
         {

@@ -61,7 +61,7 @@ namespace InvisibleGorillaXRay.Factories
                 openAboutWindow: CreateAboutWindow,
                 openPolicyWindow: CreatePolicyWindow,
                 getServerDisplayText: BuildServerDisplayText,
-                onRunServer: core.Run,
+                onRunServer: config => core.Run(config, mainWindow.NotifyReady),
                 onStopServer: core.Stop,
                 onCancelServer: core.Cancel,
                 onDisableMode: core.DisableMode,

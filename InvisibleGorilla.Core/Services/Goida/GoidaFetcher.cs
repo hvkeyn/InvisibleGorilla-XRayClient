@@ -26,7 +26,7 @@ namespace InvisibleGorillaXRay.Services.Goida
             };
             client.DefaultRequestHeaders.TryAddWithoutValidation(
                 "User-Agent",
-                "InvisibleGorilla-XRay/3.6.11");
+                "InvisibleGorilla-XRay/3.6.12");
             client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "text/plain,*/*");
             client.DefaultRequestHeaders.TryAddWithoutValidation("Cache-Control", "no-cache");
             return client;

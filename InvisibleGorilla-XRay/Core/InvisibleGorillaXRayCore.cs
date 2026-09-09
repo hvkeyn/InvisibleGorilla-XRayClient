@@ -137,7 +137,7 @@ namespace InvisibleGorillaXRay.Core
             DisableTunnel();
         }
 
-        public void Run(string config)
+        public void Run(string config, Action? onReady = null)
         {
             DiagnosticLog.Clear();
             Mode mode = getMode.Invoke();
@@ -265,6 +265,15 @@ namespace InvisibleGorillaXRay.Core
                         tunnelStatus.Content?.ToString()
                         ?? LocalizationService.GetTerm(Localization.CANT_TUNNEL_SYSTEM));
                 }
+            }
+
+            try
+            {
+                onReady?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("Run.OnReady", ex);
             }
 
             DiagnosticLog.Write("Run", "Waiting for server thread to complete (Join)...");

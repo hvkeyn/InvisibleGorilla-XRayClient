@@ -52,6 +52,11 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.12
+
+- **Windows TUN starts on the first click** — the UI waits until the virtual adapter and routes are actually up, instead of showing Connected while wintun is still being created.
+- **TUN service 0.3.10** — first-time adapter wait is 20s (was 6s), so a cold wintun load no longer skips routes.
+
 ## What's new in v3.6.11
 
 - **Goida lists stay current** — fetch from several mirrors if `raw.githubusercontent.com` is blocked, keep the previous list when a download fails, and normalize Base64 / glued URIs the same way AvenCores does.

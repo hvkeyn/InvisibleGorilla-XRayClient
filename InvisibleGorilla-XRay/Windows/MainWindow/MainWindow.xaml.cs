@@ -150,10 +150,6 @@ namespace InvisibleGorillaXRay
                         }
                     }
 
-                    Dispatcher.BeginInvoke(new Action(delegate {
-                        ShowRunStatus();
-                    }));
-
                     try
                     {
                         onRunServer.Invoke(configStatus.Content.ToString());
@@ -686,6 +682,17 @@ namespace InvisibleGorillaXRay
             AboutWindow aboutWindow = openAboutWindow.Invoke();
             aboutWindow.Owner = this;
             aboutWindow.ShowDialog();
+        }
+
+        public void NotifyReady()
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(NotifyReady);
+                return;
+            }
+
+            ShowRunStatus();
         }
 
         private void ShowRunStatus()
