@@ -44,6 +44,8 @@ namespace InvisibleGorillaXRay.Handlers
             this.userSettings.AppRuleTemplateBindings = CloneAppRuleTemplateBindings(userSettings.AppRuleTemplateBindings);
             this.userSettings.Tor = (userSettings.Tor ?? this.userSettings.Tor ?? new TorSettings()).Clone();
             this.userSettings.Goida = (userSettings.Goida ?? this.userSettings.Goida ?? new GoidaProfileSettings()).Clone();
+            this.userSettings.OpenFlux = (userSettings.OpenFlux ?? this.userSettings.OpenFlux ?? new OpenFluxProfile()).Clone();
+            this.userSettings.OpenFluxProfiles = CloneOpenFluxProfiles(userSettings.OpenFluxProfiles);
 
             UpdateStartupSetting();
             SaveUserSettings();
@@ -98,6 +100,8 @@ namespace InvisibleGorillaXRay.Handlers
                 settings.AppRuleTemplateBindings = CloneAppRuleTemplateBindings(settings.AppRuleTemplateBindings);
                 settings.Tor = (settings.Tor ?? new TorSettings()).Clone();
                 settings.Goida = (settings.Goida ?? new GoidaProfileSettings()).Clone();
+                settings.OpenFlux = (settings.OpenFlux ?? new OpenFluxProfile()).Clone();
+                settings.OpenFluxProfiles = CloneOpenFluxProfiles(settings.OpenFluxProfiles);
                 return settings;
             }
         }
@@ -148,6 +152,17 @@ namespace InvisibleGorillaXRay.Handlers
                 .Select(binding => new AppRuleTemplateBinding(
                     configPath: NormalizeConfigPath(binding.ConfigPath),
                     templateId: binding.TemplateId.Trim()))
+                .ToList();
+        }
+
+        private static System.Collections.Generic.List<OpenFluxProfile> CloneOpenFluxProfiles(System.Collections.Generic.IEnumerable<OpenFluxProfile>? profiles)
+        {
+            if (profiles == null)
+                return new System.Collections.Generic.List<OpenFluxProfile>();
+
+            return profiles
+                .Where(profile => profile != null)
+                .Select(profile => profile.Clone())
                 .ToList();
         }
 

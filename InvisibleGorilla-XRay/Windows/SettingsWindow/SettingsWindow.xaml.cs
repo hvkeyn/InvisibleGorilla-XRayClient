@@ -651,6 +651,9 @@ namespace InvisibleGorillaXRay
             );
 
             userSettings.Tor = BuildTorSettingsFromUi();
+            userSettings.Goida = currentSettings.GetGoidaSettings().Clone();
+            userSettings.OpenFlux = currentSettings.GetOpenFluxProfile().Clone();
+            userSettings.OpenFluxProfiles = currentSettings.GetOpenFluxProfiles();
 
             SendRunAtStartupActivationEvent();
             ForceSendAnalyticsActivationEvent();

@@ -31,6 +31,8 @@ namespace InvisibleGorillaXRay.Handlers.Proxies
 
         private const string PROXY_BYPASS = "<local>;localhost;127.*;10.*;192.168.*";
 
+        public static string ExtraBypass = "";
+
         private static readonly IntPtr HWND_BROADCAST = new IntPtr(0xFFFF);
         private const int WM_SETTINGCHANGE = 0x001A;
 
@@ -74,14 +76,17 @@ namespace InvisibleGorillaXRay.Handlers.Proxies
             DiagnosticLog.Write("WindowsProxy", $"Enable called: address={address}, port={port}");
             try
             {
+                string bypass = string.IsNullOrWhiteSpace(ExtraBypass)
+                    ? PROXY_BYPASS
+                    : PROXY_BYPASS + ";" + ExtraBypass;
                 string proxyServer = $"{address}:{port}";
 
                 // Set via per-connection options (updates the DefaultConnectionSettings blob)
-                bool perConnResult = SetPerConnectionProxy(proxyServer, PROXY_BYPASS);
+                bool perConnResult = SetPerConnectionProxy(proxyServer, bypass);
                 DiagnosticLog.Write("WindowsProxy", $"SetPerConnectionProxy result: {perConnResult}");
 
                 // Also set the legacy registry values for compatibility
-                SetRegistryValues(proxyServer, PROXY_BYPASS);
+                SetRegistryValues(proxyServer, bypass);
 
                 if (isCanceled)
                 {

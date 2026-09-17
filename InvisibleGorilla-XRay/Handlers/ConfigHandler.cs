@@ -7,6 +7,7 @@ namespace InvisibleGorillaXRay.Handlers
     using Configs;
     using Models;
     using Services.Goida;
+    using Services.OpenFlux;
     using Values;
     using Utilities;
 
@@ -18,6 +19,7 @@ namespace InvisibleGorillaXRay.Handlers
         private Func<string> getCurrentConfigPath;
         private Func<Config?> getGoidaListConfig;
         private Func<Config?> getGoidaRuntimeConfig;
+        private Func<Config?> getOpenFluxListConfig;
 
         public ConfigHandler()
         {
@@ -28,11 +30,13 @@ namespace InvisibleGorillaXRay.Handlers
         public void Setup(
             Func<string> getCurrentConfigPath,
             Func<Config?> getGoidaListConfig = null,
-            Func<Config?> getGoidaRuntimeConfig = null)
+            Func<Config?> getGoidaRuntimeConfig = null,
+            Func<Config?> getOpenFluxListConfig = null)
         {
             this.getCurrentConfigPath = getCurrentConfigPath;
             this.getGoidaListConfig = getGoidaListConfig;
             this.getGoidaRuntimeConfig = getGoidaRuntimeConfig;
+            this.getOpenFluxListConfig = getOpenFluxListConfig;
             subscriptionConfig.Setup(getCurrentConfigPath);
         }
 
@@ -53,6 +57,9 @@ namespace InvisibleGorillaXRay.Handlers
         public Config GetCurrentConfig()
         {
             string path = getCurrentConfigPath.Invoke();
+            if (OpenFluxProfilePaths.IsMarker(path))
+                return getOpenFluxListConfig?.Invoke() ?? CreateConfigModel(path);
+
             if (GoidaProfilePaths.IsMarker(path))
             {
                 Config? runtimeConfig = getGoidaRuntimeConfig?.Invoke();
@@ -74,6 +81,10 @@ namespace InvisibleGorillaXRay.Handlers
             if (goidaConfig != null)
                 configs.Insert(0, goidaConfig);
 
+            Config? openFluxConfig = getOpenFluxListConfig?.Invoke();
+            if (openFluxConfig != null)
+                configs.Insert(0, openFluxConfig);
+
             return configs;
         }
 
@@ -91,6 +102,9 @@ namespace InvisibleGorillaXRay.Handlers
 
         public Config CreateConfigModel(string path)
         {
+            if (OpenFluxProfilePaths.IsMarker(path))
+                return getOpenFluxListConfig?.Invoke();
+
             if (GoidaProfilePaths.IsMarker(path))
                 return getGoidaListConfig?.Invoke();
 

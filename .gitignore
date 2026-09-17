@@ -33,6 +33,9 @@
 /Logs/
 /Goida/
 **/__GoidaProfile__.json
+**/__OpenFluxProfile__.json
+/InvisibleGorilla-XRay/OpenFlux/enc.key
+/OpenFlux/enc.key
 **/*-nodes-cache.json
 **/*-goida-cache.json
 *.vless

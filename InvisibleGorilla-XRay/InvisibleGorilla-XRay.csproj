@@ -20,9 +20,9 @@
 
     <Copyright>Copyright (C) 2025 Invisible Gorilla</Copyright>
 
-    <Version>3.6.12.0</Version>
+    <Version>3.6.13.0</Version>
 
-    <AssemblyVersion>3.6.12.0</AssemblyVersion>
+    <AssemblyVersion>3.6.13.0</AssemblyVersion>
 
     <Nullable>enable</Nullable>
 
@@ -92,6 +92,22 @@
 
     </Content>
 
+    <Content Include="OpenFlux\openflux.exe" Condition="Exists('OpenFlux\openflux.exe')">
+
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+
+    </Content>
+
+    <Content Include="OpenFlux\NOTICE.txt" Condition="Exists('OpenFlux\NOTICE.txt')">
+
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+
+    </Content>
+
 
 
     <Content Include="*.dat">
@@ -102,7 +118,14 @@
 
   </ItemGroup>
 
-
+  <Target Name="CopyOpenFluxBinary" BeforeTargets="BeforeBuild">
+    <PropertyGroup>
+      <_OpenFluxSrc Condition="Exists('$(MSBuildProjectDirectory)\..\..\whiteBlade\artifacts\openflux\openflux.exe')">$(MSBuildProjectDirectory)\..\..\whiteBlade\artifacts\openflux\openflux.exe</_OpenFluxSrc>
+      <_OpenFluxSrc Condition="'$(_OpenFluxSrc)'=='' AND Exists('E:\PPROJECTS\whiteBlade\artifacts\openflux\openflux.exe')">E:\PPROJECTS\whiteBlade\artifacts\openflux\openflux.exe</_OpenFluxSrc>
+    </PropertyGroup>
+    <MakeDir Directories="$(MSBuildProjectDirectory)\OpenFlux" />
+    <Copy SourceFiles="$(_OpenFluxSrc)" DestinationFiles="$(MSBuildProjectDirectory)\OpenFlux\openflux.exe" Condition="'$(_OpenFluxSrc)'!=''" SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>
 

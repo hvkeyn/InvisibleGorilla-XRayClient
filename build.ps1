@@ -1020,7 +1020,9 @@ function Remove-PublishUserArtifacts {
 
     Get-ChildItem -Path $PublishDir -Recurse -File -ErrorAction SilentlyContinue |
         Where-Object {
+            $_.Name -eq 'enc.key' -or
             $_.Name -eq '__GoidaProfile__.json' -or
+            $_.Name -eq '__OpenFluxProfile__.json' -or
             $_.Name -like '*-nodes-cache.json' -or
             $_.Name -like '*-goida-cache.json' -or
             $_.Name -eq 'linux-transparent-proxy-config.json'

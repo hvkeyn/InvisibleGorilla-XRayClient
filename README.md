@@ -52,6 +52,11 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.13
+
+- **OpenFlux (Windows)** — connect through a Yandex Document instead of VLESS. Paste the Disk/Volga link, the shared encryption key, and Gorilla starts a local SOCKS sidecar. Changing the link restarts only OpenFlux, not the whole app.
+- **One document per exit process** — the Fornex exit registers each new URL separately, so several clients can use different documents at the same time.
+
 ## What's new in v3.6.12
 
 - **Windows TUN starts on the first click** — the UI waits until the virtual adapter and routes are actually up, instead of showing Connected while wintun is still being created.

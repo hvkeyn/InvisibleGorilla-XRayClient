@@ -9,9 +9,11 @@ namespace InvisibleGorillaXRay.Core
     using Handlers.Proxies;
     using Handlers.Tunnels;
     using Handlers.Tor;
+    using Handlers.OpenFlux;
     using Values;
     using Utilities;
     using Services;
+    using Services.OpenFlux;
     using Services.Analytics.Core;
 
     public class InvisibleGorillaXRayCore
@@ -32,8 +34,10 @@ namespace InvisibleGorillaXRay.Core
         private Func<ITunnel> getTunnel;
         private Action<string> onFailLoadingConfig;
         private Func<TorSettings> getTorSettings;
+        private Func<OpenFluxProfile> getOpenFluxProfile;
 
         private readonly TorManager torManager = new TorManager();
+        private readonly OpenFluxManager openFluxManager = new OpenFluxManager();
         private string currentRuntimeConfig;
 
         private LocalizationService LocalizationService => ServiceLocator.Get<LocalizationService>();
@@ -82,7 +86,14 @@ namespace InvisibleGorillaXRay.Core
             this.getTorSettings = getTorSettings;
         }
 
+        public void SetupOpenFlux(Func<OpenFluxProfile> getOpenFluxProfile)
+        {
+            this.getOpenFluxProfile = getOpenFluxProfile;
+        }
+
         public TorManager GetTorManager() => torManager;
+
+        public OpenFluxManager GetOpenFluxManager() => openFluxManager;
 
         public Status LoadConfig()
         {
@@ -96,6 +107,9 @@ namespace InvisibleGorillaXRay.Core
 
         public Status LoadConfig(string path)
         {
+            if (OpenFluxProfilePaths.IsMarker(path))
+                return new Status(Code.SUCCESS, SubCode.SUCCESS, OpenFluxManager.DummyConfig);
+
             if (!XRayCoreWrapper.IsFileExists(path))
             {
                 onFailLoadingConfig.Invoke(path);
@@ -140,6 +154,13 @@ namespace InvisibleGorillaXRay.Core
         public void Run(string config, Action? onReady = null)
         {
             DiagnosticLog.Clear();
+
+            if (IsOpenFluxProfile())
+            {
+                RunOpenFlux(onReady);
+                return;
+            }
+
             Mode mode = getMode.Invoke();
             int proxyPort = getProxyPort.Invoke();
             int tunnelServicePort = getTunPort.Invoke();
@@ -350,6 +371,122 @@ namespace InvisibleGorillaXRay.Core
             return loaded;
         }
 
+        private bool openFluxProxyActive;
+
+        private bool IsOpenFluxProfile()
+        {
+            Config config = getConfig?.Invoke();
+            return config != null && OpenFluxProfilePaths.IsMarker(config.Path);
+        }
+
+        private void RunOpenFlux(Action? onReady)
+        {
+            Mode mode = getMode.Invoke();
+            if (mode == Mode.TUN)
+            {
+                throw new InvalidOperationException(
+                    LocalizationService.GetTerm("Lang.OpenFlux.TunDisabled"));
+            }
+
+            DiagnosticLog.Write("Run", "OpenFlux profile selected; skipping Xray core.");
+            try { getTunnel.Invoke()?.Disable(); } catch (Exception ex) { DiagnosticLog.WriteException("Run.OpenFlux.DisableTunnel", ex); }
+            WindowsStaleTunCleanup.TryDisableStaleTunnel(getTunPort.Invoke());
+
+            OpenFluxProfile profile = getOpenFluxProfile?.Invoke()?.Clone() ?? new OpenFluxProfile();
+            openFluxManager.BeginSession();
+            openFluxProxyActive = true;
+            WindowsProxy.ExtraBypass = OpenFluxYandexBypass;
+            bool proxyEnabled = false;
+
+            try
+            {
+                bool first = true;
+                while (true)
+                {
+                    profile = getOpenFluxProfile?.Invoke()?.Clone() ?? profile;
+                    Status start = openFluxManager.Start(profile, getLogPath.Invoke());
+                    if (start.Code != Code.SUCCESS)
+                    {
+                        throw new InvalidOperationException(
+                            LocalizationService.GetTerm(MapOpenFluxError(start.Content?.ToString())));
+                    }
+
+                    OpenFluxExitRegistry.RegisterInBackground(
+                        profile.DocUrl,
+                        profile.EncryptionKey);
+
+                    int socksPort = openFluxManager.BoundSocksPort;
+                    ActiveTunnelSession.SetOpenFlux(socksPort);
+
+                    if (first)
+                    {
+                        Status proxyStatus = EnableProxy();
+                        if (proxyStatus.Code == Code.ERROR)
+                        {
+                            openFluxManager.Stop();
+                            throw new InvalidOperationException(
+                                proxyStatus.Content?.ToString()
+                                ?? LocalizationService.GetTerm(Localization.CANT_PROXY_SYSTEM));
+                        }
+                        proxyEnabled = true;
+                        first = false;
+                        try { onReady?.Invoke(); } catch (Exception ex) { DiagnosticLog.WriteException("Run.OpenFlux.OnReady", ex); }
+                    }
+
+                    openFluxManager.WaitSession();
+                    if (!openFluxManager.ConsumeRestartRequest())
+                        break;
+                }
+            }
+            finally
+            {
+                openFluxManager.Stop();
+                if (proxyEnabled)
+                    DisableProxy();
+                openFluxProxyActive = false;
+                WindowsProxy.ExtraBypass = "";
+                ActiveTunnelSession.Clear();
+            }
+        }
+
+        public Status ApplyOpenFluxDocUrl(string url)
+        {
+            string trimmed = OpenFluxUrl.Trim(url);
+            if (!OpenFluxUrl.TryValidate(trimmed, out string error))
+                return new Status(Code.ERROR, SubCode.INVALID_CONFIG, error);
+
+            if (openFluxManager.SameLiveUrl(trimmed) && openFluxManager.IsRunning)
+            {
+                OpenFluxProfile live = getOpenFluxProfile?.Invoke();
+                OpenFluxExitRegistry.RegisterInBackground(trimmed, live?.EncryptionKey);
+                return new Status(Code.SUCCESS, SubCode.SUCCESS, "noop");
+            }
+
+            OpenFluxProfile profile = getOpenFluxProfile?.Invoke();
+            OpenFluxExitRegistry.RegisterInBackground(trimmed, profile?.EncryptionKey);
+
+            if (openFluxManager.IsRunning)
+                openFluxManager.RequestRestart();
+
+            return new Status(Code.SUCCESS, SubCode.SUCCESS, "restart");
+        }
+
+        private static string MapOpenFluxError(string detail)
+        {
+            return detail switch
+            {
+                "empty" or "scheme" or "host" => "Lang.OpenFlux.Error.BadUrl",
+                "key-short" => "Lang.OpenFlux.Error.KeyShort",
+                "document" => "Lang.OpenFlux.Error.Document",
+                "transport" => "Lang.OpenFlux.Error.Transport",
+                "listen" => "Lang.OpenFlux.Error.Listen",
+                _ => "Lang.OpenFlux.Error.Generic"
+            };
+        }
+
+        private const string OpenFluxYandexBypass =
+            "disk.yandex.ru;volga.yandex.ru;push.yandex.ru;office-online.disk.yandex.net;passport.yandex.ru;yandex.ru;yandex.net";
+
         private static bool WaitForPortActive(int port, int maxWaitMs)
         {
             int elapsed = 0;
@@ -381,9 +518,11 @@ namespace InvisibleGorillaXRay.Core
         {
             DiagnosticLog.Write("Stop", "Stop requested: calling XRayCoreWrapper.StopServer()...");
             XRayCoreWrapper.StopServer();
-            DiagnosticLog.Write("Stop", "StopServer returned, stopping Tor (if any)...");
+            DiagnosticLog.Write("Stop", "StopServer returned, stopping Tor/OpenFlux (if any)...");
             torManager.Stop();
+            openFluxManager.Stop();
             ActiveTunnelSession.Clear();
+            WindowsProxy.ExtraBypass = "";
             DiagnosticLog.Write("Stop", "Stop sequence completed.");
             AnalyticsService.SendEvent(new StoppedEvent());
         }
@@ -393,6 +532,7 @@ namespace InvisibleGorillaXRay.Core
             CancelProxy();
             CancelTunnel();
             torManager.Stop();
+            openFluxManager.Stop();
         }
 
         public int Test(string config)
@@ -421,9 +561,13 @@ namespace InvisibleGorillaXRay.Core
                 port: GetProxyPort()
             );
 
-            int GetProxyPort() => getProxyPort.Invoke();
+            int GetProxyPort() => openFluxProxyActive && openFluxManager.BoundSocksPort > 0
+                ? openFluxManager.BoundSocksPort
+                : getProxyPort.Invoke();
 
-            string GetProxyAddress() => IsSocksProtocol() ? $"socks={Global.LOCAL_HOST}" : Global.LOCAL_HOST;
+            string GetProxyAddress() => (openFluxProxyActive || IsSocksProtocol())
+                ? $"socks={Global.LOCAL_HOST}"
+                : Global.LOCAL_HOST;
 
             bool IsSocksProtocol() => getProtocol.Invoke() == Protocol.SOCKS;
         }

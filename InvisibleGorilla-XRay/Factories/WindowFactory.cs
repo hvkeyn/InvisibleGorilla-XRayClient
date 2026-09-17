@@ -9,6 +9,7 @@ namespace InvisibleGorillaXRay.Factories
     using Handlers;
     using Values;
     using Services.Goida;
+    using Services.OpenFlux;
 
     public class WindowFactory
     {
@@ -70,7 +71,10 @@ namespace InvisibleGorillaXRay.Factories
                 onBugReportingClick: linkHandler.OpenBugReportingLink,
                 onCustomLinkClick: linkHandler.OpenCustomLink,
                 getGoidaPresentation: BuildGoidaPresentation,
-                onTunnelBroken: OnTunnelBroken
+                onTunnelBroken: OnTunnelBroken,
+                onSaveOpenFlux: SaveOpenFlux,
+                onApplyOpenFluxUrl: ApplyOpenFluxUrl,
+                getOpenFluxManager: core.GetOpenFluxManager
             );
             
             return mainWindow;
@@ -92,6 +96,9 @@ namespace InvisibleGorillaXRay.Factories
             string BuildServerDisplayText()
             {
                 string currentPath = settingsHandler.UserSettings.GetCurrentConfigPath();
+                if (OpenFluxProfilePaths.IsMarker(currentPath))
+                    return LocalizationService.GetTerm("Lang.OpenFlux.ServerListName");
+
                 if (GoidaProfilePaths.IsMarker(currentPath))
                 {
                     GoidaNode? activeNode = goidaHandler.Manager.GetActiveNode();
@@ -110,6 +117,23 @@ namespace InvisibleGorillaXRay.Factories
 
                 Config config = configHandler.GetCurrentConfig();
                 return config?.Name ?? LocalizationService.GetTerm(Localization.NO_SERVER_CONFIGURATION);
+            }
+
+            void SaveOpenFlux(OpenFluxProfile profile)
+            {
+                UserSettings settings = settingsHandler.UserSettings;
+                settings.OpenFlux = profile.Clone();
+                settingsHandler.UpdateUserSettings(settings);
+            }
+
+            Status ApplyOpenFluxUrl(string url)
+            {
+                UserSettings settings = settingsHandler.UserSettings;
+                OpenFluxProfile profile = settings.GetOpenFluxProfile().Clone();
+                profile.DocUrl = OpenFluxUrl.Trim(url);
+                settings.OpenFlux = profile;
+                settingsHandler.UpdateUserSettings(settings);
+                return core.ApplyOpenFluxDocUrl(profile.DocUrl);
             }
 
             GoidaMainPresentation BuildGoidaPresentation()
@@ -272,6 +296,9 @@ namespace InvisibleGorillaXRay.Factories
 
             Status LoadConfigForServer(string path)
             {
+                if (OpenFluxProfilePaths.IsMarker(path))
+                    return core.LoadConfig(path);
+
                 if (GoidaProfilePaths.IsMarker(path))
                 {
                     goidaHandler.Manager.TryEnsureActiveNode();

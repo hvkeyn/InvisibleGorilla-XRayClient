@@ -14,6 +14,8 @@ namespace InvisibleGorillaXRay
     using Values;
     using Services;
     using Services.Goida;
+    using Services.OpenFlux;
+    using Handlers.OpenFlux;
     using Services.Analytics.General;
     using Services.Analytics.MainWindow;
 
@@ -52,6 +54,9 @@ namespace InvisibleGorillaXRay
         private Func<PolicyWindow> openPolicyWindow;
         private Func<string> getServerDisplayText;
         private Func<GoidaMainPresentation> getGoidaPresentation;
+        private Action<OpenFluxProfile> onSaveOpenFlux;
+        private Func<string, Status> onApplyOpenFluxUrl;
+        private Func<OpenFluxManager> getOpenFluxManager;
         private Action<string> onRunServer;
         private Action onCancelServer;
         private Action onStopServer;
@@ -61,6 +66,10 @@ namespace InvisibleGorillaXRay
         private Action onBugReportingClick;
         private Action<string> onCustomLinkClick;
         private Func<bool> onTunnelBroken;
+        private bool openFluxApplyBusy;
+        private string pendingOpenFluxUrl;
+        private bool isApplyingOpenFluxUi;
+        private bool openFluxTransportReady;
 
         private BackgroundWorker runWorker;
         private BackgroundWorker updateWorker;
@@ -290,7 +299,10 @@ namespace InvisibleGorillaXRay
             Action onBugReportingClick,
             Action<string> onCustomLinkClick,
             Func<GoidaMainPresentation> getGoidaPresentation = null,
-            Func<bool> onTunnelBroken = null)
+            Func<bool> onTunnelBroken = null,
+            Action<OpenFluxProfile> onSaveOpenFlux = null,
+            Func<string, Status> onApplyOpenFluxUrl = null,
+            Func<OpenFluxManager> getOpenFluxManager = null)
         {
             this.isNeedToShowPolicyWindow = isNeedToShowPolicyWindow;
             this.shouldStartHidden = shouldStartHidden;
@@ -307,6 +319,9 @@ namespace InvisibleGorillaXRay
             this.openPolicyWindow = openPolicyWindow;
             this.getServerDisplayText = getServerDisplayText;
             this.getGoidaPresentation = getGoidaPresentation;
+            this.onSaveOpenFlux = onSaveOpenFlux;
+            this.onApplyOpenFluxUrl = onApplyOpenFluxUrl;
+            this.getOpenFluxManager = getOpenFluxManager;
             this.onRunServer = onRunServer;
             this.onCancelServer = onCancelServer;
             this.onStopServer = onStopServer;
@@ -318,6 +333,8 @@ namespace InvisibleGorillaXRay
             this.onCustomLinkClick = onCustomLinkClick;
             this.onTunnelBroken = onTunnelBroken;
 
+            EnsureOpenFluxTransportCombo();
+            HookOpenFluxStatus();
             UpdateUI();
         }
 
@@ -345,6 +362,7 @@ namespace InvisibleGorillaXRay
             }
 
             ApplyGoidaSummary();
+            ApplyOpenFluxPanel();
         }
 
         private void ApplyGoidaSummary()
@@ -841,6 +859,7 @@ namespace InvisibleGorillaXRay
 
             ApplyVerdict(connected, info.Ip);
             ApplyGoidaSummary();
+            ApplyOpenFluxPanel();
 
             if (isConnected && lastTunnelCheckOk == false)
                 RegisterTunnelFailure();
@@ -1034,6 +1053,250 @@ namespace InvisibleGorillaXRay
         private string Loc(string key)
         {
             return TryFindResource(key) as string ?? key;
+        }
+
+        private bool IsOpenFluxProfileActive()
+        {
+            return OpenFluxProfilePaths.IsMarker(getUserSettings?.Invoke()?.GetCurrentConfigPath());
+        }
+
+        private void EnsureOpenFluxTransportCombo()
+        {
+            if (comboOpenFluxTransport == null || openFluxTransportReady)
+                return;
+
+            comboOpenFluxTransport.Items.Clear();
+            comboOpenFluxTransport.Items.Add(new System.Windows.Controls.ComboBoxItem
+            {
+                Content = Loc("Lang.OpenFlux.Transport.Auto"),
+                Tag = OpenFluxTransportMode.Auto
+            });
+            comboOpenFluxTransport.Items.Add(new System.Windows.Controls.ComboBoxItem
+            {
+                Content = Loc("Lang.OpenFlux.Transport.Vyandex"),
+                Tag = OpenFluxTransportMode.Vyandex
+            });
+            comboOpenFluxTransport.Items.Add(new System.Windows.Controls.ComboBoxItem
+            {
+                Content = Loc("Lang.OpenFlux.Transport.Yandex"),
+                Tag = OpenFluxTransportMode.Yandex
+            });
+            comboOpenFluxTransport.SelectedIndex = 0;
+            comboOpenFluxTransport.SelectionChanged += (_, _) => SaveOpenFluxFromUi(restart: false);
+            if (textOpenFluxUrl != null)
+            {
+                textOpenFluxUrl.PreviewKeyDown += (_, e) =>
+                {
+                    if (e.Key == System.Windows.Input.Key.Enter)
+                    {
+                        e.Handled = true;
+                        OnOpenFluxApplyClick(null, null);
+                    }
+                };
+            }
+            openFluxTransportReady = true;
+        }
+
+        private void HookOpenFluxStatus()
+        {
+            OpenFluxManager manager = getOpenFluxManager?.Invoke();
+            if (manager == null)
+                return;
+            manager.StatusChanged += (status, detail) =>
+            {
+                Dispatcher.BeginInvoke(new Action(() => ApplyOpenFluxStatusText(status, detail, lastTunnelCheckOk)));
+            };
+        }
+
+        private void ApplyOpenFluxPanel()
+        {
+            if (panelOpenFlux == null)
+                return;
+
+            EnsureOpenFluxTransportCombo();
+            bool active = IsOpenFluxProfileActive();
+            panelOpenFlux.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
+            if (!active)
+                return;
+
+            UserSettings settings = getUserSettings?.Invoke();
+            OpenFluxProfile profile = settings?.GetOpenFluxProfile() ?? new OpenFluxProfile();
+            isApplyingOpenFluxUi = true;
+            try
+            {
+                if (textOpenFluxUrl != null && textOpenFluxUrl.Text != (profile.DocUrl ?? ""))
+                    textOpenFluxUrl.Text = profile.DocUrl ?? "";
+                if (boxOpenFluxKey != null && !string.IsNullOrEmpty(profile.EncryptionKey)
+                    && boxOpenFluxKey.Password.Length == 0)
+                    boxOpenFluxKey.Password = profile.EncryptionKey;
+                SelectOpenFluxTransport(profile.Transport);
+            }
+            finally
+            {
+                isApplyingOpenFluxUi = false;
+            }
+
+            OpenFluxManager manager = getOpenFluxManager?.Invoke();
+            ApplyOpenFluxStatusText(manager?.Status ?? OpenFluxClientStatus.Stopped, manager?.StatusDetail, lastTunnelCheckOk);
+        }
+
+        private void SelectOpenFluxTransport(OpenFluxTransportMode mode)
+        {
+            if (comboOpenFluxTransport == null)
+                return;
+            for (int i = 0; i < comboOpenFluxTransport.Items.Count; i++)
+            {
+                if (comboOpenFluxTransport.Items[i] is System.Windows.Controls.ComboBoxItem item
+                    && item.Tag is OpenFluxTransportMode tagged
+                    && tagged == mode)
+                {
+                    comboOpenFluxTransport.SelectedIndex = i;
+                    return;
+                }
+            }
+            comboOpenFluxTransport.SelectedIndex = 0;
+        }
+
+        private OpenFluxTransportMode ReadOpenFluxTransport()
+        {
+            if (comboOpenFluxTransport?.SelectedItem is System.Windows.Controls.ComboBoxItem item
+                && item.Tag is OpenFluxTransportMode mode)
+                return mode;
+            return OpenFluxTransportMode.Auto;
+        }
+
+        private OpenFluxProfile ReadOpenFluxFromUi()
+        {
+            UserSettings settings = getUserSettings?.Invoke();
+            OpenFluxProfile profile = settings?.GetOpenFluxProfile().Clone() ?? new OpenFluxProfile();
+            profile.DocUrl = OpenFluxUrl.Trim(textOpenFluxUrl?.Text);
+            profile.Transport = ReadOpenFluxTransport();
+            string typedKey = boxOpenFluxKey?.Password ?? "";
+            if (!string.IsNullOrWhiteSpace(typedKey))
+                profile.EncryptionKey = typedKey.Trim();
+            profile.ConfigPath = OpenFluxProfilePaths.MarkerPath;
+            return profile;
+        }
+
+        private void SaveOpenFluxFromUi(bool restart)
+        {
+            if (isApplyingOpenFluxUi || onSaveOpenFlux == null)
+                return;
+            OpenFluxProfile profile = ReadOpenFluxFromUi();
+            onSaveOpenFlux(profile);
+        }
+
+        private async void OnOpenFluxApplyClick(object sender, RoutedEventArgs e)
+        {
+            pendingOpenFluxUrl = OpenFluxUrl.Trim(textOpenFluxUrl?.Text);
+            if (openFluxApplyBusy)
+                return;
+
+            openFluxApplyBusy = true;
+            if (buttonOpenFluxApply != null)
+                buttonOpenFluxApply.IsEnabled = false;
+
+            try
+            {
+                while (true)
+                {
+                    string url = pendingOpenFluxUrl;
+                    pendingOpenFluxUrl = null;
+                    OpenFluxProfile profile = ReadOpenFluxFromUi();
+                    profile.DocUrl = url;
+
+                    if (!OpenFluxUrl.TryValidate(url, out string error))
+                    {
+                        SetOpenFluxStatusMessage(Loc("Lang.OpenFlux.Error.BadUrl"));
+                        break;
+                    }
+
+                    onSaveOpenFlux?.Invoke(profile);
+
+                    if (isConnected && onApplyOpenFluxUrl != null)
+                    {
+                        SetOpenFluxStatusMessage(Loc("Lang.OpenFlux.Status.Connecting"));
+                        Status result = await System.Threading.Tasks.Task.Run(() => onApplyOpenFluxUrl(url));
+                        if (result.Code != Code.SUCCESS)
+                        {
+                            SetOpenFluxStatusMessage(Loc(MapOpenFluxUiError(result.Content?.ToString())));
+                            break;
+                        }
+                    }
+
+                    if (pendingOpenFluxUrl == null)
+                        break;
+                }
+            }
+            finally
+            {
+                openFluxApplyBusy = false;
+                if (buttonOpenFluxApply != null)
+                    buttonOpenFluxApply.IsEnabled = true;
+                ApplyOpenFluxPanel();
+                if (isConnected)
+                    ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(2));
+            }
+        }
+
+        private void ApplyOpenFluxStatusText(OpenFluxClientStatus status, string detail, bool? tunnelOk)
+        {
+            if (!IsOpenFluxProfileActive() || textOpenFluxStatus == null)
+                return;
+
+            if (status == OpenFluxClientStatus.Error)
+            {
+                SetOpenFluxStatusMessage(Loc(MapOpenFluxUiError(detail)));
+                return;
+            }
+
+            if (!isConnected)
+            {
+                SetOpenFluxStatusMessage(Loc("Lang.OpenFlux.Status.Stopped"));
+                return;
+            }
+
+            if (status == OpenFluxClientStatus.Connecting)
+            {
+                SetOpenFluxStatusMessage(Loc("Lang.OpenFlux.Status.Connecting"));
+                return;
+            }
+
+            if (tunnelOk == false)
+            {
+                SetOpenFluxStatusMessage(Loc("Lang.OpenFlux.Status.PeerMissing"));
+                return;
+            }
+
+            if (status == OpenFluxClientStatus.Connected || status == OpenFluxClientStatus.WaitingPeer)
+            {
+                SetOpenFluxStatusMessage(tunnelOk == true
+                    ? Loc("Lang.OpenFlux.Status.Live")
+                    : Loc("Lang.OpenFlux.Status.WaitingPeer"));
+                return;
+            }
+
+            SetOpenFluxStatusMessage(Loc("Lang.OpenFlux.Status.Stopped"));
+        }
+
+        private void SetOpenFluxStatusMessage(string text)
+        {
+            if (textOpenFluxStatus != null)
+                textOpenFluxStatus.Text = text;
+        }
+
+        private static string MapOpenFluxUiError(string detail)
+        {
+            return detail switch
+            {
+                "empty" or "scheme" or "host" => "Lang.OpenFlux.Error.BadUrl",
+                "key-short" => "Lang.OpenFlux.Error.KeyShort",
+                "document" => "Lang.OpenFlux.Error.Document",
+                "transport" => "Lang.OpenFlux.Error.Transport",
+                "listen" => "Lang.OpenFlux.Error.Listen",
+                "peer" => "Lang.OpenFlux.Status.PeerMissing",
+                _ => "Lang.OpenFlux.Error.Generic"
+            };
         }
     }
 }

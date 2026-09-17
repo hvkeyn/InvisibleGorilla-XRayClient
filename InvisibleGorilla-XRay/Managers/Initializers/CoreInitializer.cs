@@ -38,6 +38,7 @@
             );
 
             Core.SetupTor(getTorSettings: settingsHandler.UserSettings.GetTorSettings);
+            Core.SetupOpenFlux(getOpenFluxProfile: settingsHandler.UserSettings.GetOpenFluxProfile);
         }
     }
 }

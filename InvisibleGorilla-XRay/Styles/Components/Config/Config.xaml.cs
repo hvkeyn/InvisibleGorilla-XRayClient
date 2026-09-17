@@ -10,6 +10,7 @@ namespace InvisibleGorillaXRay.Components
     using Values;
     using Services;
     using Services.Goida;
+    using Services.OpenFlux;
     using Services.Analytics.Configuration;
 
     public partial class Config : UserControl
@@ -69,7 +70,12 @@ namespace InvisibleGorillaXRay.Components
             this.getLogPath = getLogPath;
 
             UpdateUI();
-            ApplyVirtualProfileMode(GoidaProfilePaths.IsMarker(config.Path));
+            ApplyVirtualProfileMode(IsVirtualProfile(config.Path));
+        }
+
+        private static bool IsVirtualProfile(string path)
+        {
+            return GoidaProfilePaths.IsMarker(path) || OpenFluxProfilePaths.IsMarker(path);
         }
 
         private void ApplyVirtualProfileMode(bool isVirtualProfile)
@@ -78,6 +84,8 @@ namespace InvisibleGorillaXRay.Components
                 return;
 
             buttonLog.Visibility = Visibility.Collapsed;
+            if (buttonCheck != null)
+                buttonCheck.Visibility = Visibility.Collapsed;
         }
 
         public void SetSelection(bool isSelect)
@@ -109,7 +117,7 @@ namespace InvisibleGorillaXRay.Components
         {
             AnalyticsService.SendEvent(new EditButtonClickedEvent());
 
-            if (GoidaProfilePaths.IsMarker(config.Path))
+            if (IsVirtualProfile(config.Path))
                 return;
 
             if (!File.Exists(config.Path))
@@ -139,7 +147,7 @@ namespace InvisibleGorillaXRay.Components
         {
             AnalyticsService.SendEvent(new DeleteButtonClickedEvent());
 
-            if (GoidaProfilePaths.IsMarker(config.Path))
+            if (IsVirtualProfile(config.Path))
                 return;
 
             MessageBoxResult result = MessageBox.Show(
@@ -174,7 +182,7 @@ namespace InvisibleGorillaXRay.Components
         {
             AnalyticsService.SendEvent(new ShareButtonClickedEvent());
 
-            if (GoidaProfilePaths.IsMarker(config.Path))
+            if (IsVirtualProfile(config.Path))
                 return;
 
             if (!File.Exists(config.Path))

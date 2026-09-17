@@ -12,5 +12,8 @@
         public const string TOR = $"{ROOT}/Tor";
         // Writable Tor runtime: generated torrc, tor DataDirectory, control cookie.
         public const string TOR_DATA = $"{ROOT}/Tor/Data";
+        // Bundled OpenFlux sidecar (Yandex Documents transport). User key lives here too.
+        public const string OPENFLUX = $"{ROOT}/OpenFlux";
+        public const string LOGS = $"{ROOT}/Logs";
     }
 }

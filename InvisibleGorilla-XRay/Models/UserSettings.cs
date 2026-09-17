@@ -86,6 +86,12 @@ namespace InvisibleGorillaXRay.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
         public GoidaProfileSettings Goida;
 
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public OpenFluxProfile OpenFlux;
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public List<OpenFluxProfile> OpenFluxProfiles;
+
         public UserSettings()
         {
             this.ClientId = "";
@@ -112,6 +118,8 @@ namespace InvisibleGorillaXRay.Models
             this.AppRuleTemplateBindings = new List<AppRuleTemplateBinding>();
             this.Tor = new TorSettings();
             this.Goida = new GoidaProfileSettings();
+            this.OpenFlux = new OpenFluxProfile();
+            this.OpenFluxProfiles = new List<OpenFluxProfile>();
         }
 
         public UserSettings(
@@ -159,11 +167,30 @@ namespace InvisibleGorillaXRay.Models
             this.AppRuleTemplateBindings = NormalizeTemplateBindings(appRuleTemplateBindings);
             this.Tor = new TorSettings();
             this.Goida = new GoidaProfileSettings();
+            this.OpenFlux = new OpenFluxProfile();
+            this.OpenFluxProfiles = new List<OpenFluxProfile>();
         }
 
         public TorSettings GetTorSettings() => Tor ??= new TorSettings();
 
         public GoidaProfileSettings GetGoidaSettings() => Goida ??= new GoidaProfileSettings();
+
+        public OpenFluxProfile GetOpenFluxProfile()
+        {
+            OpenFlux ??= new OpenFluxProfile();
+            if (string.IsNullOrWhiteSpace(OpenFlux.ConfigPath))
+                OpenFlux.ConfigPath = Services.OpenFlux.OpenFluxProfilePaths.MarkerPath;
+            return OpenFlux;
+        }
+
+        public List<OpenFluxProfile> GetOpenFluxProfiles()
+        {
+            OpenFluxProfiles ??= new List<OpenFluxProfile>();
+            return OpenFluxProfiles
+                .Where(profile => profile != null)
+                .Select(profile => profile.Clone())
+                .ToList();
+        }
 
         public string GetClientId() => ClientId;
 

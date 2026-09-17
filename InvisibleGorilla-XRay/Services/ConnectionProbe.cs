@@ -46,6 +46,9 @@ namespace InvisibleGorillaXRay.Services
         /// </summary>
         public static string DescribeMode(Mode mode, Protocol protocol, TorSettings tor, string outboundProtocol)
         {
+            if (string.Equals(outboundProtocol, "OpenFlux", StringComparison.OrdinalIgnoreCase))
+                return "OpenFlux · Proxy/SOCKS";
+
             string egress;
             string protocolLabel = string.IsNullOrWhiteSpace(outboundProtocol) ? "Xray" : outboundProtocol;
 
@@ -80,6 +83,8 @@ namespace InvisibleGorillaXRay.Services
         {
             try
             {
+                if (OpenFlux.OpenFluxProfilePaths.IsMarker(configPath))
+                    return "OpenFlux";
                 if (string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath))
                     return string.Empty;
 

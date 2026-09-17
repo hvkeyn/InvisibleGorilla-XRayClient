@@ -28,5 +28,8 @@ namespace InvisibleGorillaXRay.Values
         public static readonly string PLUGGABLE_TRANSPORT_EXE = File.Exists(LYREBIRD_EXE)
             ? LYREBIRD_EXE
             : OBFS4_EXE;
+
+        public const string OPENFLUX_EXE = $"{Directory.OPENFLUX}/openflux.exe";
+        public const string OPENFLUX_USER_KEY = $"{Directory.OPENFLUX}/enc.key";
     }
 }

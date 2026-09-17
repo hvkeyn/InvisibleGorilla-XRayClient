@@ -10,6 +10,7 @@ namespace InvisibleGorillaXRay.Managers.Initializers
     using Factories;
     using Services;
     using Services.Goida;
+    using Services.OpenFlux;
     using Values;
 
     public class HandlersInitializer
@@ -82,7 +83,24 @@ namespace InvisibleGorillaXRay.Managers.Initializers
                 handlersManager.GetHandler<ConfigHandler>().Setup(
                     getCurrentConfigPath: settingsHandler.UserSettings.GetCurrentConfigPath,
                     getGoidaListConfig: BuildGoidaListConfig,
-                    getGoidaRuntimeConfig: BuildGoidaRuntimeConfig);
+                    getGoidaRuntimeConfig: BuildGoidaRuntimeConfig,
+                    getOpenFluxListConfig: BuildOpenFluxListConfig);
+
+                Config? BuildOpenFluxListConfig()
+                {
+                    OpenFluxProfile profile = settingsHandler.UserSettings.GetOpenFluxProfile();
+                    string subtitle = string.IsNullOrWhiteSpace(profile.DocUrl)
+                        ? LocalizeGoida("Lang.OpenFlux.ServerListHint", "Yandex document")
+                        : LocalizeGoida("Lang.OpenFlux.ServerListHint", "Yandex document");
+                    return new Config(
+                        path: OpenFluxProfilePaths.MarkerPath,
+                        name: string.IsNullOrWhiteSpace(profile.Name)
+                            ? LocalizeGoida("Lang.OpenFlux.ServerListName", "OpenFlux")
+                            : profile.Name,
+                        type: ConfigType.FILE,
+                        group: GroupType.GENERAL,
+                        updateTime: subtitle);
+                }
 
                 Config? BuildGoidaListConfig()
                 {

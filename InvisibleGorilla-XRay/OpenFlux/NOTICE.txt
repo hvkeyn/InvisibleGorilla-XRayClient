@@ -1,0 +1,8 @@
+OpenFlux
+========
+
+This folder ships the OpenFlux client binary (https://github.com/p1neappleXpress/OpenFlux).
+OpenFlux is licensed under GPL-3.0. Source is upstream; Gorilla launches it as a sidecar.
+
+Do not place enc.key in a public release zip. The encryption key lives in user Settings.json
+and is written to OpenFlux/enc.key at runtime.
