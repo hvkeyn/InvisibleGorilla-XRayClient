@@ -23,7 +23,7 @@
 | **Windows** | [Latest Release (.exe)](https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/latest) | Windows 10+ |
 | **macOS** | [Latest Release (.app)](https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/latest) | macOS 13+ (Apple Silicon & Intel) |
 | **Linux** | Build from source with `./build.sh` | ALT Linux + GNOME first; also supports Debian/Ubuntu, Fedora/RHEL, openSUSE, and Arch families |
-| **Android** | Build from source with `.\build-android.ps1` | .NET Android workload, Android SDK, JDK 11+, Android NDK, arm64 device |
+| **Android** | [Latest Release (.apk)](https://github.com/hvkeyn/InvisibleGorilla-XRayClient/releases/latest) | Android 7+ (arm64) |
 
 ## What Is This?
 
@@ -55,6 +55,7 @@ Android support is **experimental**.
 ## What's new in v3.6.18
 
 - **OpenFlux shows Live only after a real SOCKS probe** — if the Yandex document peer is dead, the panel says the exit does not answer instead of Disconnected/Live. User TUN bypass list is kept (`openflux.exe` is still excluded).
+- **Android APK (arm64)** is in the GitHub release again.
 
 ## What's new in v3.6.17
 
