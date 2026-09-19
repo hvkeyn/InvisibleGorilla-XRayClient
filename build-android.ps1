@@ -874,25 +874,36 @@ function Get-OpenFluxAndroidBinary {
         return
     }
 
+    $ndk = $AndroidNdkDirectory
+    if ([string]::IsNullOrWhiteSpace($ndk) -or -not (Test-Path $ndk)) {
+        $ndk = Join-Path $AndroidSdkDirectory "ndk\$AndroidNdkVersion"
+    }
+    if (-not (Test-Path $ndk)) {
+        throw "Android NDK not found. OpenFlux must be built with GOOS=android (bionic), not linux/glibc."
+    }
+
     New-DirectoryIfMissing $RuntimeDir
     $targets = @(
-        @{ Abi = "arm64-v8a"; GoArch = "arm64" },
-        @{ Abi = "x86_64";    GoArch = "amd64" }
+        @{ Abi = "arm64-v8a"; GoArch = "arm64"; Triple = "aarch64-linux-android" },
+        @{ Abi = "x86_64";    GoArch = "amd64"; Triple = "x86_64-linux-android" }
     )
 
     foreach ($t in $targets) {
         $abiDir = Join-Path $RuntimeDir $t.Abi
         New-DirectoryIfMissing $abiDir
         $dest = Join-Path $abiDir "libopenflux.so"
+        $clang = Resolve-AndroidClang -NdkRoot $ndk -ApiLevel $AndroidApiLevel -TargetTriple $t.Triple
         Write-Info "go build openflux $($t.Abi) -> $dest"
 
-        $env:CGO_ENABLED = "0"
-        $env:GOOS = "linux"
+        $env:CGO_ENABLED = "1"
+        $env:GOOS = "android"
         $env:GOARCH = $t.GoArch
+        $env:CC = $clang
         $env:GOTOOLCHAIN = "auto"
         Push-Location $src
         try {
-            & go build -trimpath -ldflags "-s -w" -o $dest .
+            # pion/anet uses go:linkname into net internals; Go 1.23+ rejects it unless this is set.
+            & go build -trimpath -ldflags "-s -w -checklinkname=0" -o $dest .
             if ($LASTEXITCODE -ne 0) {
                 throw "go build failed for OpenFlux $($t.Abi) (exit $LASTEXITCODE)"
             }
@@ -902,6 +913,7 @@ function Get-OpenFluxAndroidBinary {
             Remove-Item Env:CGO_ENABLED -ErrorAction SilentlyContinue
             Remove-Item Env:GOOS -ErrorAction SilentlyContinue
             Remove-Item Env:GOARCH -ErrorAction SilentlyContinue
+            Remove-Item Env:CC -ErrorAction SilentlyContinue
         }
 
         if (-not (Test-Path $dest)) {

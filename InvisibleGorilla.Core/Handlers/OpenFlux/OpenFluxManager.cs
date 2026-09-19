@@ -139,9 +139,15 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
                     lastUrl = url;
                 }
 
-                if (!WaitForPort(port, listenWaitMs))
+                if (!WaitForListen(port, listenWaitMs))
                 {
-                    string detail = Status == OpenFluxClientStatus.Error ? statusDetail : "listen";
+                    int exitCode = -1;
+                    bool exited = IsProcessExited(out exitCode);
+                    string detail = Status == OpenFluxClientStatus.Error
+                        ? statusDetail
+                        : (exited ? "launch" : "listen");
+                    if (exited)
+                        DiagnosticLog.Write(Tag, $"OpenFlux process exited before SOCKS listen, code={exitCode}");
                     StopProcess(waitExitMs: 3000);
                     return Fail(detail);
                 }
@@ -236,7 +242,7 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                RedirectStandardInput = true,
+                RedirectStandardInput = false,
                 CreateNoWindow = true,
                 StandardOutputEncoding = Encoding.UTF8,
                 StandardErrorEncoding = Encoding.UTF8
@@ -274,7 +280,7 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
                 process = started;
             }
 
-            DiagnosticLog.Write(Tag, $"Started pid={started.Id} socks=127.0.0.1:{port} transport={transport}");
+            DiagnosticLog.Write(Tag, $"Started pid={started.Id} exe={AppPath.OPENFLUX_EXE} socks=127.0.0.1:{port} transport={transport}");
             return true;
         }
 
@@ -459,6 +465,43 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
             {
                 DiagnosticLog.Write(Tag, $"peer probe failed: {ex.Message}");
                 return false;
+            }
+        }
+
+        private bool WaitForListen(int port, int maxWaitMs)
+        {
+            int elapsed = 0;
+            const int interval = 100;
+            while (elapsed < maxWaitMs)
+            {
+                if (IsProcessExited(out _))
+                    return false;
+                if (IsPortInUse(port))
+                    return true;
+                Thread.Sleep(interval);
+                elapsed += interval;
+            }
+            return false;
+        }
+
+        private bool IsProcessExited(out int exitCode)
+        {
+            exitCode = -1;
+            lock (sync)
+            {
+                if (process == null)
+                    return true;
+                try
+                {
+                    if (!process.HasExited)
+                        return false;
+                    exitCode = process.ExitCode;
+                    return true;
+                }
+                catch
+                {
+                    return true;
+                }
             }
         }
 

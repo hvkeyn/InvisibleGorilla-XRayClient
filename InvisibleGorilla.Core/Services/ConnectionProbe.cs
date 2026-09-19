@@ -82,11 +82,11 @@ namespace InvisibleGorillaXRay.Services
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath))
-                    return string.Empty;
-
                 if (OpenFlux.OpenFluxProfilePaths.IsMarker(configPath))
                     return "OpenFlux";
+
+                if (string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath))
+                    return string.Empty;
 
                 string json = File.ReadAllText(configPath);
                 string protocol = JsonUtility.Find(key: "protocol", parent: "outbounds", jsonString: json);
