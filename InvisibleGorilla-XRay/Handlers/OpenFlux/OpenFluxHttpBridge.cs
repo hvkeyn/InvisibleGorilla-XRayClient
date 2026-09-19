@@ -23,7 +23,7 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
         private TcpListener listener;
         private CancellationTokenSource cts;
         private int socksPort;
-        private readonly SemaphoreSlim socksGate = new SemaphoreSlim(12, 12);
+        private readonly SemaphoreSlim socksGate = new SemaphoreSlim(10, 10);
         private readonly ConcurrentDictionary<string, ConcurrentQueue<TcpClient>> warmPool = new();
         private static readonly string[] WarmHosts =
         {
@@ -99,6 +99,7 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
                 browser.NoDelay = true;
                 browser.ReceiveBufferSize = 65536;
                 browser.SendBufferSize = 65536;
+                EnableKeepAlive(browser);
                 NetworkStream browserStream = browser.GetStream();
 
                 string first = await ReadLineAsync(browserStream, token).ConfigureAwait(false);
@@ -139,7 +140,7 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
 
         private async Task RelayThroughSocksAsync(NetworkStream browserStream, string host, int port, string leftover, CancellationToken token)
         {
-            if (!await socksGate.WaitAsync(TimeSpan.FromSeconds(20), token).ConfigureAwait(false))
+            if (!await socksGate.WaitAsync(TimeSpan.FromSeconds(8), token).ConfigureAwait(false))
             {
                 await WriteAscii(browserStream, "HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n").ConfigureAwait(false);
                 return;
@@ -243,6 +244,28 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
             warmPool.Clear();
         }
 
+        private static void EnableKeepAlive(TcpClient client)
+        {
+            try
+            {
+                Socket socket = client.Client;
+                socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+                socket.NoDelay = true;
+                try
+                {
+                    socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveTime, 30);
+                    socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveInterval, 10);
+                    socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.TcpKeepAliveRetryCount, 5);
+                }
+                catch
+                {
+                }
+            }
+            catch
+            {
+            }
+        }
+
         private async Task<TcpClient> ConnectSocksAsync(string host, int port, CancellationToken token)
         {
             TcpClient socks = new TcpClient { NoDelay = true, ReceiveBufferSize = 65536, SendBufferSize = 65536 };
@@ -284,6 +307,7 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
                     await ReadExact(stream, rest, token).ConfigureAwait(false);
                 }
 
+                EnableKeepAlive(socks);
                 return socks;
             }
             catch (Exception ex)

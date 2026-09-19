@@ -52,6 +52,11 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.20
+
+- **Android OpenFlux no longer freezes the UI or the channel when you skip videos** — idle YouTube sockets are dropped, new CONNECTs are queued two at a time, and live streams are left alone. Xray / Goida / Tor keep the unlimited tun2socks path.
+- **Dead Volga sockets recover in ~20 seconds** instead of sitting silent for a minute.
+
 ## What's new in v3.6.19
 
 - **OpenFlux is faster on Android, Windows, and Linux** — more parallel streams, HTTP CONNECT reuse/prewarm, no extra probe wait before the tunnel starts. Android rejects QUIC immediately so YouTube/Chrome fall back to TCP instead of hanging.

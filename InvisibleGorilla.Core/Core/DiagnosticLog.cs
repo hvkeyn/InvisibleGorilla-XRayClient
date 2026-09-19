@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Text;
+using System.Threading;
 
 namespace InvisibleGorillaXRay.Core
 {
@@ -15,6 +17,8 @@ namespace InvisibleGorillaXRay.Core
         private const long MaxActiveLogBytes = 1024L * 1024L;
 
         private static readonly object LockObj = new object();
+        private static readonly ConcurrentQueue<string> PendingLines = new();
+        private static int flushScheduled;
 
         private static string LogFilePath => Values.Path.DIAGNOSTIC_LOG;
         private static string ArchivedLogFilePath => LogFilePath + ".1";
@@ -26,17 +30,38 @@ namespace InvisibleGorillaXRay.Core
         {
             try
             {
-                Values.Directory.EnsureWritableDirectories();
-                string line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}";
-                lock (LockObj)
-                {
-                    RotateIfNeeded();
-                    File.AppendAllText(LogFilePath, line + Environment.NewLine);
-                }
+                PendingLines.Enqueue($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}");
+                if (Interlocked.Exchange(ref flushScheduled, 1) == 0)
+                    ThreadPool.QueueUserWorkItem(static _ => FlushPending());
             }
             catch
             {
                 // Logging should never crash the app
+            }
+        }
+
+        private static void FlushPending()
+        {
+            try
+            {
+                Values.Directory.EnsureWritableDirectories();
+                lock (LockObj)
+                {
+                    while (PendingLines.TryDequeue(out string line))
+                    {
+                        RotateIfNeeded();
+                        File.AppendAllText(LogFilePath, line + Environment.NewLine);
+                    }
+                }
+            }
+            catch
+            {
+            }
+            finally
+            {
+                Interlocked.Exchange(ref flushScheduled, 0);
+                if (!PendingLines.IsEmpty && Interlocked.CompareExchange(ref flushScheduled, 1, 0) == 0)
+                    ThreadPool.QueueUserWorkItem(static _ => FlushPending());
             }
         }
 

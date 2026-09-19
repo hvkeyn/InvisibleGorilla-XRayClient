@@ -96,6 +96,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private bool pendingGoidaSectionOpen;
         private bool isShowingAdvancedImport;
         private bool isServersSectionInitialized;
+        private bool isServersSectionRefreshing;
         private bool isSettingsSectionInitialized;
         private bool isSettingsLoadedIntoControls;
         private bool suppressSubscriptionSelectionChanged;
@@ -120,6 +121,9 @@ namespace InvisibleGorillaXRay.Android.Views
         private int connectionInfoProxyWaitRetries;
         private const int ConnectionInfoMaxProxyWaitRetries = 8;
         private bool isConnectionInfoTor;
+        private int connectionInfoRefreshBusy;
+        private string lastOpenFluxGeoIp = string.Empty;
+        private ConnectionInfo? lastOpenFluxGeo;
         private bool resumeServerAfterNativeTest;
 
         public MainView()
@@ -644,7 +648,7 @@ namespace InvisibleGorillaXRay.Android.Views
             };
         }
 
-        private void EnsureServersSectionInitialized()
+        private void EnsureServersSectionInitialized(bool forceRefresh = false)
         {
             try
             {
@@ -658,7 +662,11 @@ namespace InvisibleGorillaXRay.Android.Views
                     SetAdvancedImportVisible(false);
                     SetConfigImportMode(ConfigImportMode.Link);
                     isServersSectionInitialized = true;
+                    forceRefresh = true;
                 }
+
+                if (!forceRefresh)
+                    return;
 
                 RefreshConfigs();
                 RefreshSubscriptions();
@@ -668,6 +676,30 @@ namespace InvisibleGorillaXRay.Android.Views
                 DiagnosticLog.WriteException("MainView.Servers.Init", ex);
                 SetStatus(ex.Message);
             }
+        }
+
+        private void ScheduleServersSectionRefresh(bool forceRefresh = false)
+        {
+            if (isServersSectionRefreshing)
+                return;
+
+            isServersSectionRefreshing = true;
+            Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    EnsureServersSectionInitialized(forceRefresh);
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("MainView.Servers.Open", ex);
+                    SetStatus(ex.Message);
+                }
+                finally
+                {
+                    isServersSectionRefreshing = false;
+                }
+            }, DispatcherPriority.Background);
         }
 
         private void EnsureSettingsSectionInitialized()
@@ -2410,6 +2442,8 @@ namespace InvisibleGorillaXRay.Android.Views
             else
             {
                 connectionInfoTimer!.Interval = TimeSpan.FromSeconds(45);
+                lastOpenFluxGeo = null;
+                lastOpenFluxGeoIp = string.Empty;
                 StopGoidaLiveHealthMonitor();
             }
         }
@@ -2481,32 +2515,61 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void EnsureBaselineBeforeConnect()
         {
-            if (!string.IsNullOrWhiteSpace(baselineIp))
+            if (!string.IsNullOrWhiteSpace(baselineIp) || IsOpenFluxProfileActive())
+                return;
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    ConnectionInfo info = await connectionInfoService
+                        .LookupAsync(null, CancellationToken.None)
+                        .ConfigureAwait(false);
+                    if (info.Ok && !string.IsNullOrWhiteSpace(info.Ip))
+                        baselineIp = info.Ip;
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("MainView.EnsureBaselineBeforeConnect", ex);
+                }
+            });
+        }
+
+        private async Task RefreshConnectionInfoAsync()
+        {
+            if (System.Threading.Interlocked.CompareExchange(ref connectionInfoRefreshBusy, 1, 0) != 0)
                 return;
 
             try
             {
-                Task<ConnectionInfo> lookup = connectionInfoService.LookupAsync(null, CancellationToken.None);
-                if (!lookup.Wait(TimeSpan.FromSeconds(8)))
+                if (Dispatcher.UIThread.CheckAccess())
+                {
+                    await Task.Run(RefreshConnectionInfoBodyAsync).ConfigureAwait(false);
                     return;
+                }
 
-                ConnectionInfo info = lookup.Result;
-                if (info.Ok && !string.IsNullOrWhiteSpace(info.Ip))
-                    baselineIp = info.Ip;
+                await RefreshConnectionInfoBodyAsync().ConfigureAwait(false);
             }
-            catch (Exception ex)
+            finally
             {
-                DiagnosticLog.WriteException("MainView.EnsureBaselineBeforeConnect", ex);
+                System.Threading.Interlocked.Exchange(ref connectionInfoRefreshBusy, 0);
             }
         }
 
-        private async Task RefreshConnectionInfoAsync()
+        private async Task RefreshConnectionInfoBodyAsync()
         {
             connectionInfoLookupCancellation?.Cancel();
             connectionInfoLookupCancellation = new CancellationTokenSource();
             CancellationToken token = connectionInfoLookupCancellation.Token;
 
             bool connected = isConnectionInfoConnected;
+
+            if (connected && IsOpenFluxProfileActive() && lastOpenFluxGeo != null)
+            {
+                ConnectionInfo cached = lastOpenFluxGeo;
+                Dispatcher.UIThread.Post(() => ApplyConnectionInfo(cached));
+                return;
+            }
 
             // The Android app excludes itself from its own VpnService, so a direct request
             // always leaks the real ISP IP. When connected, probe through the running xray
@@ -2622,10 +2685,21 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             if (!info.Ok)
             {
+                // OpenFlux mux is a single pipe. Retrying ipify through it while a video
+                // is playing freezes both the page and this UI. Keep the last good IP.
+                if (IsOpenFluxProfileActive())
+                {
+                    if (!string.IsNullOrWhiteSpace(ConnectionInfoIpText.Text)
+                        && !string.Equals(ConnectionInfoIpText.Text, Localize("Lang.ConnectionInfo.Checking"), StringComparison.Ordinal)
+                        && !string.Equals(ConnectionInfoIpText.Text, Localize("Lang.ConnectionInfo.Unknown"), StringComparison.Ordinal))
+                        return;
+                }
+
                 // A failed lookup must not leave a permanently stale "unknown location" in the
                 // widget. Retry a few times with a short backoff so a transient network hiccup
                 // (common right after start or right after the tunnel comes up) self-heals.
-                if (!string.Equals(info.Error, "Canceled", StringComparison.OrdinalIgnoreCase)
+                if (!IsOpenFluxProfileActive()
+                    && !string.Equals(info.Error, "Canceled", StringComparison.OrdinalIgnoreCase)
                     && connectionInfoFailureRetries < ConnectionInfoMaxFailureRetries)
                 {
                     connectionInfoFailureRetries++;
@@ -3206,12 +3280,14 @@ namespace InvisibleGorillaXRay.Android.Views
                 string ip = cached;
                 if (ip.Length < 7 || ip.IndexOf('.') < 0)
                 {
+                    // One short SOCKS probe only when we have never seen the exit IP.
+                    // A live video already owns the mux; a second ipify hangs the UI.
                     string body = await Task.Run(() => Socks5Http.GetHttpsBody(
                         "127.0.0.1",
                         port,
                         "api.ipify.org",
                         "/",
-                        8000), token).ConfigureAwait(false);
+                        4000), token).ConfigureAwait(false);
                     ip = (body ?? "").Trim();
                 }
 
@@ -3236,11 +3312,26 @@ namespace InvisibleGorillaXRay.Android.Views
             }
         }
 
-        private static async Task<ConnectionInfo> EnrichOpenFluxGeoAsync(ConnectionInfo info, CancellationToken token)
+        private async Task<ConnectionInfo> EnrichOpenFluxGeoAsync(ConnectionInfo info, CancellationToken token)
         {
+            if (!string.IsNullOrWhiteSpace(lastOpenFluxGeoIp)
+                && string.Equals(lastOpenFluxGeoIp, info.Ip, StringComparison.Ordinal)
+                && lastOpenFluxGeo != null)
+            {
+                return lastOpenFluxGeo;
+            }
+
             try
             {
-                using HttpClient client = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
+                using SocketsHttpHandler handler = new SocketsHttpHandler
+                {
+                    UseProxy = false,
+                    ConnectTimeout = TimeSpan.FromSeconds(3)
+                };
+                using HttpClient client = new HttpClient(handler, disposeHandler: true)
+                {
+                    Timeout = TimeSpan.FromSeconds(3)
+                };
                 string json = await client.GetStringAsync("https://ipwho.is/" + info.Ip, token).ConfigureAwait(false);
                 using JsonDocument doc = JsonDocument.Parse(json);
                 JsonElement root = doc.RootElement;
@@ -3260,7 +3351,7 @@ namespace InvisibleGorillaXRay.Android.Views
                         org = ispEl.GetString() ?? "";
                 }
 
-                return new ConnectionInfo
+                ConnectionInfo geo = new ConnectionInfo
                 {
                     Ok = true,
                     Ip = info.Ip,
@@ -3270,6 +3361,9 @@ namespace InvisibleGorillaXRay.Android.Views
                     CountryCode = cc,
                     Org = org
                 };
+                lastOpenFluxGeoIp = info.Ip;
+                lastOpenFluxGeo = geo;
+                return geo;
             }
             catch (Exception ex)
             {
@@ -3592,16 +3686,8 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void OnServersSectionClick(object? sender, RoutedEventArgs e)
         {
-            try
-            {
-                ShowSection(NavigationSection.Servers);
-                EnsureServersSectionInitialized();
-            }
-            catch (Exception ex)
-            {
-                DiagnosticLog.WriteException("MainView.Servers.Open", ex);
-                SetStatus(ex.Message);
-            }
+            ShowSection(NavigationSection.Servers);
+            ScheduleServersSectionRefresh(forceRefresh: !isServersSectionInitialized);
         }
 
         private void OnSettingsSectionClick(object? sender, RoutedEventArgs e)

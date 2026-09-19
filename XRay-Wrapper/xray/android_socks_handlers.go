@@ -9,6 +9,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/proxy"
@@ -30,10 +31,87 @@ const (
 
 	// Yandex OpenFlux mux dies when a browser opens dozens of parallel TCP
 	// streams. Cap concurrent SOCKS relays so pages can finish.
-	androidMaxConcurrentSocks = 12
+	androidMaxConcurrentSocks = 10
+	androidMaxConcurrentDials = 2
+	androidSocksIdleEvict     = 3 * time.Second
+	androidSocksHotWindow     = 2 * time.Second
+	androidSocksReadIdle      = 20 * time.Second
 )
 
-var androidSocksGate = make(chan struct{}, androidMaxConcurrentSocks)
+var (
+	androidSocksGate     = make(chan struct{}, androidMaxConcurrentSocks)
+	androidSocksDialGate = make(chan struct{}, androidMaxConcurrentDials)
+	androidMuxLimited    atomic.Bool
+)
+
+type androidActiveRelay struct {
+	lhs, rhs net.Conn
+	started  time.Time
+	lastNano atomic.Int64
+	closed   atomic.Bool
+}
+
+var (
+	androidRelayMu sync.Mutex
+	androidRelays  []*androidActiveRelay
+)
+
+func (r *androidActiveRelay) touch() {
+	r.lastNano.Store(time.Now().UnixNano())
+}
+
+func (r *androidActiveRelay) idle() time.Duration {
+	return time.Since(time.Unix(0, r.lastNano.Load()))
+}
+
+func (r *androidActiveRelay) close() {
+	if r == nil || !r.closed.CompareAndSwap(false, true) {
+		return
+	}
+	_ = r.lhs.Close()
+	_ = r.rhs.Close()
+}
+
+func registerAndroidRelay(r *androidActiveRelay) {
+	androidRelayMu.Lock()
+	androidRelays = append(androidRelays, r)
+	androidRelayMu.Unlock()
+}
+
+func unregisterAndroidRelay(r *androidActiveRelay) {
+	androidRelayMu.Lock()
+	defer androidRelayMu.Unlock()
+	dst := androidRelays[:0]
+	for _, item := range androidRelays {
+		if item != r {
+			dst = append(dst, item)
+		}
+	}
+	androidRelays = dst
+}
+
+func evictAndroidRelays(minIdle time.Duration, maxEvict int) int {
+	androidRelayMu.Lock()
+	snapshot := append([]*androidActiveRelay(nil), androidRelays...)
+	androidRelayMu.Unlock()
+
+	evicted := 0
+	for _, item := range snapshot {
+		if evicted >= maxEvict {
+			break
+		}
+		if item.closed.Load() {
+			continue
+		}
+		idle := item.idle()
+		if idle < androidSocksHotWindow || idle < minIdle {
+			continue
+		}
+		item.close()
+		evicted++
+	}
+	return evicted
+}
 
 type androidSocksTCPHandler struct {
 	proxyHost string
@@ -86,14 +164,53 @@ func newAndroidUDPHandler(proxyHost string, proxyPort uint16, auth *localSocksAu
 	}
 }
 
+func enableAndroidKeepAlive(c net.Conn) {
+	if tc, ok := c.(*net.TCPConn); ok {
+		_ = tc.SetKeepAlive(true)
+		_ = tc.SetKeepAlivePeriod(30 * time.Second)
+		_ = tc.SetNoDelay(true)
+	}
+}
+
+func tryAcquireAndroidSocksGate() bool {
+	select {
+	case androidSocksGate <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
 func acquireAndroidSocksGate(timeout time.Duration) bool {
+	if tryAcquireAndroidSocksGate() {
+		return true
+	}
+	// Drop keep-alive shells only. Never cut a stream that just moved bytes —
+	// that is the current video and killing it freezes both UI and traffic.
+	evictAndroidRelays(androidSocksIdleEvict, 6)
+	if tryAcquireAndroidSocksGate() {
+		return true
+	}
+
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
 	case androidSocksGate <- struct{}{}:
 		return true
 	case <-timer.C:
-		return false
+		evictAndroidRelays(androidSocksIdleEvict, 4)
+		return tryAcquireAndroidSocksGate()
+	}
+}
+
+func acquireAndroidSocksDial() {
+	androidSocksDialGate <- struct{}{}
+}
+
+func releaseAndroidSocksDial() {
+	select {
+	case <-androidSocksDialGate:
+	default:
 	}
 }
 
@@ -115,12 +232,15 @@ func (d androidTimedDialer) Dial(network, address string) (net.Conn, error) {
 
 func (h *androidSocksTCPHandler) Handle(conn net.Conn, target *net.TCPAddr) error {
 	go func() {
-		if !acquireAndroidSocksGate(20 * time.Second) {
-			log.Errorf("socks gate timeout %v", target)
-			conn.Close()
-			return
+		limited := androidMuxLimited.Load()
+		if limited {
+			if !acquireAndroidSocksGate(2 * time.Second) {
+				log.Errorf("socks gate timeout %v", target)
+				conn.Close()
+				return
+			}
+			defer func() { <-androidSocksGate }()
 		}
-		defer func() { <-androidSocksGate }()
 
 		var proxyAuth *proxy.Auth
 		if h.auth != nil && h.auth.enabled() {
@@ -143,21 +263,61 @@ func (h *androidSocksTCPHandler) Handle(conn net.Conn, target *net.TCPAddr) erro
 			dialTarget = &net.TCPAddr{IP: ip4, Port: target.Port}
 		}
 
+		if limited {
+			acquireAndroidSocksDial()
+		}
 		upstreamConn, err := dialer.Dial("tcp", dialTarget.String())
+		if limited {
+			releaseAndroidSocksDial()
+		}
 		if err != nil {
 			log.Errorf("socks connect %v: %v", dialTarget, err)
 			conn.Close()
 			return
 		}
 		_ = upstreamConn.SetDeadline(time.Time{})
+		enableAndroidKeepAlive(conn)
+		enableAndroidKeepAlive(upstreamConn)
 
-		log.Infof("new proxy connection to %v", target)
-		relayTCP(conn, upstreamConn)
+		if !limited {
+			relayTCP(conn, upstreamConn, nil)
+			return
+		}
+
+		relay := &androidActiveRelay{lhs: conn, rhs: upstreamConn, started: time.Now()}
+		relay.touch()
+		registerAndroidRelay(relay)
+		defer func() {
+			relay.close()
+			unregisterAndroidRelay(relay)
+		}()
+		relayTCP(conn, upstreamConn, relay)
 	}()
 	return nil
 }
 
-func relayTCP(lhs net.Conn, rhs net.Conn) {
+func copyAndroidRelay(dst, src net.Conn, relay *androidActiveRelay) error {
+	if relay == nil {
+		_, err := io.Copy(dst, src)
+		return err
+	}
+	buf := make([]byte, 32*1024)
+	for {
+		_ = src.SetReadDeadline(time.Now().Add(androidSocksReadIdle))
+		n, err := src.Read(buf)
+		if n > 0 {
+			relay.touch()
+			if _, werr := dst.Write(buf[:n]); werr != nil {
+				return werr
+			}
+		}
+		if err != nil {
+			return err
+		}
+	}
+}
+
+func relayTCP(lhs net.Conn, rhs net.Conn, relay *androidActiveRelay) {
 	upCh := make(chan struct{})
 
 	closeConn := func(dir tcpRelayDirection, interrupt bool) {
@@ -181,7 +341,7 @@ func relayTCP(lhs net.Conn, rhs net.Conn) {
 	}
 
 	go func() {
-		if _, err := io.Copy(rhs, lhs); err != nil {
+		if err := copyAndroidRelay(rhs, lhs, relay); err != nil {
 			closeConn(relayUplink, true)
 		} else {
 			closeConn(relayUplink, false)
@@ -189,7 +349,7 @@ func relayTCP(lhs net.Conn, rhs net.Conn) {
 		upCh <- struct{}{}
 	}()
 
-	if _, err := io.Copy(lhs, rhs); err != nil {
+	if err := copyAndroidRelay(lhs, rhs, relay); err != nil {
 		closeConn(relayDownlink, true)
 	} else {
 		closeConn(relayDownlink, false)

@@ -193,14 +193,15 @@ namespace InvisibleGorillaXRay.Core
             int fileDescriptor,
             int proxyPort,
             bool isUdpEnabled,
-            LocalProxyCredentials? localProxyCredentials = null)
+            LocalProxyCredentials? localProxyCredentials = null,
+            bool limitMux = false)
         {
             LocalProxyCredentials credentials = localProxyCredentials ?? LocalProxyCredentials.None;
             IntPtr usernamePtr = StringToUtf8Ptr(credentials.Username);
             IntPtr passwordPtr = StringToUtf8Ptr(credentials.Password);
             try
             {
-                IntPtr errorPtr = StartAndroidTunnelNative(fileDescriptor, proxyPort, isUdpEnabled, usernamePtr, passwordPtr);
+                IntPtr errorPtr = StartAndroidTunnelNative(fileDescriptor, proxyPort, isUdpEnabled, usernamePtr, passwordPtr, limitMux);
                 return errorPtr == IntPtr.Zero ? null : Marshal.PtrToStringAnsi(errorPtr);
             }
             finally
@@ -215,7 +216,8 @@ namespace InvisibleGorillaXRay.Core
                 int proxyPort,
                 [MarshalAs(UnmanagedType.I1)] bool isUdpEnabled,
                 IntPtr usernamePtr,
-                IntPtr passwordPtr);
+                IntPtr passwordPtr,
+                [MarshalAs(UnmanagedType.I1)] bool limitMux);
         }
 
         public static void StopAndroidTunnel()

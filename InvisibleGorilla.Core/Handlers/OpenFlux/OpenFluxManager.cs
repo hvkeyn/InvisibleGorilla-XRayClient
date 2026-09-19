@@ -277,6 +277,9 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
             startInfo.Environment["ALL_PROXY"] = "";
             startInfo.Environment["http_proxy"] = "";
             startInfo.Environment["https_proxy"] = "";
+            startInfo.Environment["OPENFLUX_BATCH_BYTES"] = "32768";
+            startInfo.Environment["OPENFLUX_BATCH_COUNT"] = "96";
+            startInfo.Environment["OPENFLUX_BATCH_LINGER_MS"] = "4";
 
             var started = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
             started.OutputDataReceived += (_, e) => HandleProcessLine(e.Data, logPath);

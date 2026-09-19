@@ -238,7 +238,8 @@ namespace InvisibleGorillaXRay.Android.Services
                     tunFd,
                     proxyPort,
                     udpEnabled,
-                    localProxyCredentials);
+                    localProxyCredentials,
+                    limitMux: httpProxyPort > 0);
                 if (!string.IsNullOrWhiteSpace(bridgeError))
                 {
                     XRayCoreWrapper.StopAndroidTunnel();

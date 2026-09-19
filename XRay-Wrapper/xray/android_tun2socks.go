@@ -25,6 +25,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -36,6 +37,7 @@ const androidTunReadBufferSize = 64 * 1024
 var androidTunMutex sync.Mutex
 var androidTunState *androidTunBridge
 var androidTunLastError string
+var androidTunRunning atomic.Bool
 
 type androidTunBridge struct {
 	tunFile *os.File
@@ -46,7 +48,7 @@ type androidTunBridge struct {
 }
 
 //export StartAndroidTun2Socks
-func StartAndroidTun2Socks(fd C.int, proxyPort C.int, isUdpEnabled C.bool, username *C.char, password *C.char) (errPtr *C.char) {
+func StartAndroidTun2Socks(fd C.int, proxyPort C.int, isUdpEnabled C.bool, username *C.char, password *C.char, limitMux C.bool) (errPtr *C.char) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			message := fmt.Sprintf("android tun2socks panic: %v", recovered)
@@ -77,6 +79,7 @@ func StartAndroidTun2Socks(fd C.int, proxyPort C.int, isUdpEnabled C.bool, usern
 	}
 
 	auth := newLocalSocksAuth(C.GoString(username), C.GoString(password))
+	androidMuxLimited.Store(bool(limitMux))
 
 	tunFile := os.NewFile(uintptr(fd), fmt.Sprintf("android-tun-%d", int(fd)))
 	if tunFile == nil {
@@ -105,6 +108,7 @@ func StartAndroidTun2Socks(fd C.int, proxyPort C.int, isUdpEnabled C.bool, usern
 	})
 
 	androidTunState = bridge
+	androidTunRunning.Store(true)
 	go runAndroidTunLoop(bridge)
 	return nil
 }
@@ -118,9 +122,7 @@ func StopAndroidTun2Socks() {
 
 //export IsAndroidTun2SocksRunning
 func IsAndroidTun2SocksRunning() C.bool {
-	androidTunMutex.Lock()
-	defer androidTunMutex.Unlock()
-	return C.bool(androidTunState != nil)
+	return C.bool(androidTunRunning.Load())
 }
 
 //export GetAndroidTun2SocksLastError
@@ -197,10 +199,11 @@ func runAndroidTunLoop(bridge *androidTunBridge) {
 }
 
 func writeAndroidTunPacket(bridge *androidTunBridge, data []byte) (int, error) {
-	androidTunMutex.Lock()
-	defer androidTunMutex.Unlock()
-
-	if androidTunState != bridge || bridge.tunFile == nil {
+	if !androidTunRunning.Load() {
+		return 0, io.ErrClosedPipe
+	}
+	tunFile := bridge.tunFile
+	if tunFile == nil {
 		return 0, io.ErrClosedPipe
 	}
 
@@ -208,9 +211,9 @@ func writeAndroidTunPacket(bridge *androidTunBridge, data []byte) (int, error) {
 		framed := make([]byte, len(data)+4)
 		framed[2] = 0x08
 		copy(framed[4:], data)
-		return bridge.tunFile.Write(framed)
+		return tunFile.Write(framed)
 	}
-	return bridge.tunFile.Write(data)
+	return tunFile.Write(data)
 }
 
 func stripTunPi(bridge *androidTunBridge, packet []byte) []byte {
@@ -228,6 +231,8 @@ func stripTunPi(bridge *androidTunBridge, packet []byte) []byte {
 func stopAndroidTunLocked() {
 	bridge := androidTunState
 	androidTunState = nil
+	androidTunRunning.Store(false)
+	androidMuxLimited.Store(false)
 
 	if bridge == nil {
 		return
@@ -372,7 +377,7 @@ func tryRejectTunUdp(bridge *androidTunBridge, packet []byte) bool {
 	}
 	reply := buildIcmpPortUnreachable(packet)
 	if len(reply) > 0 {
-		_, _ = writeAndroidTunPacket(bridge, reply)
+		go func() { _, _ = writeAndroidTunPacket(bridge, reply) }()
 	}
 	return true
 }

@@ -31,6 +31,11 @@ namespace InvisibleGorillaXRay.Android
         {
             try
             {
+                System.Threading.ThreadPool.GetMinThreads(out int workers, out int io);
+                System.Threading.ThreadPool.SetMinThreads(
+                    workers < 32 ? 32 : workers,
+                    io < 16 ? 16 : io);
+
                 if (ApplicationLifetime is ISingleViewApplicationLifetime singleView)
                 {
                     InvisibleGorillaXRay.Core.DiagnosticLog.Write("AndroidApp", "Single view lifetime detected");
