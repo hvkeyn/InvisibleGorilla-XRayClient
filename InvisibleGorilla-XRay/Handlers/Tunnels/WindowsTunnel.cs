@@ -34,10 +34,14 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
 
         /// <summary>
         /// Optional sidecar (e.g. openflux.exe) kept off the TUN so its own transport
-        /// does not loop back through the local SOCKS. Converted to BYPASS when the
-        /// user has ALL_APPS; appended to an existing BYPASS list; ignored for ONLY_SELECTED.
+        /// does not loop back through the local SOCKS.
+        /// When ExtraBypassExclusive is set, user app-rules are ignored and only this
+        /// sidecar stays direct. Otherwise ALL_APPS becomes BYPASS of the sidecar, and
+        /// an existing BYPASS list gets the sidecar appended.
         /// </summary>
         public static string ExtraBypassAppPath { get; set; } = "";
+
+        public static bool ExtraBypassExclusive { get; set; }
 
         private LocalizationService LocalizationService => ServiceLocator.Get<LocalizationService>();
 
@@ -340,7 +344,7 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
             string extraBypass = ExtraBypassAppPath?.Trim() ?? "";
             if (!string.IsNullOrWhiteSpace(extraBypass) && System.IO.File.Exists(extraBypass))
             {
-                if (mode == AppRulesMode.ALL_APPS)
+                if (ExtraBypassExclusive || mode == AppRulesMode.ALL_APPS)
                 {
                     mode = AppRulesMode.BYPASS_SELECTED_APPS;
                     appPaths = new[] { extraBypass };

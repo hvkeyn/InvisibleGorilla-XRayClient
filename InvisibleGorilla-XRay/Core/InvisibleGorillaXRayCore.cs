@@ -484,6 +484,7 @@ namespace InvisibleGorillaXRay.Core
                 openFluxProxyActive = false;
                 WindowsProxy.ExtraBypass = "";
                 WindowsTunnel.ExtraBypassAppPath = "";
+                WindowsTunnel.ExtraBypassExclusive = false;
                 ActiveTunnelSession.Clear();
             }
         }
@@ -649,6 +650,7 @@ namespace InvisibleGorillaXRay.Core
             }
 
             WindowsTunnel.ExtraBypassAppPath = System.IO.Path.GetFullPath(Values.Path.OPENFLUX_EXE);
+            WindowsTunnel.ExtraBypassExclusive = false;
             ITunnel tunnel = getTunnel.Invoke();
             return tunnel.Enable(
                 ip: Global.LOCAL_HOST,

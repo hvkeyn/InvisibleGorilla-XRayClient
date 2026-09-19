@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -146,7 +147,12 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
                 }
 
                 if (Status != OpenFluxClientStatus.Error)
-                    SetStatus(OpenFluxClientStatus.WaitingPeer, "");
+                {
+                    if (ProbePeer(port, 12000))
+                        SetStatus(OpenFluxClientStatus.Connected, "");
+                    else
+                        SetStatus(OpenFluxClientStatus.WaitingPeer, "peer");
+                }
 
                 DiagnosticLog.Write(Tag, $"SOCKS5 listening on 127.0.0.1:{port} transport={transport}");
                 return new Status(Code.SUCCESS, SubCode.SUCCESS, port);
@@ -421,6 +427,32 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
             string dest = AppPath.OPENFLUX_USER_KEY;
             File.WriteAllText(dest, trimmed, new UTF8Encoding(false));
             return IoPath.GetFullPath(dest);
+        }
+
+        private static bool ProbePeer(int socksPort, int timeoutMs)
+        {
+            try
+            {
+                SocketsHttpHandler handler = new SocketsHttpHandler
+                {
+                    UseProxy = true,
+                    Proxy = new WebProxy($"socks5://127.0.0.1:{socksPort}"),
+                    ConnectTimeout = TimeSpan.FromMilliseconds(timeoutMs)
+                };
+                using HttpClient client = new HttpClient(handler)
+                {
+                    Timeout = TimeSpan.FromMilliseconds(timeoutMs)
+                };
+                string body = client.GetStringAsync("https://ifconfig.co/ip").GetAwaiter().GetResult();
+                string ip = (body ?? "").Trim();
+                DiagnosticLog.Write(Tag, $"peer probe ok ip={ip}");
+                return ip.Length > 0;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.Write(Tag, $"peer probe failed: {ex.Message}");
+                return false;
+            }
         }
 
         private static bool WaitForPort(int port, int maxWaitMs)

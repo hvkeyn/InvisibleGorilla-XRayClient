@@ -1342,7 +1342,7 @@ namespace InvisibleGorillaXRay
                 return;
             }
 
-            if (!isConnected)
+            if (status == OpenFluxClientStatus.Stopped)
             {
                 SetOpenFluxStatusMessage(Loc("Lang.OpenFlux.Status.Stopped"));
                 return;
@@ -1354,24 +1354,26 @@ namespace InvisibleGorillaXRay
                 return;
             }
 
-            if (tunnelOk == false)
+            if (status == OpenFluxClientStatus.WaitingPeer
+                || (status == OpenFluxClientStatus.Connected && !isConnected))
             {
-                SetOpenFluxStatusMessage(Loc("Lang.OpenFlux.Status.PeerMissing"));
+                if (string.Equals(detail, "peer", StringComparison.OrdinalIgnoreCase) || tunnelOk == false)
+                    SetOpenFluxStatusMessage(Loc("Lang.OpenFlux.Status.PeerMissing"));
+                else
+                    SetOpenFluxStatusMessage(Loc("Lang.OpenFlux.Status.WaitingPeer"));
                 return;
             }
 
-            if (status == OpenFluxClientStatus.Connected || status == OpenFluxClientStatus.WaitingPeer)
+            if (status == OpenFluxClientStatus.Connected)
             {
-                if (tunnelOk == true)
+                if (tunnelOk == false)
                 {
-                    SetOpenFluxStatusMessage(lastOpenFluxPingMs > 0
-                        ? string.Format(Loc("Lang.OpenFlux.Status.LiveMs"), lastOpenFluxPingMs)
-                        : Loc("Lang.OpenFlux.Status.Live"));
+                    SetOpenFluxStatusMessage(Loc("Lang.OpenFlux.Status.PeerMissing"));
+                    return;
                 }
-                else
-                {
-                    SetOpenFluxStatusMessage(Loc("Lang.OpenFlux.Status.WaitingPeer"));
-                }
+                SetOpenFluxStatusMessage(lastOpenFluxPingMs > 0
+                    ? string.Format(Loc("Lang.OpenFlux.Status.LiveMs"), lastOpenFluxPingMs)
+                    : Loc("Lang.OpenFlux.Status.Live"));
                 return;
             }
 

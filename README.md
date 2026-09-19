@@ -52,6 +52,10 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.18
+
+- **OpenFlux shows Live only after a real SOCKS probe** — if the Yandex document peer is dead, the panel says the exit does not answer instead of Disconnected/Live. User TUN bypass list is kept (`openflux.exe` is still excluded).
+
 ## What's new in v3.6.17
 
 - **OpenFlux honors TUN** — if Mode is TUN, traffic goes through the virtual adapter into the local OpenFlux SOCKS. Proxy mode is unchanged (HTTP CONNECT bridge).
