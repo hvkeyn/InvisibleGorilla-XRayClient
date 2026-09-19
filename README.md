@@ -55,7 +55,7 @@ Android support is **experimental**.
 ## What's new in v3.6.18
 
 - **OpenFlux shows Live only after a real SOCKS probe** — if the Yandex document peer is dead, the panel says the exit does not answer instead of Disconnected/Live. User TUN bypass list is kept (`openflux.exe` is still excluded).
-- **Android APK (arm64)** is in the GitHub release again.
+- **Android APK (arm64)** is in the GitHub release again. The server list now includes **OpenFlux / Yandex document** like Windows: paste the Disk link, Apply, then RUN.
 
 ## What's new in v3.6.17
 

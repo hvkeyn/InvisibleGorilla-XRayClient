@@ -859,6 +859,58 @@ function Get-TorAndroidBundle {
     }
 }
 
+function Get-OpenFluxAndroidBinary {
+    Write-Step "Building OpenFlux sidecar (Android libopenflux.so)"
+
+    $src = "E:\PPROJECTS\whiteBlade\artifacts\openflux-src"
+    if (-not (Test-Path (Join-Path $src "go.mod"))) {
+        Write-Err "OpenFlux source not found at $src"
+        return
+    }
+
+    $go = Get-Command go -ErrorAction SilentlyContinue
+    if ($null -eq $go) {
+        Write-Err "go is not on PATH; OpenFlux will be missing from the APK"
+        return
+    }
+
+    New-DirectoryIfMissing $RuntimeDir
+    $targets = @(
+        @{ Abi = "arm64-v8a"; GoArch = "arm64" },
+        @{ Abi = "x86_64";    GoArch = "amd64" }
+    )
+
+    foreach ($t in $targets) {
+        $abiDir = Join-Path $RuntimeDir $t.Abi
+        New-DirectoryIfMissing $abiDir
+        $dest = Join-Path $abiDir "libopenflux.so"
+        Write-Info "go build openflux $($t.Abi) -> $dest"
+
+        $env:CGO_ENABLED = "0"
+        $env:GOOS = "linux"
+        $env:GOARCH = $t.GoArch
+        $env:GOTOOLCHAIN = "auto"
+        Push-Location $src
+        try {
+            & go build -trimpath -ldflags "-s -w" -o $dest .
+            if ($LASTEXITCODE -ne 0) {
+                throw "go build failed for OpenFlux $($t.Abi) (exit $LASTEXITCODE)"
+            }
+        }
+        finally {
+            Pop-Location
+            Remove-Item Env:CGO_ENABLED -ErrorAction SilentlyContinue
+            Remove-Item Env:GOOS -ErrorAction SilentlyContinue
+            Remove-Item Env:GOARCH -ErrorAction SilentlyContinue
+        }
+
+        if (-not (Test-Path $dest)) {
+            throw "OpenFlux binary was not produced: $dest"
+        }
+        Write-Success "OpenFlux $($t.Abi) ready ($((Get-Item $dest).Length) bytes)"
+    }
+}
+
 function Resolve-AndroidClang {
     param(
         [Parameter(Mandatory)][string]$NdkRoot,
@@ -1055,6 +1107,8 @@ if (-not $SkipTor) {
 else {
     Write-Info "Skipping Tor bundle"
 }
+
+Get-OpenFluxAndroidBinary
 
 if (-not $NoPublish) {
     Publish-AndroidApk

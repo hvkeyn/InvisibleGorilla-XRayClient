@@ -24,6 +24,7 @@ namespace InvisibleGorillaXRay.Android.Platforms
             CopyAssetIfPresent("Runtime/geosite.dat", Path.Combine(InvisibleGorillaXRay.Values.Directory.ROOT, "geosite.dat"));
             DeleteLegacyCopiedNativeRuntime();
             ConfigureTorBinaries();
+            ConfigureOpenFluxBinary();
         }
 
         /// <summary>
@@ -56,6 +57,25 @@ namespace InvisibleGorillaXRay.Android.Platforms
             catch
             {
                 // Tor stays unavailable if the native dir cannot be resolved; UI surfaces this.
+            }
+        }
+
+        private static void ConfigureOpenFluxBinary()
+        {
+            try
+            {
+                string? nativeLibDir = Application.Context.ApplicationInfo?.NativeLibraryDir;
+                if (string.IsNullOrWhiteSpace(nativeLibDir))
+                    return;
+
+                string openFluxExe = Path.Combine(nativeLibDir, "libopenflux.so");
+                if (!File.Exists(openFluxExe))
+                    return;
+
+                InvisibleGorillaXRay.Values.Path.OverrideOpenFluxBinary(openFluxExe);
+            }
+            catch
+            {
             }
         }
 

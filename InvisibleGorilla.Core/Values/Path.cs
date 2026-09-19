@@ -32,6 +32,7 @@ namespace InvisibleGorillaXRay.Values
         private static string? pluggableTransportOverride;
         private static string? geoIpOverride;
         private static string? geoIp6Override;
+        private static string? openFluxExeOverride;
 
         /// <summary>
         /// Overrides Tor binary/data locations for platforms that cannot use the default
@@ -45,6 +46,16 @@ namespace InvisibleGorillaXRay.Values
             geoIpOverride = geoip;
             geoIp6Override = geoip6;
         }
+
+        public static void OverrideOpenFluxBinary(string? exe)
+        {
+            openFluxExeOverride = exe;
+        }
+
+        public static string OPENFLUX_EXE => openFluxExeOverride
+            ?? System.IO.Path.Combine(Directory.OPENFLUX, ExeName("openflux"));
+
+        public static string OPENFLUX_USER_KEY => System.IO.Path.Combine(Directory.OPENFLUX, "enc.key");
 
         public static string TOR_EXE => torExeOverride ?? System.IO.Path.Combine(Directory.TOR, ExeName("tor"));
         // lyrebird is the modern obfs4/meek pluggable transport binary (was obfs4proxy).

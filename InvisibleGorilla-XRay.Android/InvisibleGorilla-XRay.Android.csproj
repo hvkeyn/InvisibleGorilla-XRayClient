@@ -20,7 +20,7 @@
 
     <ApplicationTitle>Invisible Gorilla XRay</ApplicationTitle>
 
-    <ApplicationVersion>38</ApplicationVersion>
+    <ApplicationVersion>39</ApplicationVersion>
 
     <ApplicationDisplayVersion>3.6.18</ApplicationDisplayVersion>
 
@@ -147,6 +147,22 @@
     <AndroidNativeLibrary Include="Assets\Runtime\x86_64\liblyrebird.so"
 
                           Condition="Exists('Assets\Runtime\x86_64\liblyrebird.so')">
+
+      <Abi>x86_64</Abi>
+
+    </AndroidNativeLibrary>
+
+    <AndroidNativeLibrary Include="Assets\Runtime\arm64-v8a\libopenflux.so"
+
+                          Condition="Exists('Assets\Runtime\arm64-v8a\libopenflux.so')">
+
+      <Abi>arm64-v8a</Abi>
+
+    </AndroidNativeLibrary>
+
+    <AndroidNativeLibrary Include="Assets\Runtime\x86_64\libopenflux.so"
+
+                          Condition="Exists('Assets\Runtime\x86_64\libopenflux.so')">
 
       <Abi>x86_64</Abi>
 

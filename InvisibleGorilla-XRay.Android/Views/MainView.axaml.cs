@@ -35,6 +35,7 @@ namespace InvisibleGorillaXRay.Android.Views
     using InvisibleGorillaXRay.Models;
     using InvisibleGorillaXRay.Services;
     using InvisibleGorillaXRay.Services.Goida;
+    using InvisibleGorillaXRay.Services.OpenFlux;
     using InvisibleGorillaXRay.Utilities;
     using InvisibleGorillaXRay.Values;
 
@@ -171,6 +172,7 @@ namespace InvisibleGorillaXRay.Android.Views
             GoidaNativeTestBridge.ResumeAfterNativeTest = TryResumeAfterNativeTest;
             goidaHandler.Manager.NodesUpdated += OnGoidaNodesUpdated;
             TrySetupStep("InitializeGoidaControls", InitializeGoidaControls);
+            TrySetupStep("InitializeOpenFluxControls", InitializeOpenFluxControls);
 
             InitializeControls();
             ApplyLocalizedText();
@@ -562,6 +564,7 @@ namespace InvisibleGorillaXRay.Android.Views
             RefreshAppRulesSummary();
 
             ApplyGoidaLocalizedText();
+            ApplyOpenFluxLocalizedText();
         }
 
         private string Localize(string key)
@@ -1823,14 +1826,18 @@ namespace InvisibleGorillaXRay.Android.Views
         private Border CreateConfigCard(Config config)
         {
             bool isGoidaMarker = GoidaProfilePaths.IsMarker(config.Path);
+            bool isOpenFluxMarker = OpenFluxProfilePaths.IsMarker(config.Path);
             string currentPath = settingsHandler.UserSettings.GetCurrentConfigPath();
             bool isGoidaActive = isGoidaMarker
                 && GoidaProfilePaths.IsMarker(currentPath);
+            bool isOpenFluxActive = isOpenFluxMarker
+                && OpenFluxProfilePaths.IsMarker(currentPath);
 
             bool isSelected = string.Equals(currentPath, config.Path, StringComparison.OrdinalIgnoreCase)
-                || isGoidaActive;
+                || isGoidaActive
+                || isOpenFluxActive;
 
-            TorProfile? torProfile = isGoidaMarker
+            TorProfile? torProfile = isGoidaMarker || isOpenFluxMarker
                 ? null
                 : settingsHandler.UserSettings.FindTorProfileByPath(config.Path);
 
@@ -1917,9 +1924,9 @@ namespace InvisibleGorillaXRay.Android.Views
                 Margin = new Thickness(0, 4, 0, 0),
                 Spacing = 4
             };
-            if (torProfile == null && !isGoidaMarker)
+            if (torProfile == null && !isGoidaMarker && !isOpenFluxMarker)
                 actionRow.Children.Add(CreateIconActionButton("Icon.Share", 11, 13, () => _ = ShareConfigAsync(config)));
-            if (!isGoidaMarker)
+            if (!isGoidaMarker && !isOpenFluxMarker)
                 actionRow.Children.Add(CreateIconActionButton("Icon.Delete", 12, 12, () => DeleteSelectedConfig(config)));
             actionRow.Children.Add(CreateIconActionButton("Icon.Connection", 15, 11, () =>
             {
@@ -1927,6 +1934,8 @@ namespace InvisibleGorillaXRay.Android.Views
                     _ = CheckTorProfileAsync(torProfile);
                 else if (isGoidaMarker)
                     _ = CheckGoidaProfileAsync();
+                else if (isOpenFluxMarker)
+                    _ = CheckOpenFluxProfileAsync();
                 else
                     _ = CheckConfigAsync(config);
             }));
@@ -2805,6 +2814,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     return false;
 
                 ApplyTorStateForSelectedConfig(path);
+                ApplyOpenFluxPanel();
 
                 UpdateCurrentConfigSummary();
                 UpdateRuntimeSummary();
@@ -4015,7 +4025,7 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void DeleteSelectedConfig(Config config)
         {
-            if (GoidaProfilePaths.IsMarker(config.Path))
+            if (GoidaProfilePaths.IsMarker(config.Path) || OpenFluxProfilePaths.IsMarker(config.Path))
                 return;
 
             if (pendingConfigShare != null &&

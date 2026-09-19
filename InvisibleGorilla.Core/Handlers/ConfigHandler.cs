@@ -7,6 +7,7 @@ namespace InvisibleGorillaXRay.Handlers
     using Configs;
     using Models;
     using Services.Goida;
+    using Services.OpenFlux;
     using Values;
     using Utilities;
 
@@ -18,6 +19,7 @@ namespace InvisibleGorillaXRay.Handlers
         private Func<string> getCurrentConfigPath;
         private Func<Config?> getGoidaListConfig;
         private Func<Config?> getGoidaRuntimeConfig;
+        private Func<Config?> getOpenFluxListConfig;
 
         public ConfigHandler()
         {
@@ -28,11 +30,13 @@ namespace InvisibleGorillaXRay.Handlers
         public void Setup(
             Func<string> getCurrentConfigPath,
             Func<Config?> getGoidaListConfig = null,
-            Func<Config?> getGoidaRuntimeConfig = null)
+            Func<Config?> getGoidaRuntimeConfig = null,
+            Func<Config?> getOpenFluxListConfig = null)
         {
             this.getCurrentConfigPath = getCurrentConfigPath;
             this.getGoidaListConfig = getGoidaListConfig;
             this.getGoidaRuntimeConfig = getGoidaRuntimeConfig;
+            this.getOpenFluxListConfig = getOpenFluxListConfig;
             subscriptionConfig.Setup(getCurrentConfigPath);
         }
 
@@ -60,6 +64,9 @@ namespace InvisibleGorillaXRay.Handlers
                     return runtimeConfig;
             }
 
+            if (OpenFluxProfilePaths.IsMarker(path))
+                return getOpenFluxListConfig?.Invoke() ?? CreateConfigModel(path);
+
             return CreateConfigModel(path);
         }
 
@@ -73,6 +80,10 @@ namespace InvisibleGorillaXRay.Handlers
             Config? goidaConfig = getGoidaListConfig?.Invoke();
             if (goidaConfig != null)
                 configs.Insert(0, goidaConfig);
+
+            Config? openFluxConfig = getOpenFluxListConfig?.Invoke();
+            if (openFluxConfig != null)
+                configs.Insert(0, openFluxConfig);
 
             return configs;
         }
@@ -93,6 +104,9 @@ namespace InvisibleGorillaXRay.Handlers
         {
             if (GoidaProfilePaths.IsMarker(path))
                 return getGoidaListConfig?.Invoke();
+
+            if (OpenFluxProfilePaths.IsMarker(path))
+                return getOpenFluxListConfig?.Invoke();
 
             if (string.IsNullOrEmpty(path) || !FileUtility.IsFileExists(path))
                 return null;

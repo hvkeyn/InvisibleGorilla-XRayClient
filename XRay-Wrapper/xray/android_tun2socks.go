@@ -77,11 +77,6 @@ func StartAndroidTun2Socks(fd C.int, proxyPort C.int, isUdpEnabled C.bool, usern
 	}
 
 	auth := newLocalSocksAuth(C.GoString(username), C.GoString(password))
-	if auth == nil {
-		message := "missing Android SOCKS credentials"
-		androidTunLastError = message
-		return C.CString(message)
-	}
 
 	tunFile := os.NewFile(uintptr(fd), fmt.Sprintf("android-tun-%d", int(fd)))
 	if tunFile == nil {

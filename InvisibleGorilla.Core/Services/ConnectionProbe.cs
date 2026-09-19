@@ -85,6 +85,9 @@ namespace InvisibleGorillaXRay.Services
                 if (string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath))
                     return string.Empty;
 
+                if (OpenFlux.OpenFluxProfilePaths.IsMarker(configPath))
+                    return "OpenFlux";
+
                 string json = File.ReadAllText(configPath);
                 string protocol = JsonUtility.Find(key: "protocol", parent: "outbounds", jsonString: json);
                 return NormalizeProtocol(protocol);

@@ -751,6 +751,54 @@
                                    FontSize="18"
                                    FontWeight="SemiBold" />
 
+                                    <Border x:Name="OpenFluxEditorPanel"
+                                            Padding="12"
+                                            CornerRadius="10"
+                                            BorderBrush="{StaticResource SurfaceBright}"
+                                            BorderThickness="1"
+                                            Background="{StaticResource SurfaceBright}"
+                                            IsVisible="False">
+                                        <StackPanel Spacing="8">
+                                            <TextBlock x:Name="OpenFluxUrlLabelTextBlock"
+                                                       Text="Yandex document URL"
+                                                       Foreground="{StaticResource TextMuted}"
+                                                       FontSize="12"
+                                                       TextWrapping="Wrap" />
+                                            <TextBox x:Name="OpenFluxUrlTextBox"
+                                                     MinHeight="72"
+                                                     AcceptsReturn="True"
+                                                     TextWrapping="Wrap"
+                                                     Foreground="White"
+                                                     Watermark="https://disk.yandex.ru/edit/d/..." />
+                                            <TextBlock x:Name="OpenFluxKeyLabelTextBlock"
+                                                       Text="Key"
+                                                       Foreground="{StaticResource TextMuted}"
+                                                       FontSize="12"
+                                                       TextWrapping="Wrap" />
+                                            <TextBox x:Name="OpenFluxKeyTextBox"
+                                                     IsReadOnly="True"
+                                                     Foreground="#D0FFD0"
+                                                     FontFamily="Consolas,monospace" />
+                                            <ComboBox x:Name="OpenFluxTransportComboBox"
+                                                      MinHeight="38"
+                                                      Foreground="White" />
+                                            <Button x:Name="OpenFluxApplyButton"
+                                                    Height="38"
+                                                    Content="Apply URL"
+                                                    Theme="{StaticResource TabButtonTheme}"
+                                                    Background="{StaticResource AccentMint}"
+                                                    Click="OnOpenFluxApplyClick" />
+                                            <TextBlock x:Name="OpenFluxStatusTextBlock"
+                                                       Foreground="White"
+                                                       FontSize="12"
+                                                       TextWrapping="Wrap" />
+                                            <TextBlock x:Name="OpenFluxHintTextBlock"
+                                                       Foreground="{StaticResource TextMuted}"
+                                                       FontSize="11"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+
                                     <Grid MinHeight="280">
                                         <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                                                       VerticalScrollBarVisibility="Auto">

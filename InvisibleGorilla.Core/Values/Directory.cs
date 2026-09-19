@@ -17,6 +17,8 @@ namespace InvisibleGorillaXRay.Values
         public static string TOR => System.IO.Path.Combine(RUNTIME_ROOT, "Tor");
         // Writable Tor runtime: generated torrc, tor DataDirectory, control cookie.
         public static string TOR_DATA => System.IO.Path.Combine(DATA_ROOT, "Tor");
+        // OpenFlux sidecar working dir (enc.key + logs). Binary may live elsewhere (Android nativeLibraryDir).
+        public static string OPENFLUX => System.IO.Path.Combine(DATA_ROOT, "OpenFlux");
         public static string ASSETS => System.IO.Path.Combine(RUNTIME_ROOT, "Assets");
         public static string LOCALIZATION => System.IO.Path.Combine(ASSETS, "Localization");
 
@@ -49,6 +51,7 @@ namespace InvisibleGorillaXRay.Values
             TryCreate(LOGS);
             TryCreate(DATA_TUN);
             TryCreate(TOR_DATA);
+            TryCreate(OPENFLUX);
 
             static void TryCreate(string path)
             {

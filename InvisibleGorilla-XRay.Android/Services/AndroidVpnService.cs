@@ -148,7 +148,9 @@ namespace InvisibleGorillaXRay.Android.Services
                 username: intent.GetStringExtra(ExtraProxyUsername) ?? string.Empty,
                 password: intent.GetStringExtra(ExtraProxyPassword) ?? string.Empty);
             if (!localProxyCredentials.HasValue)
-                throw new InvalidOperationException("Android VPN local proxy credentials are missing.");
+            {
+                DiagnosticLog.Write("AndroidVpnService", "Starting VPN without local SOCKS credentials (OpenFlux/no-auth listener)");
+            }
 
             bool udpEnabled = intent.GetBooleanExtra(ExtraUdpEnabled, true);
             string tunAddress = intent.GetStringExtra(ExtraTunAddress)?.Trim() ?? "10.0.236.10";

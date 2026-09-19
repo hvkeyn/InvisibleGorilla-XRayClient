@@ -10,9 +10,11 @@ namespace InvisibleGorillaXRay.Core
     using Handlers.Proxies;
     using Handlers.Tunnels;
     using Handlers.Tor;
+    using Handlers.OpenFlux;
     using Values;
     using Utilities;
     using Services;
+    using Services.OpenFlux;
     using Services.Analytics.Core;
 
     public class InvisibleGorillaXRayCore
@@ -33,8 +35,10 @@ namespace InvisibleGorillaXRay.Core
         private Func<ITunnel> getTunnel;
         private Action<string> onFailLoadingConfig;
         private Func<TorSettings> getTorSettings;
+        private Func<OpenFluxProfile> getOpenFluxProfile;
 
         private readonly TorManager torManager = new TorManager();
+        private readonly OpenFluxManager openFluxManager = new OpenFluxManager();
         private string currentRuntimeConfig;
         private LocalProxyCredentials activeLocalProxyCredentials = LocalProxyCredentials.None;
 
@@ -84,7 +88,14 @@ namespace InvisibleGorillaXRay.Core
             this.getTorSettings = getTorSettings;
         }
 
+        public void SetupOpenFlux(Func<OpenFluxProfile> getOpenFluxProfile)
+        {
+            this.getOpenFluxProfile = getOpenFluxProfile;
+        }
+
         public TorManager GetTorManager() => torManager;
+
+        public OpenFluxManager GetOpenFluxManager() => openFluxManager;
         
         public Status LoadConfig()
         {
@@ -98,6 +109,9 @@ namespace InvisibleGorillaXRay.Core
 
         public Status LoadConfig(string path)
         {
+            if (OpenFluxProfilePaths.IsMarker(path))
+                return new Status(Code.SUCCESS, SubCode.SUCCESS, OpenFluxManager.DummyConfig);
+
             if (!XRayCoreWrapper.IsFileExists(path))
             {
                 onFailLoadingConfig.Invoke(path);
@@ -143,6 +157,13 @@ namespace InvisibleGorillaXRay.Core
         public void Run(string config, Action? onReady = null)
         {
             DiagnosticLog.Clear();
+
+            if (IsOpenFluxProfile())
+            {
+                RunOpenFlux(onReady);
+                return;
+            }
+
             Mode mode = getMode.Invoke();
             int proxyPort = getProxyPort.Invoke();
             int tunnelServicePort = getTunPort.Invoke();
@@ -393,6 +414,7 @@ namespace InvisibleGorillaXRay.Core
         {
             XRayCoreWrapper.StopServer();
             torManager.Stop();
+            openFluxManager.Stop();
             AnalyticsService.SendEvent(new StoppedEvent());
         }
 
@@ -401,6 +423,7 @@ namespace InvisibleGorillaXRay.Core
             CancelProxy();
             CancelTunnel();
             torManager.Stop();
+            openFluxManager.Stop();
         }
 
         public int Test(string config)
@@ -569,6 +592,11 @@ namespace InvisibleGorillaXRay.Core
         /// </summary>
         public IWebProxy CreateActiveProbeProxy()
         {
+            if (openFluxManager.IsRunning && openFluxManager.BoundSocksPort > 0)
+            {
+                return new WebProxy($"socks5://{Global.LOCAL_HOST}:{openFluxManager.BoundSocksPort}");
+            }
+
             int proxyPort = getProxyPort.Invoke();
             if (proxyPort <= 0)
                 return null;
@@ -594,5 +622,140 @@ namespace InvisibleGorillaXRay.Core
         }
 
         private bool ShouldChangeSystemProxy() => getSystemProxyUsed.Invoke();
+
+        private bool IsOpenFluxProfile()
+        {
+            Config config = getConfig?.Invoke();
+            return config != null && OpenFluxProfilePaths.IsMarker(config.Path);
+        }
+
+        private void RunOpenFlux(Action? onReady)
+        {
+            DiagnosticLog.Write("Run", "OpenFlux profile selected; using TUN over local SOCKS.");
+
+            try { getTunnel.Invoke()?.Disable(); }
+            catch (Exception ex) { DiagnosticLog.WriteException("Run.OpenFlux.DisableTunnel", ex); }
+
+            OpenFluxProfile profile = getOpenFluxProfile?.Invoke()?.Clone() ?? new OpenFluxProfile();
+            openFluxManager.BeginSession();
+            bool tunnelEnabled = false;
+            int lastTunSocksPort = 0;
+
+            try
+            {
+                bool first = true;
+                while (true)
+                {
+                    profile = getOpenFluxProfile?.Invoke()?.Clone() ?? profile;
+                    profile.DocUrl = OpenFluxUrl.Trim(profile.DocUrl);
+                    profile.EncryptionKey = OpenFluxUrl.DeriveKey(profile.DocUrl);
+                    Status start = openFluxManager.Start(profile, getLogPath.Invoke());
+                    if (start.Code != Code.SUCCESS)
+                    {
+                        throw new InvalidOperationException(
+                            LocalizationService.GetTerm(MapOpenFluxError(start.Content?.ToString())));
+                    }
+
+                    OpenFluxExitRegistry.RegisterInBackground(
+                        profile.DocUrl,
+                        profile.EncryptionKey);
+
+                    int socksPort = openFluxManager.BoundSocksPort;
+                    activeLocalProxyCredentials = LocalProxyCredentials.None;
+
+                    if (!tunnelEnabled || lastTunSocksPort != socksPort)
+                    {
+                        if (tunnelEnabled)
+                        {
+                            try { DisableTunnel(); }
+                            catch (Exception ex) { DiagnosticLog.WriteException("Run.OpenFlux.Retune", ex); }
+                            tunnelEnabled = false;
+                        }
+
+                        Status tunnelStatus = EnableOpenFluxTunnel(socksPort);
+                        DiagnosticLog.Write("Run", $"EnableOpenFluxTunnel result: code={tunnelStatus.Code}, subCode={tunnelStatus.SubCode}");
+                        if (tunnelStatus.Code == Code.ERROR)
+                        {
+                            openFluxManager.Stop();
+                            throw new InvalidOperationException(
+                                tunnelStatus.Content?.ToString()
+                                ?? LocalizationService.GetTerm(Localization.CANT_TUNNEL_SYSTEM));
+                        }
+
+                        tunnelEnabled = true;
+                        lastTunSocksPort = socksPort;
+                    }
+
+                    if (first)
+                    {
+                        first = false;
+                        try { onReady?.Invoke(); } catch (Exception ex) { DiagnosticLog.WriteException("Run.OpenFlux.OnReady", ex); }
+                    }
+
+                    openFluxManager.WaitSession();
+                    if (!openFluxManager.ConsumeRestartRequest())
+                        break;
+                }
+            }
+            finally
+            {
+                openFluxManager.Stop();
+                if (tunnelEnabled)
+                    DisableTunnel();
+                activeLocalProxyCredentials = LocalProxyCredentials.None;
+            }
+        }
+
+        public Status ApplyOpenFluxDocUrl(string url)
+        {
+            string trimmed = OpenFluxUrl.Trim(url);
+            if (!OpenFluxUrl.TryValidate(trimmed, out string error))
+                return new Status(Code.ERROR, SubCode.INVALID_CONFIG, error);
+
+            string key = OpenFluxUrl.DeriveKey(trimmed);
+            if (string.IsNullOrWhiteSpace(key) || key.Length < 16)
+                return new Status(Code.ERROR, SubCode.INVALID_CONFIG, "key-short");
+
+            OpenFluxProfile profile = getOpenFluxProfile?.Invoke();
+            if (profile != null)
+                profile.EncryptionKey = key;
+
+            bool registered = OpenFluxExitRegistry.Register(trimmed, key, null, CancellationToken.None);
+            string tag = registered ? "registered" : "register-fail";
+
+            if (openFluxManager.SameLiveUrl(trimmed) && openFluxManager.IsRunning)
+                return new Status(Code.SUCCESS, SubCode.SUCCESS, tag);
+
+            if (openFluxManager.IsRunning)
+                openFluxManager.RequestRestart();
+
+            return new Status(Code.SUCCESS, SubCode.SUCCESS, tag);
+        }
+
+        private static string MapOpenFluxError(string detail)
+        {
+            return detail switch
+            {
+                "empty" or "scheme" or "host" => "Lang.OpenFlux.Error.BadUrl",
+                "key-short" => "Lang.OpenFlux.Error.KeyShort",
+                "document" => "Lang.OpenFlux.Error.Document",
+                "transport" => "Lang.OpenFlux.Error.Transport",
+                "listen" => "Lang.OpenFlux.Error.Listen",
+                _ => "Lang.OpenFlux.Error.Generic"
+            };
+        }
+
+        private Status EnableOpenFluxTunnel(int socksPort)
+        {
+            ITunnel tunnel = getTunnel.Invoke();
+            return tunnel.Enable(
+                ip: Global.LOCAL_HOST,
+                port: socksPort,
+                address: getTunIp.Invoke(),
+                server: "127.0.0.1",
+                dns: getDns.Invoke(),
+                localProxyCredentials: LocalProxyCredentials.None
+            );
+        }
     }
 }

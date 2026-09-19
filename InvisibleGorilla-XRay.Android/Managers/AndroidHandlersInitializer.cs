@@ -5,6 +5,7 @@ using InvisibleGorillaXRay.Managers;
 using InvisibleGorillaXRay.Models;
 using InvisibleGorillaXRay.Services;
 using InvisibleGorillaXRay.Services.Goida;
+using InvisibleGorillaXRay.Services.OpenFlux;
 
 namespace InvisibleGorillaXRay.Android.Managers
 {
@@ -69,7 +70,21 @@ namespace InvisibleGorillaXRay.Android.Managers
                 HandlersManager.GetHandler<ConfigHandler>().Setup(
                     getCurrentConfigPath: settingsHandler.UserSettings.GetCurrentConfigPath,
                     getGoidaListConfig: BuildGoidaListConfig,
-                    getGoidaRuntimeConfig: BuildGoidaRuntimeConfig);
+                    getGoidaRuntimeConfig: BuildGoidaRuntimeConfig,
+                    getOpenFluxListConfig: BuildOpenFluxListConfig);
+
+                Config? BuildOpenFluxListConfig()
+                {
+                    OpenFluxProfile profile = settingsHandler.UserSettings.GetOpenFluxProfile();
+                    return new Config(
+                        path: OpenFluxProfilePaths.MarkerPath,
+                        name: string.IsNullOrWhiteSpace(profile.Name)
+                            ? LocalizeGoida("Lang.OpenFlux.ServerListName", "OpenFlux")
+                            : profile.Name,
+                        type: ConfigType.FILE,
+                        group: GroupType.GENERAL,
+                        updateTime: LocalizeGoida("Lang.OpenFlux.ServerListHint", "Yandex document"));
+                }
 
                 Config? BuildGoidaListConfig()
                 {
