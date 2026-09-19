@@ -101,7 +101,20 @@ namespace InvisibleGorillaXRay.Android.Views
                 return;
 
             RefreshOpenFluxDerivedKey();
+            PersistOpenFluxFromUi();
             ScheduleOpenFluxUrlCheck();
+        }
+
+        private void PersistOpenFluxFromUi()
+        {
+            try
+            {
+                settingsHandler.UpdateOpenFlux(ReadOpenFluxFromUi());
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.OpenFlux.Persist", ex);
+            }
         }
 
         private void RefreshOpenFluxDerivedKey()
@@ -141,6 +154,8 @@ namespace InvisibleGorillaXRay.Android.Views
                 if (OpenFluxUrlInput.Text != url)
                     OpenFluxUrlInput.Text = url;
 
+                settingsHandler.UpdateOpenFlux(profile);
+
                 OpenFluxUrlCheckResult check = await OpenFluxUrlCheck.InspectAsync(url, CancellationToken.None);
                 if (!string.IsNullOrWhiteSpace(check.Error))
                 {
@@ -168,8 +183,11 @@ namespace InvisibleGorillaXRay.Android.Views
                     OpenFluxStatusText.Text = Localize(MapOpenFluxApplyError(result.Content?.ToString()));
                 }
 
+                string applyStatus = OpenFluxStatusText.Text ?? string.Empty;
                 RefreshConfigs();
                 ApplyOpenFluxPanel();
+                if (!string.IsNullOrWhiteSpace(applyStatus))
+                    OpenFluxStatusText.Text = applyStatus;
             }
             catch (Exception ex)
             {
@@ -230,10 +248,18 @@ namespace InvisibleGorillaXRay.Android.Views
             if (!IsOpenFluxProfileActive())
                 return;
 
+            if (status == OpenFluxClientStatus.WaitingPeer && detail == "peer")
+            {
+                int lastPing = settingsHandler.UserSettings.GetOpenFluxProfile().LastLatencyMs;
+                OpenFluxStatusText.Text = lastPing >= 0
+                    ? string.Format(Localize("Lang.OpenFlux.Status.UrlOk"), lastPing)
+                    : Localize("Lang.OpenFlux.Status.PeerProbePending");
+                return;
+            }
+
             OpenFluxStatusText.Text = status switch
             {
                 OpenFluxClientStatus.Connecting => Localize("Lang.OpenFlux.Status.Connecting"),
-                OpenFluxClientStatus.WaitingPeer when detail == "peer" => Localize("Lang.OpenFlux.Status.PeerMissing"),
                 OpenFluxClientStatus.WaitingPeer => Localize("Lang.OpenFlux.Status.WaitingPeer"),
                 OpenFluxClientStatus.Connected => Localize("Lang.OpenFlux.Status.Live"),
                 OpenFluxClientStatus.Error => Localize(MapOpenFluxApplyError(detail)),
@@ -254,10 +280,22 @@ namespace InvisibleGorillaXRay.Android.Views
             }
 
             OpenFluxUrlCheckResult check = await OpenFluxUrlCheck.InspectAsync(url, CancellationToken.None);
+            string markerPath = OpenFluxProfilePaths.MarkerPath;
             if (!string.IsNullOrWhiteSpace(check.Error))
+            {
+                SetConfigAvailability(markerPath, InvisibleGorillaXRay.Values.Availability.ERROR);
                 SetStatus(MapOpenFluxCheckError(check.Error));
+            }
             else
+            {
+                SetConfigAvailability(markerPath, check.LatencyMs);
+                OpenFluxProfile profile = settingsHandler.UserSettings.GetOpenFluxProfile();
+                profile.LastLatencyMs = check.LatencyMs;
+                settingsHandler.UpdateOpenFlux(profile);
                 SetStatus(string.Format(Localize("Lang.OpenFlux.Status.UrlOk"), check.LatencyMs));
+            }
+
+            RefreshConfigs();
         }
 
         private string MapOpenFluxCheckError(string error)

@@ -52,8 +52,20 @@ namespace InvisibleGorillaXRay.Values
             openFluxExeOverride = exe;
         }
 
-        public static string OPENFLUX_EXE => openFluxExeOverride
-            ?? System.IO.Path.Combine(Directory.OPENFLUX, ExeName("openflux"));
+        public static string OPENFLUX_EXE
+        {
+            get
+            {
+                if (!string.IsNullOrWhiteSpace(openFluxExeOverride))
+                    return openFluxExeOverride;
+
+                string data = System.IO.Path.Combine(Directory.OPENFLUX, ExeName("openflux"));
+                if (File.Exists(data))
+                    return data;
+
+                return System.IO.Path.Combine(Directory.RUNTIME_ROOT, "OpenFlux", ExeName("openflux"));
+            }
+        }
 
         public static string OPENFLUX_USER_KEY => System.IO.Path.Combine(Directory.OPENFLUX, "enc.key");
 

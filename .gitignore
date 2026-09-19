@@ -23,6 +23,7 @@
 /publish-android-x64
 /publish-android-arm64
 /publish-linux
+/publish-linux-x64
 /publish-macos
 /publish-windows
 /dist
@@ -36,6 +37,8 @@
 **/__OpenFluxProfile__.json
 /InvisibleGorilla-XRay/OpenFlux/enc.key
 /OpenFlux/enc.key
+/InvisibleGorilla-XRay.Linux/OpenFlux/openflux
+/InvisibleGorilla-XRay.Linux/OpenFlux/openflux-arm64
 **/*-nodes-cache.json
 **/*-goida-cache.json
 *.vless

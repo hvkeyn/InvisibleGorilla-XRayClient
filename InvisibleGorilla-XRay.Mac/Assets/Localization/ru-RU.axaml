@@ -361,6 +361,7 @@
     <x:String x:Key="Lang.OpenFlux.Status.Live">Туннель живой</x:String>
     <x:String x:Key="Lang.OpenFlux.Status.LiveMs">Туннель живой · {0} мс</x:String>
     <x:String x:Key="Lang.OpenFlux.Status.PeerMissing">Клиент на новом документе, exit не отвечает — на VPS тот же URL?</x:String>
+    <x:String x:Key="Lang.OpenFlux.Status.PeerProbePending">Документ доступен. Exit IP через SOCKS ещё проверяется.</x:String>
     <x:String x:Key="Lang.OpenFlux.Status.Registered">Ссылка принята на сервере. Можно запускать.</x:String>
     <x:String x:Key="Lang.OpenFlux.Status.RegisterFail">Ссылка сохранена локально, сервер не ответил. Проверь ключ.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.BadUrl">Некорректная ссылка на документ Яндекса.</x:String>

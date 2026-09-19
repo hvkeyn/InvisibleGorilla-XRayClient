@@ -805,6 +805,14 @@ COMMAND
         ok "Bundled: tun2socks"
     fi
 
+    local openflux_src="$LINUX_DIR/OpenFlux/openflux"
+    if [[ -f "$openflux_src" ]]; then
+        mkdir -p "$stage/bin/OpenFlux"
+        cp "$openflux_src" "$stage/bin/OpenFlux/"
+        chmod +x "$stage/bin/OpenFlux/openflux"
+        ok "Bundled: OpenFlux sidecar"
+    fi
+
     local tor_src_dir="$LINUX_DIR/Tor"
     if [[ -f "$tor_src_dir/tor" ]]; then
         mkdir -p "$stage/bin/Tor"

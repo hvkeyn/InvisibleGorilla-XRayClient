@@ -361,6 +361,7 @@
     <x:String x:Key="Lang.OpenFlux.Status.Live">Tunnel is up</x:String>
     <x:String x:Key="Lang.OpenFlux.Status.LiveMs">Tunnel is up · {0} ms</x:String>
     <x:String x:Key="Lang.OpenFlux.Status.PeerMissing">Client is on the new document, exit does not answer — is the VPS on the same URL?</x:String>
+    <x:String x:Key="Lang.OpenFlux.Status.PeerProbePending">Document is reachable. Exit IP via SOCKS is still being checked.</x:String>
     <x:String x:Key="Lang.OpenFlux.Status.Registered">URL accepted by the exit. You can connect.</x:String>
     <x:String x:Key="Lang.OpenFlux.Status.RegisterFail">URL saved locally, exit did not answer. Check the key.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.BadUrl">Invalid Yandex document URL.</x:String>

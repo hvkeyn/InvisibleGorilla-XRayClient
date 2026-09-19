@@ -60,9 +60,9 @@ namespace InvisibleGorillaXRay.Services
         // a bare IP; ipify (IP-only) stays as a last-resort fallback.
         private static readonly string[] TunnelLookupEndpoints =
         {
-            "https://ipinfo.io/json",
+            "https://api.ipify.org?format=json",
             "https://ipwho.is/",
-            "https://api.ipify.org?format=json"
+            "https://ipinfo.io/json"
         };
 
         private static readonly SemaphoreSlim LookupGate = new(1, 1);
@@ -76,7 +76,7 @@ namespace InvisibleGorillaXRay.Services
             {
                 bool throughTunnel = proxy != null;
                 string[] endpoints = throughTunnel ? TunnelLookupEndpoints : LookupEndpoints;
-                int timeoutSeconds = throughTunnel ? 6 : 12;
+                int timeoutSeconds = throughTunnel ? 18 : 12;
                 ConnectionInfo lastFailure = new ConnectionInfo { Ok = false, Error = "all endpoints failed" };
                 ConnectionInfo ipOnlyFallback = null;
 
@@ -146,6 +146,7 @@ namespace InvisibleGorillaXRay.Services
                 ConnectTimeout = timeout,
                 MaxConnectionsPerServer = proxy != null ? 1 : 4
             };
+            Socks5Http.Attach(handler, proxy);
 
             using HttpClient client = new HttpClient(handler, disposeHandler: true)
             {

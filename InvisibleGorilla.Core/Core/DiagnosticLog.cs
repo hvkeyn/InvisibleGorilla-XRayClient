@@ -92,6 +92,23 @@ namespace InvisibleGorillaXRay.Core
             catch { }
         }
 
+        public static void CopySnapshot(string destinationPath)
+        {
+            try
+            {
+                string text = ReadAll();
+                if (string.IsNullOrEmpty(destinationPath))
+                    return;
+                string? dir = System.IO.Path.GetDirectoryName(destinationPath);
+                if (!string.IsNullOrEmpty(dir))
+                    System.IO.Directory.CreateDirectory(dir);
+                File.WriteAllText(destinationPath, text);
+            }
+            catch
+            {
+            }
+        }
+
         public static string ReadAll()
         {
             try

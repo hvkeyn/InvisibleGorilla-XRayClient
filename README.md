@@ -52,6 +52,12 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.19
+
+- **OpenFlux is faster on Android, Windows, and Linux** — more parallel streams, HTTP CONNECT reuse/prewarm, no extra probe wait before the tunnel starts. Android rejects QUIC immediately so YouTube/Chrome fall back to TCP instead of hanging.
+- **Android TUN actually browses** — browsers use a local HTTP CONNECT proxy on the VPN address. IP widget and real sites both show the Fornex exit.
+- **Linux ships the OpenFlux sidecar** next to the app (`OpenFlux/openflux`).
+
 ## What's new in v3.6.18
 
 - **OpenFlux shows Live only after a real SOCKS probe** — if the Yandex document peer is dead, the panel says the exit does not answer instead of Disconnected/Live. User TUN bypass list is kept (`openflux.exe` is still excluded).

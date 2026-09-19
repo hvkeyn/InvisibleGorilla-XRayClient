@@ -96,7 +96,7 @@ namespace InvisibleGorillaXRay.Linux.Factories
                 openAboutWindow: CreateAboutWindow,
                 openPolicyWindow: CreatePolicyWindow,
                 getServerDisplayText: BuildServerDisplayText,
-                onRunServer: core.Run,
+                onRunServer: config => core.Run(config),
                 onStopServer: core.Stop,
                 onCancelServer: core.Cancel,
                 onDisableMode: core.DisableMode,

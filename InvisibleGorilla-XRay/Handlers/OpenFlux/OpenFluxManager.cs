@@ -148,10 +148,13 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
 
                 if (Status != OpenFluxClientStatus.Error)
                 {
-                    if (ProbePeer(port, 12000))
-                        SetStatus(OpenFluxClientStatus.Connected, "");
-                    else
-                        SetStatus(OpenFluxClientStatus.WaitingPeer, "peer");
+                    SetStatus(OpenFluxClientStatus.Connected, "listen");
+                    int probePort = port;
+                    ThreadPool.QueueUserWorkItem(_ =>
+                    {
+                        if (ProbePeer(probePort, 12000))
+                            SetStatus(OpenFluxClientStatus.Connected, "");
+                    });
                 }
 
                 DiagnosticLog.Write(Tag, $"SOCKS5 listening on 127.0.0.1:{port} transport={transport}");

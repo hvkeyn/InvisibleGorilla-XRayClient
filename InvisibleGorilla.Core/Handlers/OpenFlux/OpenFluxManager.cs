@@ -2,8 +2,9 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
-using System.Net.Http;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 
@@ -11,6 +12,7 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
 {
     using Models;
     using InvisibleGorillaXRay.Core;
+    using InvisibleGorillaXRay.Services;
     using IoPath = System.IO.Path;
     using AppPath = InvisibleGorillaXRay.Values.Path;
     using AppDir = InvisibleGorillaXRay.Values.Directory;
@@ -42,6 +44,7 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
         private volatile bool restartFlag;
         private int boundSocksPort;
         private string lastUrl = "";
+        private string lastExitIp = "";
         private OpenFluxClientStatus status = OpenFluxClientStatus.Stopped;
         private string statusDetail = "";
 
@@ -63,6 +66,11 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
         public int BoundSocksPort
         {
             get { lock (sync) return boundSocksPort; }
+        }
+
+        public string LastExitIp
+        {
+            get { lock (sync) return lastExitIp ?? ""; }
         }
 
         public OpenFluxClientStatus Status
@@ -111,6 +119,7 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
             if (string.IsNullOrEmpty(keyFile))
                 return Fail("key-short");
 
+            KillOrphanSidecars();
             int port = ResolveListenPort(profile.GetSocksPort());
             string transport = OpenFluxUrl.ResolveTransport(url, profile.Transport);
             string codec = profile.GetCodec();
@@ -154,10 +163,13 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
 
                 if (Status != OpenFluxClientStatus.Error)
                 {
-                    if (ProbePeer(port, 12000))
-                        SetStatus(OpenFluxClientStatus.Connected, "");
-                    else
-                        SetStatus(OpenFluxClientStatus.WaitingPeer, "peer");
+                    SetStatus(OpenFluxClientStatus.Connected, "listen");
+                    int probePort = port;
+                    ThreadPool.QueueUserWorkItem(_ =>
+                    {
+                        if (ProbePeer(probePort, 12000))
+                            SetStatus(OpenFluxClientStatus.Connected, "");
+                    });
                 }
 
                 DiagnosticLog.Write(Tag, $"SOCKS5 listening on 127.0.0.1:{port} transport={transport}");
@@ -220,6 +232,7 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
             {
                 boundSocksPort = 0;
                 lastUrl = "";
+                lastExitIp = "";
             }
             SetStatus(OpenFluxClientStatus.Stopped, "");
         }
@@ -371,14 +384,18 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
             {
                 if (!running.HasExited)
                 {
+                    int pid = 0;
+                    try { pid = running.Id; } catch { }
                     try
                     {
                         running.Kill(entireProcessTree: true);
                     }
                     catch
                     {
-                        running.Kill();
+                        try { running.Kill(); } catch { }
                     }
+                    if (pid > 0)
+                        TryNativeKill(pid);
                     running.WaitForExit(waitExitMs);
                 }
             }
@@ -442,29 +459,73 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
             return IoPath.GetFullPath(dest);
         }
 
-        private static bool ProbePeer(int socksPort, int timeoutMs)
+        private bool ProbePeer(int socksPort, int timeoutMs)
+        {
+            DateTime until = DateTime.UtcNow.AddMilliseconds(Math.Max(8000, timeoutMs));
+            string lastError = "";
+            while (DateTime.UtcNow < until)
+            {
+                try
+                {
+                    string body = Socks5Http.GetHttpsBody("127.0.0.1", socksPort, "api.ipify.org", "/", 6000);
+                    string ip = (body ?? "").Trim();
+                    if (ip.Length >= 7 && ip.IndexOf('.') > 0)
+                    {
+                        lock (sync)
+                            lastExitIp = ip;
+                        DiagnosticLog.Write(Tag, $"peer probe ok ip={ip}");
+                        return true;
+                    }
+                    lastError = "empty body";
+                }
+                catch (Exception ex)
+                {
+                    lastError = ex.Message;
+                    DiagnosticLog.Write(Tag, $"peer probe retry: {ex.Message}");
+                }
+
+                Thread.Sleep(400);
+            }
+
+            DiagnosticLog.Write(Tag, $"peer probe failed: {lastError}");
+            return false;
+        }
+
+        [DllImport("libc", SetLastError = true, EntryPoint = "kill")]
+        private static extern int NativeKillSignal(int pid, int signal);
+
+        private static void TryNativeKill(int pid)
+        {
+            if (pid <= 1 || RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                return;
+            try { NativeKillSignal(pid, 9); } catch { }
+        }
+
+        private static void KillOrphanSidecars()
         {
             try
             {
-                SocketsHttpHandler handler = new SocketsHttpHandler
+                foreach (Process candidate in Process.GetProcesses())
                 {
-                    UseProxy = true,
-                    Proxy = new WebProxy($"socks5://127.0.0.1:{socksPort}"),
-                    ConnectTimeout = TimeSpan.FromMilliseconds(timeoutMs)
-                };
-                using HttpClient client = new HttpClient(handler)
-                {
-                    Timeout = TimeSpan.FromMilliseconds(timeoutMs)
-                };
-                string body = client.GetStringAsync("https://ifconfig.co/ip").GetAwaiter().GetResult();
-                string ip = (body ?? "").Trim();
-                DiagnosticLog.Write(Tag, $"peer probe ok ip={ip}");
-                return ip.Length > 0;
+                    string name = "";
+                    try { name = candidate.ProcessName ?? ""; } catch { continue; }
+                    if (name.IndexOf("openflux", StringComparison.OrdinalIgnoreCase) < 0)
+                        continue;
+                    try
+                    {
+                        if (!candidate.HasExited)
+                        {
+                            try { candidate.Kill(); } catch { }
+                            TryNativeKill(candidate.Id);
+                        }
+                    }
+                    catch { }
+                    try { candidate.Dispose(); } catch { }
+                }
             }
             catch (Exception ex)
             {
-                DiagnosticLog.Write(Tag, $"peer probe failed: {ex.Message}");
-                return false;
+                DiagnosticLog.Write(Tag, $"orphan kill: {ex.Message}");
             }
         }
 
@@ -534,12 +595,25 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
         {
             try
             {
-                using TcpClient client = new TcpClient();
-                IAsyncResult ar = client.BeginConnect(IPAddress.Loopback, port, null, null);
-                bool ok = ar.AsyncWaitHandle.WaitOne(TimeSpan.FromMilliseconds(80));
-                if (!ok)
-                    return false;
-                client.EndConnect(ar);
+                foreach (IPEndPoint endpoint in IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners())
+                {
+                    if (endpoint != null && endpoint.Port == port)
+                        return true;
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                using Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                socket.ExclusiveAddressUse = true;
+                socket.Bind(new IPEndPoint(IPAddress.Loopback, port));
+                return false;
+            }
+            catch (SocketException)
+            {
                 return true;
             }
             catch

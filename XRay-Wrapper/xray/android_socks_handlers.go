@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,7 +27,13 @@ const (
 
 	// max IP packet size - min IP header size - min UDP header size - min SOCKS5 header size
 	androidMaxUdpPayloadSize = 65535 - 20 - 8 - 7
+
+	// Yandex OpenFlux mux dies when a browser opens dozens of parallel TCP
+	// streams. Cap concurrent SOCKS relays so pages can finish.
+	androidMaxConcurrentSocks = 12
 )
+
+var androidSocksGate = make(chan struct{}, androidMaxConcurrentSocks)
 
 type androidSocksTCPHandler struct {
 	proxyHost string
@@ -79,27 +86,74 @@ func newAndroidUDPHandler(proxyHost string, proxyPort uint16, auth *localSocksAu
 	}
 }
 
+func acquireAndroidSocksGate(timeout time.Duration) bool {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case androidSocksGate <- struct{}{}:
+		return true
+	case <-timer.C:
+		return false
+	}
+}
+
+type androidTimedDialer struct {
+	timeout time.Duration
+}
+
+func (d androidTimedDialer) Dial(network, address string) (net.Conn, error) {
+	conn, err := net.DialTimeout(network, address, d.timeout)
+	if err != nil {
+		return nil, err
+	}
+	if err := conn.SetDeadline(time.Now().Add(d.timeout)); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	return conn, nil
+}
+
 func (h *androidSocksTCPHandler) Handle(conn net.Conn, target *net.TCPAddr) error {
-	var proxyAuth *proxy.Auth
-	if h.auth != nil && h.auth.enabled() {
-		proxyAuth = &proxy.Auth{
-			User:     h.auth.Username,
-			Password: h.auth.Password,
+	go func() {
+		if !acquireAndroidSocksGate(20 * time.Second) {
+			log.Errorf("socks gate timeout %v", target)
+			conn.Close()
+			return
 		}
-	}
+		defer func() { <-androidSocksGate }()
 
-	dialer, err := proxy.SOCKS5("tcp", tcore.ParseTCPAddr(h.proxyHost, h.proxyPort).String(), proxyAuth, nil)
-	if err != nil {
-		return err
-	}
+		var proxyAuth *proxy.Auth
+		if h.auth != nil && h.auth.enabled() {
+			proxyAuth = &proxy.Auth{
+				User:     h.auth.Username,
+				Password: h.auth.Password,
+			}
+		}
 
-	upstreamConn, err := dialer.Dial(target.Network(), target.String())
-	if err != nil {
-		return err
-	}
+		socksAddr := tcore.ParseTCPAddr(h.proxyHost, h.proxyPort).String()
+		dialer, err := proxy.SOCKS5("tcp", socksAddr, proxyAuth, androidTimedDialer{timeout: 8 * time.Second})
+		if err != nil {
+			log.Errorf("socks dialer: %v", err)
+			conn.Close()
+			return
+		}
 
-	go relayTCP(conn, upstreamConn)
-	log.Infof("new proxy connection to %v", target)
+		dialTarget := target
+		if ip4 := target.IP.To4(); ip4 != nil {
+			dialTarget = &net.TCPAddr{IP: ip4, Port: target.Port}
+		}
+
+		upstreamConn, err := dialer.Dial("tcp", dialTarget.String())
+		if err != nil {
+			log.Errorf("socks connect %v: %v", dialTarget, err)
+			conn.Close()
+			return
+		}
+		_ = upstreamConn.SetDeadline(time.Time{})
+
+		log.Infof("new proxy connection to %v", target)
+		relayTCP(conn, upstreamConn)
+	}()
 	return nil
 }
 
@@ -393,4 +447,144 @@ func readAndroidSocksAddr(r io.Reader, buffer []byte) (tsocks.Addr, error) {
 	default:
 		return nil, errors.New("unsupported SOCKS address type")
 	}
+}
+
+// OpenFlux cannot do UDP ASSOCIATE, and TCP/53 through the Yandex mux times out.
+// Resolve TUN DNS in this process (the VPN app is disallowed from its own TUN,
+// so net.LookupIP uses Wi-Fi/cell) and return A records only.
+type androidDnsOverTcpHandler struct {
+	proxyHost string
+	proxyPort uint16
+	auth      *localSocksAuth
+}
+
+func newAndroidDnsOverTcpHandler(proxyHost string, proxyPort uint16, auth *localSocksAuth) tcore.UDPConnHandler {
+	return &androidDnsOverTcpHandler{
+		proxyHost: proxyHost,
+		proxyPort: proxyPort,
+		auth:      auth,
+	}
+}
+
+func (h *androidDnsOverTcpHandler) Connect(conn tcore.UDPConn, target *net.UDPAddr) error {
+	if target != nil && target.Port != 53 {
+		conn.Close()
+		return errors.New("udp is disabled")
+	}
+	return nil
+}
+
+func (h *androidDnsOverTcpHandler) ReceiveTo(conn tcore.UDPConn, data []byte, addr *net.UDPAddr) error {
+	if addr == nil || addr.Port != 53 || len(data) < 12 {
+		conn.Close()
+		return errors.New("udp is disabled")
+	}
+
+	go func() {
+		resp, err := resolveTunDnsLocally(data)
+		if err != nil {
+			log.Errorf("tun local dns failed: %v", err)
+			conn.Close()
+			return
+		}
+		if _, err := conn.WriteFrom(resp, addr); err != nil {
+			conn.Close()
+		}
+	}()
+	return nil
+}
+
+func resolveTunDnsLocally(query []byte) ([]byte, error) {
+	name, qtype, err := parseDnsQuestion(query)
+	if err != nil {
+		return nil, err
+	}
+
+	if qtype != 1 {
+		return buildDnsResponse(query, nil, qtype), nil
+	}
+
+	ips, err := net.LookupIP(name)
+	if err != nil {
+		return buildDnsResponse(query, nil, qtype), nil
+	}
+
+	var v4 []net.IP
+	for _, ip := range ips {
+		if ip4 := ip.To4(); ip4 != nil {
+			v4 = append(v4, ip4)
+		}
+	}
+	return buildDnsResponse(query, v4, qtype), nil
+}
+
+func parseDnsQuestion(query []byte) (string, uint16, error) {
+	if len(query) < 12 {
+		return "", 0, errors.New("short dns query")
+	}
+	offset := 12
+	var labels []string
+	for {
+		if offset >= len(query) {
+			return "", 0, errors.New("truncated dns name")
+		}
+		n := int(query[offset])
+		if n == 0 {
+			offset++
+			break
+		}
+		if n&0xC0 == 0xC0 {
+			return "", 0, errors.New("compressed dns question")
+		}
+		offset++
+		if offset+n > len(query) {
+			return "", 0, errors.New("truncated dns label")
+		}
+		labels = append(labels, string(query[offset:offset+n]))
+		offset += n
+	}
+	if offset+4 > len(query) {
+		return "", 0, errors.New("truncated dns question type")
+	}
+	qtype := uint16(query[offset])<<8 | uint16(query[offset+1])
+	return strings.Join(labels, "."), qtype, nil
+}
+
+func buildDnsResponse(query []byte, ips []net.IP, qtype uint16) []byte {
+	resp := make([]byte, 0, len(query)+16*len(ips))
+	resp = append(resp, query...)
+	if len(resp) < 12 {
+		return resp
+	}
+	// QR=1, RD copied, RA=1
+	resp[2] = query[2] | 0x80
+	resp[3] = 0x80
+	resp[6] = 0
+	resp[7] = 0
+	resp[8] = 0
+	resp[9] = 0
+	resp[10] = 0
+	resp[11] = 0
+
+	if qtype != 1 || len(ips) == 0 {
+		return resp
+	}
+
+	resp[6] = byte(len(ips) >> 8)
+	resp[7] = byte(len(ips))
+	for _, ip := range ips {
+		ip4 := ip.To4()
+		if ip4 == nil {
+			continue
+		}
+		resp = append(resp,
+			0xC0, 0x0C,
+			0x00, 0x01,
+			0x00, 0x01,
+			0x00, 0x00, 0x00, 0x1E,
+			0x00, 0x04,
+			ip4[0], ip4[1], ip4[2], ip4[3],
+		)
+	}
+	return resp
 }

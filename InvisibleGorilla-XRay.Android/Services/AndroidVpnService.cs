@@ -9,6 +9,7 @@ using Android.Content.PM;
 using Android.Net;
 using Android.OS;
 using InvisibleGorillaXRay.Core;
+using InvisibleGorillaXRay.Handlers.OpenFlux;
 using InvisibleGorillaXRay.Models;
 
 namespace InvisibleGorillaXRay.Android.Services
@@ -26,9 +27,11 @@ namespace InvisibleGorillaXRay.Android.Services
         private const string ActionStart = "io.invisiblegorilla.xray.action.START_VPN";
         private const string ActionStop = "io.invisiblegorilla.xray.action.STOP_VPN";
         private const string ExtraProxyPort = "proxy_port";
+        private const string ExtraHttpProxyPort = "http_proxy_port";
         private const string ExtraProxyUsername = "proxy_username";
         private const string ExtraProxyPassword = "proxy_password";
         private const string ExtraUdpEnabled = "udp_enabled";
+        private const string ExtraEnableIpv6 = "enable_ipv6";
         private const string ExtraTunAddress = "tun_address";
         private const string ExtraDns = "dns";
         private const string ExtraSessionName = "session_name";
@@ -46,9 +49,11 @@ namespace InvisibleGorillaXRay.Android.Services
             Intent intent = new Intent(context, typeof(AndroidVpnService));
             intent.SetAction(ActionStart);
             intent.PutExtra(ExtraProxyPort, options.ProxyPort);
+            intent.PutExtra(ExtraHttpProxyPort, options.HttpProxyPort);
             intent.PutExtra(ExtraProxyUsername, options.ProxyUsername);
             intent.PutExtra(ExtraProxyPassword, options.ProxyPassword);
             intent.PutExtra(ExtraUdpEnabled, options.UdpEnabled);
+            intent.PutExtra(ExtraEnableIpv6, options.EnableIpv6);
             intent.PutExtra(ExtraTunAddress, options.TunAddress);
             intent.PutExtra(ExtraDns, options.Dns);
             intent.PutExtra(ExtraSessionName, options.SessionName);
@@ -141,6 +146,7 @@ namespace InvisibleGorillaXRay.Android.Services
                 throw new InvalidOperationException("Android VPN permission has not been granted.");
 
             int proxyPort = intent.GetIntExtra(ExtraProxyPort, 0);
+            int httpProxyPort = intent.GetIntExtra(ExtraHttpProxyPort, 0);
             if (proxyPort <= 0)
                 throw new InvalidOperationException("Android VPN proxy port is missing.");
 
@@ -153,6 +159,7 @@ namespace InvisibleGorillaXRay.Android.Services
             }
 
             bool udpEnabled = intent.GetBooleanExtra(ExtraUdpEnabled, true);
+            bool enableIpv6 = intent.GetBooleanExtra(ExtraEnableIpv6, true);
             string tunAddress = intent.GetStringExtra(ExtraTunAddress)?.Trim() ?? "10.0.236.10";
             string dns = intent.GetStringExtra(ExtraDns)?.Trim() ?? "8.8.8.8";
             string sessionName = intent.GetStringExtra(ExtraSessionName)?.Trim() ?? "Invisible Gorilla XRay";
@@ -174,12 +181,31 @@ namespace InvisibleGorillaXRay.Android.Services
                     .AddRoute("0.0.0.0", 0);
 
                 if (Build.VERSION.SdkInt >= BuildVersionCodes.Q)
+                {
                     builder.SetBlocking(true);
+                    try { builder.AllowFamily(2); } catch { }
+                    if (httpProxyPort > 0)
+                    {
+                        try
+                        {
+                            builder.SetHttpProxy(ProxyInfo.BuildDirectProxy(tunAddress, httpProxyPort));
+                            DiagnosticLog.Write("AndroidVpnService", $"VPN HTTP proxy {tunAddress}:{httpProxyPort}");
+                        }
+                        catch (Exception ex)
+                        {
+                            DiagnosticLog.WriteException("AndroidVpnService.SetHttpProxy", ex);
+                        }
+                    }
+                }
 
                 foreach (string dnsServer in SplitDnsServers(dns))
                     builder.AddDnsServer(dnsServer);
 
-                TryEnableIpv6(builder);
+                if (enableIpv6)
+                    TryEnableIpv6(builder);
+                else
+                    DiagnosticLog.Write("AndroidVpnService", "IPv6 TUN routes skipped (OpenFlux / IPv4-only)");
+
                 ApplyApplicationRules(builder, appRulesMode, appPackages);
 
                 DiagnosticLog.Write(
@@ -194,6 +220,20 @@ namespace InvisibleGorillaXRay.Android.Services
                 int tunFd = tunInterface.DetachFd();
                 tunInterface.Dispose();
 
+                if (httpProxyPort > 0)
+                {
+                    try
+                    {
+                        OpenFluxHttpBridge.Shared.Start(proxyPort, tunAddress, httpProxyPort);
+                        DiagnosticLog.Write("AndroidVpnService", $"HTTP CONNECT {tunAddress}:{httpProxyPort} -> SOCKS {proxyPort}");
+                    }
+                    catch (Exception ex)
+                    {
+                        DiagnosticLog.WriteException("AndroidVpnService.HttpBridge", ex);
+                    }
+                }
+
+                XRayCoreWrapper.BindAndroidSocketProtect(Protect);
                 string? bridgeError = XRayCoreWrapper.StartAndroidTunnel(
                     tunFd,
                     proxyPort,
@@ -289,6 +329,8 @@ namespace InvisibleGorillaXRay.Android.Services
             {
                 DiagnosticLog.WriteException("AndroidVpnService.StopTunnel", ex);
             }
+
+            try { OpenFluxHttpBridge.Shared.Stop(); } catch { }
 
             AndroidVpnServiceController.NotifyStopped(reason);
 

@@ -49,8 +49,8 @@ namespace InvisibleGorillaXRay.Handlers
             this.userSettings.Tor = (userSettings.Tor ?? this.userSettings.Tor ?? new TorSettings()).Clone();
             this.userSettings.TorProfiles = CloneTorProfiles(userSettings.TorProfiles);
             this.userSettings.Goida = (userSettings.Goida ?? this.userSettings.Goida ?? new GoidaProfileSettings()).Clone();
-            this.userSettings.OpenFlux = (userSettings.OpenFlux ?? this.userSettings.OpenFlux ?? new OpenFluxProfile()).Clone();
-            this.userSettings.OpenFluxProfiles = CloneOpenFluxProfiles(userSettings.OpenFluxProfiles);
+            this.userSettings.OpenFlux = MergeOpenFlux(userSettings.OpenFlux, this.userSettings.OpenFlux);
+            this.userSettings.OpenFluxProfiles = MergeOpenFluxProfiles(userSettings.OpenFluxProfiles, this.userSettings.OpenFluxProfiles);
 
             UpdateStartupSetting();
             SaveUserSettings();
@@ -204,6 +204,24 @@ namespace InvisibleGorillaXRay.Handlers
                 .Where(profile => profile != null)
                 .Select(profile => profile.Clone())
                 .ToList();
+        }
+
+        private static OpenFluxProfile MergeOpenFlux(OpenFluxProfile incoming, OpenFluxProfile current)
+        {
+            bool incomingHasUrl = incoming != null && !string.IsNullOrWhiteSpace(incoming.DocUrl);
+            bool currentHasUrl = current != null && !string.IsNullOrWhiteSpace(current.DocUrl);
+            OpenFluxProfile source = incomingHasUrl ? incoming : currentHasUrl ? current : (incoming ?? current ?? new OpenFluxProfile());
+            return source.Clone();
+        }
+
+        private static System.Collections.Generic.List<OpenFluxProfile> MergeOpenFluxProfiles(
+            System.Collections.Generic.IEnumerable<OpenFluxProfile>? incoming,
+            System.Collections.Generic.IEnumerable<OpenFluxProfile>? current)
+        {
+            System.Collections.Generic.List<OpenFluxProfile> next = CloneOpenFluxProfiles(incoming);
+            if (next.Count > 0)
+                return next;
+            return CloneOpenFluxProfiles(current);
         }
 
         public void UpdateOpenFlux(OpenFluxProfile profile)

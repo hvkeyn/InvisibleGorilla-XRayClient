@@ -165,6 +165,30 @@ namespace InvisibleGorillaXRay.Core
             static extern IntPtr GetXRayCoreVersionNative();
         }
 
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate int AndroidProtectDelegate(int fileDescriptor);
+
+        private static AndroidProtectDelegate? androidProtectDelegate;
+
+        public static void BindAndroidSocketProtect(Func<int, bool>? protect)
+        {
+            if (!OperatingSystem.IsAndroid())
+                return;
+
+            if (protect == null)
+            {
+                androidProtectDelegate = null;
+                SetAndroidSocketProtectNative(IntPtr.Zero);
+                return;
+            }
+
+            androidProtectDelegate = fd => protect(fd) ? 1 : 0;
+            SetAndroidSocketProtectNative(Marshal.GetFunctionPointerForDelegate(androidProtectDelegate));
+        }
+
+        [DllImport(LIB_NAME, EntryPoint = "SetAndroidSocketProtect", CallingConvention = CallingConvention.Cdecl)]
+        private static extern void SetAndroidSocketProtectNative(IntPtr callback);
+
         public static string? StartAndroidTunnel(
             int fileDescriptor,
             int proxyPort,

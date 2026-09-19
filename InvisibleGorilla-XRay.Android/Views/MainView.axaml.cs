@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -2561,6 +2562,16 @@ namespace InvisibleGorillaXRay.Android.Views
             ConnectionInfo info;
             if (connected)
             {
+                if (IsOpenFluxProfileActive())
+                {
+                    ConnectionInfo? openFluxInfo = await TryLookupOpenFluxExitIpAsync(token).ConfigureAwait(false);
+                    if (token.IsCancellationRequested)
+                        return;
+                    Dispatcher.UIThread.Post(() => ApplyConnectionInfo(
+                        openFluxInfo ?? new ConnectionInfo { Ok = false, Error = "SOCKS timeout" }));
+                    return;
+                }
+
                 ConnectionInfo tunnelInfo = await connectionInfoService
                     .LookupThroughTunnelAsync(probeProxy!, token)
                     .ConfigureAwait(false);
@@ -3100,20 +3111,31 @@ namespace InvisibleGorillaXRay.Android.Views
                     started = true;
                     AndroidConnectionNotificationManager.MarkRunning();
                     LogGoidaConnectionEvent(connected: true);
-                    Dispatcher.UIThread.Post(() =>
+                    core.Run(activeConfig, () =>
                     {
-                        SetConnectionState(ConnectionState.Running);
-                        SetStatus("Lang.Android.Status.RunningTunnel");
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            SetConnectionState(ConnectionState.Running);
+                            SetStatus("Lang.Android.Status.RunningTunnel");
+                        });
                     });
-
-                    core.Run(activeConfig);
                 }
                 catch (Exception ex)
                 {
                     failureMessage = MapExceptionToStatus(ex);
+                    DiagnosticLog.WriteException("MainView.Run", ex);
                 }
                 finally
                 {
+                    try
+                    {
+                        var ext = global::Android.App.Application.Context.GetExternalFilesDir(null);
+                        if (ext != null)
+                            DiagnosticLog.CopySnapshot(System.IO.Path.Combine(ext.AbsolutePath, "diagnostic.log"));
+                    }
+                    catch
+                    {
+                    }
                     isRunWorkerBusy = false;
                     isStopWorkerBusy = false;
                     if (AndroidVpnServiceController.IsStopping)
@@ -3169,6 +3191,91 @@ namespace InvisibleGorillaXRay.Android.Views
         private void OnSaveSettingsClick(object? sender, RoutedEventArgs e)
         {
             TrySaveSettings(showSuccessMessage: true);
+        }
+
+        private async Task<ConnectionInfo?> TryLookupOpenFluxExitIpAsync(CancellationToken token)
+        {
+            try
+            {
+                var manager = core.GetOpenFluxManager();
+                int port = manager.BoundSocksPort;
+                if (!manager.IsRunning || port <= 0)
+                    return null;
+
+                string cached = manager.LastExitIp;
+                string ip = cached;
+                if (ip.Length < 7 || ip.IndexOf('.') < 0)
+                {
+                    string body = await Task.Run(() => Socks5Http.GetHttpsBody(
+                        "127.0.0.1",
+                        port,
+                        "api.ipify.org",
+                        "/",
+                        8000), token).ConfigureAwait(false);
+                    ip = (body ?? "").Trim();
+                }
+
+                if (ip.Length < 7 || ip.IndexOf('.') < 0)
+                    return null;
+
+                ConnectionInfo info = new ConnectionInfo
+                {
+                    Ok = true,
+                    Ip = ip
+                };
+                return await EnrichOpenFluxGeoAsync(info, token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return null;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("ConnectionInfo.OpenFlux", ex);
+                return null;
+            }
+        }
+
+        private static async Task<ConnectionInfo> EnrichOpenFluxGeoAsync(ConnectionInfo info, CancellationToken token)
+        {
+            try
+            {
+                using HttpClient client = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
+                string json = await client.GetStringAsync("https://ipwho.is/" + info.Ip, token).ConfigureAwait(false);
+                using JsonDocument doc = JsonDocument.Parse(json);
+                JsonElement root = doc.RootElement;
+                if (root.TryGetProperty("success", out JsonElement success) && success.ValueKind == JsonValueKind.False)
+                    return info;
+
+                string city = root.TryGetProperty("city", out JsonElement cityEl) ? cityEl.GetString() ?? "" : "";
+                string region = root.TryGetProperty("region", out JsonElement regionEl) ? regionEl.GetString() ?? "" : "";
+                string country = root.TryGetProperty("country", out JsonElement countryEl) ? countryEl.GetString() ?? "" : "";
+                string cc = root.TryGetProperty("country_code", out JsonElement ccEl) ? ccEl.GetString() ?? "" : "";
+                string org = "";
+                if (root.TryGetProperty("connection", out JsonElement conn) && conn.ValueKind == JsonValueKind.Object)
+                {
+                    if (conn.TryGetProperty("org", out JsonElement orgEl))
+                        org = orgEl.GetString() ?? "";
+                    if (string.IsNullOrWhiteSpace(org) && conn.TryGetProperty("isp", out JsonElement ispEl))
+                        org = ispEl.GetString() ?? "";
+                }
+
+                return new ConnectionInfo
+                {
+                    Ok = true,
+                    Ip = info.Ip,
+                    City = city,
+                    Region = region,
+                    CountryName = country,
+                    CountryCode = cc,
+                    Org = org
+                };
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("ConnectionInfo.OpenFluxGeo", ex);
+                return info;
+            }
         }
 
         private void OnRefreshConnectionInfoClick(object? sender, RoutedEventArgs e)
