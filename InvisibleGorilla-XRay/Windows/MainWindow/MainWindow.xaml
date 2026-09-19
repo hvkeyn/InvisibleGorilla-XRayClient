@@ -1,4 +1,4 @@
-﻿<Window x:Class="InvisibleGorillaXRay.MainWindow"
+<Window x:Class="InvisibleGorillaXRay.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -174,16 +174,24 @@
                                          FontFamily="{StaticResource SegoeUI}" FontSize="11"
                                          Background="#1A1A1A" Foreground="White" BorderBrush="#505050"
                                          Padding="4"/>
-                                <Grid Margin="0 6 0 0">
+                                <TextBlock Text="{DynamicResource Lang.OpenFlux.KeyLabel}"
+                                           FontFamily="{StaticResource SegoeUI}" FontSize="11"
+                                           Foreground="#BDBDBD" Margin="0 8 0 4"
+                                           TextWrapping="Wrap"/>
+                                <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <PasswordBox x:Name="boxOpenFluxKey" Grid.Column="0"
-                                                 Height="26" FontSize="11"
-                                                 Background="#1A1A1A" Foreground="White" BorderBrush="#505050"
-                                                 Padding="4 3"
-                                                 ToolTip="{DynamicResource Lang.OpenFlux.KeyHint}"/>
+                                    <TextBox x:Name="textOpenFluxKey" Grid.Column="0"
+                                             Height="26" FontSize="11"
+                                             FontFamily="Consolas"
+                                             IsReadOnly="True"
+                                             TextWrapping="NoWrap"
+                                             VerticalContentAlignment="Center"
+                                             Background="#1A1A1A" Foreground="#D0FFD0" BorderBrush="#505050"
+                                             Padding="4 3"
+                                             ToolTip="{DynamicResource Lang.OpenFlux.KeyHint}"/>
                                     <Button Grid.Column="1" Width="96" Height="26" Margin="6 0 0 0"
                                             Content="{DynamicResource Lang.OpenFlux.Apply}"
                                             Style="{StaticResource Button.Rectangle.Green}"

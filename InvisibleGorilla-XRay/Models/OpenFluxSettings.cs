@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using Newtonsoft.Json;
 
 namespace InvisibleGorillaXRay.Models
@@ -79,7 +81,44 @@ namespace InvisibleGorillaXRay.Models
 
     public static class OpenFluxUrl
     {
-        public static string Trim(string url) => (url ?? "").Trim();
+        public static string Trim(string url) => Canonicalize((url ?? "").Trim());
+
+        public static string DeriveKey(string url)
+        {
+            string canonical = Trim(url);
+            if (string.IsNullOrWhiteSpace(canonical))
+                return "";
+            byte[] data = Encoding.UTF8.GetBytes("OpenFlux document key v1\0" + canonical);
+            using SHA256 sha = SHA256.Create();
+            byte[] hash = sha.ComputeHash(data);
+            return Convert.ToHexString(hash).ToLowerInvariant();
+        }
+
+
+        public static string Canonicalize(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url))
+                return "";
+            if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out Uri uri))
+                return url.Trim();
+
+            string host = (uri.Host ?? "").ToLowerInvariant();
+            string path = uri.AbsolutePath ?? "";
+            bool editDoc = path.IndexOf("/edit/d/", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (editDoc && (host == "docs.yandex.ru" || host.EndsWith(".docs.yandex.ru")
+                || host == "volga.yandex.ru" || host.EndsWith(".volga.yandex.ru")))
+            {
+                var builder = new UriBuilder(uri)
+                {
+                    Host = "disk.yandex.ru",
+                    Scheme = "https",
+                    Port = -1
+                };
+                return builder.Uri.ToString();
+            }
+
+            return uri.ToString();
+        }
 
         public static bool TryValidate(string url, out string error)
         {

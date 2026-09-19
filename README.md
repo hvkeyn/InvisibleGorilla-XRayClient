@@ -52,6 +52,26 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.17
+
+- **OpenFlux honors TUN** — if Mode is TUN, traffic goes through the virtual adapter into the local OpenFlux SOCKS. Proxy mode is unchanged (HTTP CONNECT bridge).
+
+## What's new in v3.6.16
+
+- **OpenFlux websites work in the browser** — Chrome now uses a local HTTP proxy in front of SOCKS5, instead of the Windows `socks=` setting that closed connections.
+- **Ping is visible** — the OpenFlux line and the IP widget show latency in ms.
+
+## What's new in v3.6.15
+
+- **OpenFlux key comes from the Yandex URL** — paste the document link, Gorilla shows the key, another client needs only that link.
+- **Apply checks the document** — format, reachability, and ping, then registers the URL on the exit.
+
+## What's new in v3.6.14
+
+- **OpenFlux starts without switching modes** — TUN is ignored, the app uses system Proxy by itself.
+- **Apply works while disconnected** — the URL is saved and registered on the exit immediately.
+- **docs.yandex.ru / disk.yandex.ru** edit links are treated as the same document.
+
 ## What's new in v3.6.13
 
 - **OpenFlux (Windows)** — connect through a Yandex Document instead of VLESS. Paste the Disk/Volga link, the shared encryption key, and Gorilla starts a local SOCKS sidecar. Changing the link restarts only OpenFlux, not the whole app.

@@ -74,10 +74,15 @@ namespace InvisibleGorillaXRay.Factories
                 onTunnelBroken: OnTunnelBroken,
                 onSaveOpenFlux: SaveOpenFlux,
                 onApplyOpenFluxUrl: ApplyOpenFluxUrl,
-                getOpenFluxManager: core.GetOpenFluxManager
+                getOpenFluxManager: core.GetOpenFluxManager,
+                ensureOpenFluxProxyMode: EnsureOpenFluxProxyMode
             );
             
             return mainWindow;
+
+            void EnsureOpenFluxProxyMode()
+            {
+            }
 
             bool OnTunnelBroken()
             {

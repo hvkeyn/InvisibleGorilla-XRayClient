@@ -24,6 +24,7 @@ namespace InvisibleGorillaXRay.Services
         public string CountryName { get; init; } = string.Empty;
         public string Org { get; init; } = string.Empty;
         public string Error { get; init; } = string.Empty;
+        public int LatencyMs { get; init; }
 
         public string FlagEmoji => CountryDisplay.GetFlagEmoji(CountryCode);
 
@@ -149,11 +150,14 @@ namespace InvisibleGorillaXRay.Services
 
             try
             {
+                System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
                 using HttpResponseMessage response = await client.GetAsync(url, token).ConfigureAwait(false);
+                watch.Stop();
+                int latencyMs = (int)Math.Max(1, watch.ElapsedMilliseconds);
                 if (!response.IsSuccessStatusCode)
                 {
                     DiagnosticLog.Write("ConnectionInfo", $"GET {url} returned {(int)response.StatusCode}");
-                    return new ConnectionInfo { Ok = false, Error = $"HTTP {(int)response.StatusCode}" };
+                    return new ConnectionInfo { Ok = false, Error = $"HTTP {(int)response.StatusCode}", LatencyMs = latencyMs };
                 }
 
                 string payload = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -161,7 +165,7 @@ namespace InvisibleGorillaXRay.Services
 
                 string ip = FirstNonEmpty(root, "ip", "query");
                 if (string.IsNullOrWhiteSpace(ip))
-                    return new ConnectionInfo { Ok = false, Error = "no ip" };
+                    return new ConnectionInfo { Ok = false, Error = "no ip", LatencyMs = latencyMs };
 
                 string countryCode = FirstNonEmpty(root, "country_iso", "country_code", "country");
                 string countryName = FirstNonEmpty(root, "country_name", "country");
@@ -181,7 +185,8 @@ namespace InvisibleGorillaXRay.Services
                     Region = FirstNonEmpty(root, "region", "regionName"),
                     CountryCode = countryCode,
                     CountryName = countryName,
-                    Org = FirstNonEmpty(root, "org", "asn_org", "isp")
+                    Org = FirstNonEmpty(root, "org", "asn_org", "isp"),
+                    LatencyMs = latencyMs
                 };
             }
             catch (OperationCanceledException)

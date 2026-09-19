@@ -32,6 +32,13 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
 
         private const string NETWORK_INTERFACE_NAME = "InvisibleGorilla-XRay";
 
+        /// <summary>
+        /// Optional sidecar (e.g. openflux.exe) kept off the TUN so its own transport
+        /// does not loop back through the local SOCKS. Converted to BYPASS when the
+        /// user has ALL_APPS; appended to an existing BYPASS list; ignored for ONLY_SELECTED.
+        /// </summary>
+        public static string ExtraBypassAppPath { get; set; } = "";
+
         private LocalizationService LocalizationService => ServiceLocator.Get<LocalizationService>();
 
         public WindowsTunnel()
@@ -329,6 +336,23 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
                 .Where(appId => !string.IsNullOrWhiteSpace(appId) && System.IO.File.Exists(appId))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray()!;
+
+            string extraBypass = ExtraBypassAppPath?.Trim() ?? "";
+            if (!string.IsNullOrWhiteSpace(extraBypass) && System.IO.File.Exists(extraBypass))
+            {
+                if (mode == AppRulesMode.ALL_APPS)
+                {
+                    mode = AppRulesMode.BYPASS_SELECTED_APPS;
+                    appPaths = new[] { extraBypass };
+                }
+                else if (mode == AppRulesMode.BYPASS_SELECTED_APPS)
+                {
+                    appPaths = appPaths
+                        .Concat(new[] { extraBypass })
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                }
+            }
 
             StringBuilder payloadBuilder = new();
             payloadBuilder.Append("MODE=").Append(mode);

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Net;
 using System.Threading;
 using System.Windows;
@@ -57,6 +58,7 @@ namespace InvisibleGorillaXRay
         private Action<OpenFluxProfile> onSaveOpenFlux;
         private Func<string, Status> onApplyOpenFluxUrl;
         private Func<OpenFluxManager> getOpenFluxManager;
+        private Action ensureOpenFluxProxyMode;
         private Action<string> onRunServer;
         private Action onCancelServer;
         private Action onStopServer;
@@ -70,6 +72,9 @@ namespace InvisibleGorillaXRay
         private string pendingOpenFluxUrl;
         private bool isApplyingOpenFluxUi;
         private bool openFluxTransportReady;
+        private bool openFluxUrlHooked;
+        private DispatcherTimer openFluxCheckTimer;
+        private int lastOpenFluxPingMs = -1;
 
         private BackgroundWorker runWorker;
         private BackgroundWorker updateWorker;
@@ -112,6 +117,7 @@ namespace InvisibleGorillaXRay
                 };
 
                 runWorker.DoWork += (sender, e) => {
+                    EnsureOpenFluxProxyMode();
                     EnsureBaselineBeforeConnect();
 
                     Dispatcher.BeginInvoke(new Action(delegate {
@@ -302,7 +308,8 @@ namespace InvisibleGorillaXRay
             Func<bool> onTunnelBroken = null,
             Action<OpenFluxProfile> onSaveOpenFlux = null,
             Func<string, Status> onApplyOpenFluxUrl = null,
-            Func<OpenFluxManager> getOpenFluxManager = null)
+            Func<OpenFluxManager> getOpenFluxManager = null,
+            Action ensureOpenFluxProxyMode = null)
         {
             this.isNeedToShowPolicyWindow = isNeedToShowPolicyWindow;
             this.shouldStartHidden = shouldStartHidden;
@@ -322,6 +329,7 @@ namespace InvisibleGorillaXRay
             this.onSaveOpenFlux = onSaveOpenFlux;
             this.onApplyOpenFluxUrl = onApplyOpenFluxUrl;
             this.getOpenFluxManager = getOpenFluxManager;
+            this.ensureOpenFluxProxyMode = ensureOpenFluxProxyMode;
             this.onRunServer = onRunServer;
             this.onCancelServer = onCancelServer;
             this.onStopServer = onStopServer;
@@ -854,7 +862,11 @@ namespace InvisibleGorillaXRay
 
             connectionInfoFailureRetries = 0;
 
-            textInfoIp.Text = info.Ip;
+            textInfoIp.Text = info.LatencyMs > 0
+                ? $"{info.Ip}  ·  {info.LatencyMs} ms"
+                : info.Ip;
+            if (info.LatencyMs > 0)
+                lastOpenFluxPingMs = info.LatencyMs;
             ApplyConnectionInfoDetails(info);
 
             ApplyVerdict(connected, info.Ip);
@@ -1083,8 +1095,10 @@ namespace InvisibleGorillaXRay
             });
             comboOpenFluxTransport.SelectedIndex = 0;
             comboOpenFluxTransport.SelectionChanged += (_, _) => SaveOpenFluxFromUi(restart: false);
-            if (textOpenFluxUrl != null)
+            if (textOpenFluxUrl != null && !openFluxUrlHooked)
             {
+                openFluxUrlHooked = true;
+                textOpenFluxUrl.TextChanged += OnOpenFluxUrlTextChanged;
                 textOpenFluxUrl.PreviewKeyDown += (_, e) =>
                 {
                     if (e.Key == System.Windows.Input.Key.Enter)
@@ -1095,6 +1109,23 @@ namespace InvisibleGorillaXRay
                 };
             }
             openFluxTransportReady = true;
+        }
+
+        private void OnOpenFluxUrlTextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        {
+            if (isApplyingOpenFluxUi)
+                return;
+            RefreshOpenFluxDerivedKey();
+            ScheduleOpenFluxUrlCheck();
+        }
+
+        private void RefreshOpenFluxDerivedKey()
+        {
+            if (textOpenFluxKey == null)
+                return;
+            string key = OpenFluxUrl.DeriveKey(textOpenFluxUrl?.Text);
+            if (textOpenFluxKey.Text != key)
+                textOpenFluxKey.Text = key;
         }
 
         private void HookOpenFluxStatus()
@@ -1124,11 +1155,10 @@ namespace InvisibleGorillaXRay
             isApplyingOpenFluxUi = true;
             try
             {
-                if (textOpenFluxUrl != null && textOpenFluxUrl.Text != (profile.DocUrl ?? ""))
-                    textOpenFluxUrl.Text = profile.DocUrl ?? "";
-                if (boxOpenFluxKey != null && !string.IsNullOrEmpty(profile.EncryptionKey)
-                    && boxOpenFluxKey.Password.Length == 0)
-                    boxOpenFluxKey.Password = profile.EncryptionKey;
+                string canonicalUrl = OpenFluxUrl.Trim(profile.DocUrl);
+                if (textOpenFluxUrl != null && textOpenFluxUrl.Text != canonicalUrl)
+                    textOpenFluxUrl.Text = canonicalUrl;
+                RefreshOpenFluxDerivedKey();
                 SelectOpenFluxTransport(profile.Transport);
             }
             finally
@@ -1137,7 +1167,10 @@ namespace InvisibleGorillaXRay
             }
 
             OpenFluxManager manager = getOpenFluxManager?.Invoke();
-            ApplyOpenFluxStatusText(manager?.Status ?? OpenFluxClientStatus.Stopped, manager?.StatusDetail, lastTunnelCheckOk);
+            if (isConnected)
+                ApplyOpenFluxStatusText(manager?.Status ?? OpenFluxClientStatus.Stopped, manager?.StatusDetail, lastTunnelCheckOk);
+            else if (lastOpenFluxPingMs > 0)
+                SetOpenFluxStatusMessage(string.Format(Loc("Lang.OpenFlux.Status.UrlOk"), lastOpenFluxPingMs));
         }
 
         private void SelectOpenFluxTransport(OpenFluxTransportMode mode)
@@ -1171,11 +1204,19 @@ namespace InvisibleGorillaXRay
             OpenFluxProfile profile = settings?.GetOpenFluxProfile().Clone() ?? new OpenFluxProfile();
             profile.DocUrl = OpenFluxUrl.Trim(textOpenFluxUrl?.Text);
             profile.Transport = ReadOpenFluxTransport();
-            string typedKey = boxOpenFluxKey?.Password ?? "";
-            if (!string.IsNullOrWhiteSpace(typedKey))
-                profile.EncryptionKey = typedKey.Trim();
+            profile.EncryptionKey = OpenFluxUrl.DeriveKey(profile.DocUrl);
             profile.ConfigPath = OpenFluxProfilePaths.MarkerPath;
             return profile;
+        }
+
+        private static string ResolveOpenFluxKey(string typed, string stored)
+        {
+            return OpenFluxUrl.DeriveKey(!string.IsNullOrWhiteSpace(typed) ? typed : stored);
+        }
+
+        private void EnsureOpenFluxProxyMode()
+        {
+            ensureOpenFluxProxyMode?.Invoke();
         }
 
         private void SaveOpenFluxFromUi(bool restart)
@@ -1204,24 +1245,41 @@ namespace InvisibleGorillaXRay
                     pendingOpenFluxUrl = null;
                     OpenFluxProfile profile = ReadOpenFluxFromUi();
                     profile.DocUrl = url;
+                    profile.EncryptionKey = OpenFluxUrl.DeriveKey(url);
 
-                    if (!OpenFluxUrl.TryValidate(url, out string error))
+                    if (textOpenFluxUrl != null && textOpenFluxUrl.Text != url)
+                        textOpenFluxUrl.Text = url;
+                    RefreshOpenFluxDerivedKey();
+
+                    SetOpenFluxStatusMessage(Loc("Lang.OpenFlux.Status.Connecting"));
+                    OpenFluxUrlCheckResult check = await OpenFluxUrlCheck.InspectAsync(url, CancellationToken.None);
+                    lastOpenFluxPingMs = check.LooksLikeDocument ? check.LatencyMs : -1;
+                    if (!check.FormatOk || !check.LooksLikeDocument)
                     {
-                        SetOpenFluxStatusMessage(Loc("Lang.OpenFlux.Error.BadUrl"));
+                        SetOpenFluxStatusMessage(Loc(MapOpenFluxUiError(check.Error)));
                         break;
                     }
 
                     onSaveOpenFlux?.Invoke(profile);
 
-                    if (isConnected && onApplyOpenFluxUrl != null)
+                    string ping = string.Format(Loc("Lang.OpenFlux.Status.UrlOk"), check.LatencyMs);
+                    if (onApplyOpenFluxUrl != null)
                     {
-                        SetOpenFluxStatusMessage(Loc("Lang.OpenFlux.Status.Connecting"));
                         Status result = await System.Threading.Tasks.Task.Run(() => onApplyOpenFluxUrl(url));
                         if (result.Code != Code.SUCCESS)
                         {
-                            SetOpenFluxStatusMessage(Loc(MapOpenFluxUiError(result.Content?.ToString())));
+                            SetOpenFluxStatusMessage(ping + " · " + Loc(MapOpenFluxUiError(result.Content?.ToString())));
                             break;
                         }
+
+                        string register = result.Content?.ToString() == "register-fail"
+                            ? Loc("Lang.OpenFlux.Status.RegisterFail")
+                            : Loc("Lang.OpenFlux.Status.Registered");
+                        SetOpenFluxStatusMessage(ping + " · " + register);
+                    }
+                    else
+                    {
+                        SetOpenFluxStatusMessage(ping);
                     }
 
                     if (pendingOpenFluxUrl == null)
@@ -1233,10 +1291,44 @@ namespace InvisibleGorillaXRay
                 openFluxApplyBusy = false;
                 if (buttonOpenFluxApply != null)
                     buttonOpenFluxApply.IsEnabled = true;
-                ApplyOpenFluxPanel();
                 if (isConnected)
                     ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(2));
             }
+        }
+
+        private void ScheduleOpenFluxUrlCheck()
+        {
+            if (openFluxCheckTimer == null)
+            {
+                openFluxCheckTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(700) };
+                openFluxCheckTimer.Tick += async (_, _) =>
+                {
+                    openFluxCheckTimer.Stop();
+                    if (openFluxApplyBusy || isConnected)
+                        return;
+                    string url = OpenFluxUrl.Trim(textOpenFluxUrl?.Text);
+                    if (!OpenFluxUrl.TryValidate(url, out _))
+                    {
+                        lastOpenFluxPingMs = -1;
+                        SetOpenFluxStatusMessage(Loc("Lang.OpenFlux.Error.BadUrl"));
+                        return;
+                    }
+                    SetOpenFluxStatusMessage(Loc("Lang.OpenFlux.Status.Connecting"));
+                    OpenFluxUrlCheckResult check = await OpenFluxUrlCheck.InspectAsync(url, CancellationToken.None);
+                    if (openFluxApplyBusy)
+                        return;
+                    if (!check.LooksLikeDocument)
+                    {
+                        lastOpenFluxPingMs = -1;
+                        SetOpenFluxStatusMessage(Loc(MapOpenFluxUiError(check.Error)));
+                        return;
+                    }
+                    lastOpenFluxPingMs = check.LatencyMs;
+                    SetOpenFluxStatusMessage(string.Format(Loc("Lang.OpenFlux.Status.UrlOk"), check.LatencyMs));
+                };
+            }
+            openFluxCheckTimer.Stop();
+            openFluxCheckTimer.Start();
         }
 
         private void ApplyOpenFluxStatusText(OpenFluxClientStatus status, string detail, bool? tunnelOk)
@@ -1270,9 +1362,16 @@ namespace InvisibleGorillaXRay
 
             if (status == OpenFluxClientStatus.Connected || status == OpenFluxClientStatus.WaitingPeer)
             {
-                SetOpenFluxStatusMessage(tunnelOk == true
-                    ? Loc("Lang.OpenFlux.Status.Live")
-                    : Loc("Lang.OpenFlux.Status.WaitingPeer"));
+                if (tunnelOk == true)
+                {
+                    SetOpenFluxStatusMessage(lastOpenFluxPingMs > 0
+                        ? string.Format(Loc("Lang.OpenFlux.Status.LiveMs"), lastOpenFluxPingMs)
+                        : Loc("Lang.OpenFlux.Status.Live"));
+                }
+                else
+                {
+                    SetOpenFluxStatusMessage(Loc("Lang.OpenFlux.Status.WaitingPeer"));
+                }
                 return;
             }
 
@@ -1294,6 +1393,10 @@ namespace InvisibleGorillaXRay
                 "document" => "Lang.OpenFlux.Error.Document",
                 "transport" => "Lang.OpenFlux.Error.Transport",
                 "listen" => "Lang.OpenFlux.Error.Listen",
+                "login" => "Lang.OpenFlux.Error.Login",
+                "timeout" => "Lang.OpenFlux.Error.Timeout",
+                "http" => "Lang.OpenFlux.Error.Http",
+                "register-fail" => "Lang.OpenFlux.Status.RegisterFail",
                 "peer" => "Lang.OpenFlux.Status.PeerMissing",
                 _ => "Lang.OpenFlux.Error.Generic"
             };
