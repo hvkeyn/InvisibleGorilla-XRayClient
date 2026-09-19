@@ -19,6 +19,7 @@ namespace InvisibleGorillaXRay.Services.OpenFlux
     {
         public const string DefaultRegisterUrl = "http://5.187.4.132:17911/v1/urls";
         private const string Tag = "OpenFlux.Register";
+        public static string LastError { get; private set; } = "";
 
         private static readonly HttpClient http = CreateClient();
 
@@ -83,8 +84,12 @@ namespace InvisibleGorillaXRay.Services.OpenFlux
         {
             url = (url ?? "").Trim();
             string endpoint = string.IsNullOrWhiteSpace(registerUrl) ? DefaultRegisterUrl : registerUrl.Trim();
+            LastError = "";
             if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(encryptionKey))
+            {
+                LastError = "empty url or key";
                 return false;
+            }
 
             string payload = JsonConvert.SerializeObject(new
             {
@@ -99,11 +104,18 @@ namespace InvisibleGorillaXRay.Services.OpenFlux
                 using HttpResponseMessage response = http.SendAsync(request, token).GetAwaiter().GetResult();
                 string body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
                 DiagnosticLog.Write(Tag, $"POST {endpoint} -> {(int)response.StatusCode}");
-                return response.IsSuccessStatusCode;
+                if (!response.IsSuccessStatusCode)
+                {
+                    LastError = $"HTTP {(int)response.StatusCode}";
+                    return false;
+                }
+                return true;
             }
             catch (Exception ex)
             {
-                DiagnosticLog.Write(Tag, "register error: " + ex.Message);
+                string detail = ex.InnerException == null ? ex.Message : ex.Message + " / " + ex.InnerException.Message;
+                LastError = detail;
+                DiagnosticLog.Write(Tag, "register error: " + detail);
                 return false;
             }
         }

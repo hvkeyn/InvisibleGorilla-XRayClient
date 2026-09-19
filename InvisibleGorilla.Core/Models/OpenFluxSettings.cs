@@ -99,8 +99,10 @@ namespace InvisibleGorillaXRay.Models
         {
             if (string.IsNullOrWhiteSpace(url))
                 return "";
-            if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out Uri uri))
-                return url.Trim();
+
+            string cleaned = string.Concat(url.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+            if (!Uri.TryCreate(cleaned, UriKind.Absolute, out Uri uri))
+                return cleaned;
 
             string host = (uri.Host ?? "").ToLowerInvariant();
             string path = uri.AbsolutePath ?? "";

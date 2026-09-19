@@ -158,6 +158,9 @@ namespace InvisibleGorillaXRay.Android.Views
                     string tag = result.Content?.ToString() ?? string.Empty;
                     OpenFluxStatusText.Text = tag == "register-fail"
                         ? Localize("Lang.OpenFlux.Status.RegisterFail")
+                            + (string.IsNullOrWhiteSpace(OpenFluxExitRegistry.LastError)
+                                ? ""
+                                : " (" + OpenFluxExitRegistry.LastError + ")")
                         : Localize("Lang.OpenFlux.Status.Registered");
                 }
                 else
