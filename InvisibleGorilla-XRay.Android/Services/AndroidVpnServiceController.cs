@@ -92,7 +92,7 @@ namespace InvisibleGorillaXRay.Android.Services
 
             lock (SyncRoot)
             {
-                if (!isRunning || isStopping)
+                if (!isRunning && !isStopping)
                     return;
 
                 isStopping = true;

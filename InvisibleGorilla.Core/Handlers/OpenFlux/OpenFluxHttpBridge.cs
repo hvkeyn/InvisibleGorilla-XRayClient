@@ -23,8 +23,8 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
         private TcpListener listener;
         private CancellationTokenSource cts;
         private int socksPort;
-        private readonly SemaphoreSlim socksGate = new SemaphoreSlim(10, 10);
-        private readonly SemaphoreSlim dialGate = new SemaphoreSlim(2, 2);
+        private readonly SemaphoreSlim socksGate = new SemaphoreSlim(24, 24);
+        private readonly SemaphoreSlim dialGate = new SemaphoreSlim(6, 6);
         private readonly ConcurrentDictionary<string, ConcurrentQueue<WarmEntry>> warmPool = new();
         private readonly ConcurrentDictionary<ActiveRelay, byte> activeRelays = new();
         private static readonly string[] WarmHosts =
@@ -216,7 +216,7 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
             foreach (ActiveRelay relay in activeRelays.Keys)
             {
                 long idleMs = now - relay.LastTicks;
-                if (idleMs < 3000)
+                if (idleMs < 2000)
                     continue;
                 try { relay.Kill?.Cancel(); } catch { }
                 try { relay.Socks?.Close(); } catch { }

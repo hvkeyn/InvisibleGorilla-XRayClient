@@ -92,6 +92,8 @@ namespace InvisibleGorillaXRay.Android.Views
         private bool isCheckWorkerBusy;
         private bool isRunWorkerBusy;
         private bool isStopWorkerBusy;
+        private int connectionEpoch;
+        private readonly SemaphoreSlim connectionOpLock = new(1, 1);
         private bool isInitialized;
         private bool pendingGoidaSectionOpen;
         private bool isShowingAdvancedImport;
@@ -182,6 +184,7 @@ namespace InvisibleGorillaXRay.Android.Views
             InitializeControls();
             ApplyLocalizedText();
             AndroidDeepLinkDispatcher.Register(HandlePendingImport);
+            global::InvisibleGorillaXRay.Android.MainActivity.ForegroundChanged += OnAppForegroundChanged;
             DiagnosticLog.Write("MainView", "Controls initialized");
 
             // The remaining steps are non-essential for navigation. They must never prevent the
@@ -2426,7 +2429,7 @@ namespace InvisibleGorillaXRay.Android.Views
             }
 
             TimeSpan delay = state == ConnectionState.Running
-                ? TimeSpan.FromSeconds(3)
+                ? (IsOpenFluxProfileActive() ? TimeSpan.FromSeconds(20) : TimeSpan.FromSeconds(3))
                 : TimeSpan.FromMilliseconds(200);
             ScheduleConnectionInfoRefresh(delay);
 
@@ -2454,16 +2457,27 @@ namespace InvisibleGorillaXRay.Android.Views
                 return false;
 
             resumeServerAfterNativeTest = true;
-            Dispatcher.UIThread.Post(() =>
+            void RequestStop()
             {
                 if (!isStopWorkerBusy && StopActionButton.IsVisible)
                     OnStopClick(null, new RoutedEventArgs());
-            });
+            }
+
+            if (Dispatcher.UIThread.CheckAccess())
+                RequestStop();
+            else
+                Dispatcher.UIThread.Post(RequestStop);
+
+            // Never sleep on the Android/Avalonia UI thread — that is the ANR dialog.
+            if (Dispatcher.UIThread.CheckAccess())
+                return false;
 
             DateTime deadline = DateTime.UtcNow.AddSeconds(15);
             while (DateTime.UtcNow < deadline)
             {
-                if (!IsConnectionActive())
+                if (!isRunWorkerBusy
+                    && !AndroidVpnServiceController.IsRunning
+                    && !AndroidVpnServiceController.IsStopping)
                     return true;
 
                 Thread.Sleep(50);
@@ -2535,8 +2549,19 @@ namespace InvisibleGorillaXRay.Android.Views
             });
         }
 
+        private void OnAppForegroundChanged(bool foreground)
+        {
+            if (foreground)
+                return;
+
+            try { connectionInfoLookupCancellation?.Cancel(); } catch { }
+        }
+
         private async Task RefreshConnectionInfoAsync()
         {
+            if (!global::InvisibleGorillaXRay.Android.MainActivity.IsInForeground)
+                return;
+
             if (System.Threading.Interlocked.CompareExchange(ref connectionInfoRefreshBusy, 1, 0) != 0)
                 return;
 
@@ -3121,25 +3146,32 @@ namespace InvisibleGorillaXRay.Android.Views
             UpdateRuntimeSummary();
         }
 
-        private async void OnRunClick(object? sender, RoutedEventArgs e)
+        private void StopCoreAndVpn()
         {
-            if (isRunWorkerBusy)
-                return;
+            try { AndroidVpnServiceController.Stop(); }
+            catch (Exception ex) { DiagnosticLog.WriteException("MainView.StopVpn", ex); }
+            try { core.Stop(); }
+            catch (Exception ex) { DiagnosticLog.WriteException("MainView.StopCore", ex); }
+            try { AndroidVpnServiceController.Stop(); }
+            catch (Exception ex) { DiagnosticLog.WriteException("MainView.StopVpn.Retry", ex); }
+        }
 
+        private void PostConnectionUi(int epoch, Action action)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (epoch != Volatile.Read(ref connectionEpoch))
+                    return;
+                action();
+            });
+        }
+
+        private void OnRunClick(object? sender, RoutedEventArgs e)
+        {
             if (!TrySaveSettings(showSuccessMessage: false))
                 return;
 
-            // Stop the Goida native probe before the tunnel starts: both use the same native
-            // xray core and running them together crashes the process (the ~1 min crash).
-            await StopGoidaProbingForConnectionAsync();
-
-            bool vpnPrepared = await global::InvisibleGorillaXRay.Android.MainActivity.EnsureVpnPreparedAsync();
-            if (!vpnPrepared)
-            {
-                SetStatus("Lang.Android.Status.VpnPermissionDenied");
-                return;
-            }
-
+            int epoch = Interlocked.Increment(ref connectionEpoch);
             ShowSection(NavigationSection.Home);
             EnsureBaselineBeforeConnect();
             isRunWorkerBusy = true;
@@ -3150,56 +3182,151 @@ namespace InvisibleGorillaXRay.Android.Views
             SetStatus("Lang.Android.Status.LoadingConfig");
 
             AndroidConnectionNotificationText notificationText = CreateConnectionNotificationText();
+            _ = Task.Run(() => RunConnectionSession(epoch, notificationText));
+        }
 
-            await Task.Run(() =>
+        private void RunConnectionSession(int epoch, AndroidConnectionNotificationText notificationText)
+        {
+            // Unblock a leftover session from the previous toggle, then take the lock.
+            StopCoreAndVpn();
+            try
             {
-                bool started = false;
-                string? failureMessage = null;
-
-                try
+                if (!connectionOpLock.Wait(15000))
                 {
-                    Status configStatus = core.LoadConfig();
-                    if (configStatus.Code == Code.ERROR)
+                    PostConnectionUi(epoch, () =>
                     {
-                        failureMessage = configStatus.Content?.ToString() ?? "Lang.Message.NoConfig";
-                        return;
-                    }
-
-                    string activeConfig = configStatus.Content?.ToString() ?? string.Empty;
-                    AndroidConnectionNotificationManager.ShowStarting(
-                        BuildConnectionNotificationSession(activeConfig, notificationText));
-
-                    Status modeStatus = core.EnableMode();
-                    if (modeStatus.Code == Code.ERROR)
-                    {
-                        failureMessage = modeStatus.Content?.ToString() ?? "Lang.Message.CantProxy";
-                        return;
-                    }
-
-                    if (modeStatus.Code == Code.INFO && modeStatus.SubCode == SubCode.CANCELED)
-                    {
-                        failureMessage = "Lang.Android.Status.StartCanceled";
-                        return;
-                    }
-
-                    started = true;
-                    AndroidConnectionNotificationManager.MarkRunning();
-                    LogGoidaConnectionEvent(connected: true);
-                    core.Run(activeConfig, () =>
-                    {
-                        Dispatcher.UIThread.Post(() =>
-                        {
-                            SetConnectionState(ConnectionState.Running);
-                            SetStatus("Lang.Android.Status.RunningTunnel");
-                        });
+                        isRunWorkerBusy = false;
+                        SetRunningState(false);
+                        SetConnectionState(ConnectionState.Stopped);
+                        SetStatus("Lang.Android.Status.StartCanceled");
                     });
+                    return;
                 }
-                catch (Exception ex)
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.Run.Lock", ex);
+                return;
+            }
+
+            bool started = false;
+            string? failureMessage = null;
+            try
+            {
+                if (epoch != Volatile.Read(ref connectionEpoch))
+                    return;
+
+                StopGoidaProbingForConnectionAsync().GetAwaiter().GetResult();
+
+                bool vpnPrepared = global::InvisibleGorillaXRay.Android.MainActivity
+                    .EnsureVpnPreparedAsync()
+                    .GetAwaiter()
+                    .GetResult();
+                if (!vpnPrepared)
                 {
-                    failureMessage = MapExceptionToStatus(ex);
-                    DiagnosticLog.WriteException("MainView.Run", ex);
+                    failureMessage = "Lang.Android.Status.VpnPermissionDenied";
+                    return;
                 }
-                finally
+
+                if (epoch != Volatile.Read(ref connectionEpoch))
+                    return;
+
+                StopCoreAndVpn();
+                for (int i = 0; i < 50; i++)
+                {
+                    if (!AndroidVpnServiceController.IsRunning && !AndroidVpnServiceController.IsStopping)
+                        break;
+                    Thread.Sleep(100);
+                }
+
+                if (epoch != Volatile.Read(ref connectionEpoch))
+                    return;
+
+                Status configStatus = core.LoadConfig();
+                if (configStatus.Code == Code.ERROR)
+                {
+                    failureMessage = configStatus.Content?.ToString() ?? "Lang.Message.NoConfig";
+                    return;
+                }
+
+                string activeConfig = configStatus.Content?.ToString() ?? string.Empty;
+                AndroidConnectionNotificationManager.ShowStarting(
+                    BuildConnectionNotificationSession(activeConfig, notificationText));
+
+                Status modeStatus = core.EnableMode();
+                if (modeStatus.Code == Code.ERROR)
+                {
+                    failureMessage = modeStatus.Content?.ToString() ?? "Lang.Message.CantProxy";
+                    return;
+                }
+
+                if (modeStatus.Code == Code.INFO && modeStatus.SubCode == SubCode.CANCELED)
+                {
+                    failureMessage = "Lang.Android.Status.StartCanceled";
+                    return;
+                }
+
+                started = true;
+                AndroidConnectionNotificationManager.MarkRunning();
+                LogGoidaConnectionEvent(connected: true);
+                core.Run(activeConfig, () =>
+                {
+                    PostConnectionUi(epoch, () =>
+                    {
+                        SetConnectionState(ConnectionState.Running);
+                        SetStatus("Lang.Android.Status.RunningTunnel");
+                    });
+                });
+            }
+            catch (Exception ex)
+            {
+                failureMessage = MapExceptionToStatus(ex);
+                DiagnosticLog.WriteException("MainView.Run", ex);
+            }
+            finally
+            {
+                if (epoch == Volatile.Read(ref connectionEpoch))
+                {
+                    isRunWorkerBusy = false;
+                    isStopWorkerBusy = false;
+                }
+                if (AndroidVpnServiceController.IsStopping)
+                {
+                }
+                else if (AndroidVpnServiceController.IsRunning)
+                {
+                    AndroidConnectionNotificationManager.MarkRunning();
+                }
+                else if (started)
+                {
+                    AndroidConnectionNotificationManager.MarkStopped();
+                }
+                else
+                {
+                    AndroidConnectionNotificationManager.Stop();
+                }
+
+                if (started)
+                    LogGoidaConnectionEvent(connected: false);
+                ResumeGoidaProbingAfterConnection();
+
+                try { connectionOpLock.Release(); }
+                catch (SemaphoreFullException) { }
+
+                PostConnectionUi(epoch, () =>
+                {
+                    SetRunningState(false);
+                    StopActionButton.IsEnabled = true;
+                    SetConnectionState(ConnectionState.Stopped);
+                    UpdateRuntimeSummary();
+
+                    if (!string.IsNullOrWhiteSpace(failureMessage))
+                        SetStatus(failureMessage);
+                    else if (started)
+                        SetStatus("Lang.Status.Stopped");
+                });
+
+                _ = Task.Run(() =>
                 {
                     try
                     {
@@ -3210,56 +3337,49 @@ namespace InvisibleGorillaXRay.Android.Views
                     catch
                     {
                     }
-                    isRunWorkerBusy = false;
-                    isStopWorkerBusy = false;
-                    if (AndroidVpnServiceController.IsStopping)
-                    {
-                        // Let the Android VPN service publish the final stop-state notification.
-                    }
-                    else if (AndroidVpnServiceController.IsRunning)
-                    {
-                        AndroidConnectionNotificationManager.MarkRunning();
-                    }
-                    else if (started)
-                    {
-                        AndroidConnectionNotificationManager.MarkStopped();
-                    }
-                    else
-                    {
-                        AndroidConnectionNotificationManager.Stop();
-                    }
-
-                    // Tunnel is no longer running: it is safe to let Goida probe again.
-                    if (started)
-                        LogGoidaConnectionEvent(connected: false);
-                    ResumeGoidaProbingAfterConnection();
-
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        SetRunningState(false);
-                        StopActionButton.IsEnabled = true;
-                        SetConnectionState(ConnectionState.Stopped);
-                        UpdateRuntimeSummary();
-
-                        if (!string.IsNullOrWhiteSpace(failureMessage))
-                            SetStatus(failureMessage);
-                        else if (started)
-                            SetStatus("Lang.Status.Stopped");
-                    });
-                }
-            });
+                });
+            }
         }
 
         private void OnStopClick(object? sender, RoutedEventArgs e)
         {
-            if (isStopWorkerBusy || !StopActionButton.IsVisible)
+            RequestStop();
+        }
+
+        private void RequestStop()
+        {
+            if (isStopWorkerBusy)
                 return;
 
+            if (!StopActionButton.IsVisible
+                && !isRunWorkerBusy
+                && !AndroidVpnServiceController.IsRunning
+                && !AndroidVpnServiceController.IsStopping)
+            {
+                return;
+            }
+
+            Interlocked.Increment(ref connectionEpoch);
             isStopWorkerBusy = true;
-            StopActionButton.IsEnabled = false;
-            core.Stop();
-            AndroidConnectionNotificationManager.MarkStopping();
-            SetStatus("Lang.Android.Status.StopRequested");
+            isRunWorkerBusy = false;
+            SetRunningState(false);
+            SetConnectionState(ConnectionState.Stopped);
+            SetStatus("Lang.Status.Stopped");
+            AndroidConnectionNotificationManager.MarkStopped();
+
+            _ = Task.Run(() =>
+            {
+                try { StopCoreAndVpn(); }
+                catch (Exception ex) { DiagnosticLog.WriteException("MainView.RequestStop", ex); }
+                finally
+                {
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        isStopWorkerBusy = false;
+                        UpdateRuntimeSummary();
+                    });
+                }
+            });
         }
 
         private void OnSaveSettingsClick(object? sender, RoutedEventArgs e)

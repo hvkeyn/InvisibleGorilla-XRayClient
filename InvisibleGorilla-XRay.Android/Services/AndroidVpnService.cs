@@ -43,6 +43,9 @@ namespace InvisibleGorillaXRay.Android.Services
         private static readonly object SyncRoot = new();
 
         private Timer? healthTimer;
+        private int healthGeneration;
+        private int healthMisses;
+        private long tunHealthySinceMs;
 
         internal static Intent CreateStartIntent(Context context, AndroidVpnStartOptions options)
         {
@@ -104,7 +107,11 @@ namespace InvisibleGorillaXRay.Android.Services
         public override void OnDestroy()
         {
             DiagnosticLog.Write("AndroidVpnService", "Foreground VPN service destroyed");
-            StopVpn("Android VPN service destroyed");
+            _ = Task.Run(() =>
+            {
+                try { StopVpn("Android VPN service destroyed"); }
+                catch (Exception ex) { DiagnosticLog.WriteException("AndroidVpnService.OnDestroy", ex); }
+            });
             base.OnDestroy();
         }
 
@@ -173,53 +180,64 @@ namespace InvisibleGorillaXRay.Android.Services
             lock (SyncRoot)
             {
                 ResetVpnCore("Restarting Android VPN");
+            }
 
-                Builder builder = new Builder(this)
-                    .SetSession(sessionName)
-                    .SetMtu(DefaultMtu)
-                    .AddAddress(tunAddress, 32)
-                    .AddRoute("0.0.0.0", 0);
+            Builder builder = new Builder(this)
+                .SetSession(sessionName)
+                .SetMtu(DefaultMtu)
+                .AddAddress(tunAddress, 32)
+                .AddRoute("0.0.0.0", 0);
 
-                if (Build.VERSION.SdkInt >= BuildVersionCodes.Q)
+            if (Build.VERSION.SdkInt >= BuildVersionCodes.Q)
+            {
+                builder.SetBlocking(true);
+                try { builder.AllowFamily(2); } catch { }
+                if (httpProxyPort > 0)
                 {
-                    builder.SetBlocking(true);
-                    try { builder.AllowFamily(2); } catch { }
-                    if (httpProxyPort > 0)
+                    try
                     {
-                        try
-                        {
-                            builder.SetHttpProxy(ProxyInfo.BuildDirectProxy(tunAddress, httpProxyPort));
-                            DiagnosticLog.Write("AndroidVpnService", $"VPN HTTP proxy {tunAddress}:{httpProxyPort}");
-                        }
-                        catch (Exception ex)
-                        {
-                            DiagnosticLog.WriteException("AndroidVpnService.SetHttpProxy", ex);
-                        }
+                        builder.SetHttpProxy(ProxyInfo.BuildDirectProxy(tunAddress, httpProxyPort));
+                        DiagnosticLog.Write("AndroidVpnService", $"VPN HTTP proxy {tunAddress}:{httpProxyPort}");
+                    }
+                    catch (Exception ex)
+                    {
+                        DiagnosticLog.WriteException("AndroidVpnService.SetHttpProxy", ex);
                     }
                 }
+            }
 
-                foreach (string dnsServer in SplitDnsServers(dns))
-                    builder.AddDnsServer(dnsServer);
+            foreach (string dnsServer in SplitDnsServers(dns))
+                builder.AddDnsServer(dnsServer);
 
-                if (enableIpv6)
-                    TryEnableIpv6(builder);
-                else
-                    DiagnosticLog.Write("AndroidVpnService", "IPv6 TUN routes skipped (OpenFlux / IPv4-only)");
+            if (enableIpv6)
+                TryEnableIpv6(builder);
+            else
+                DiagnosticLog.Write("AndroidVpnService", "IPv6 TUN routes skipped (OpenFlux / IPv4-only)");
 
-                ApplyApplicationRules(builder, appRulesMode, appPackages);
+            ApplyApplicationRules(builder, appRulesMode, appPackages);
 
-                DiagnosticLog.Write(
-                    "AndroidVpnService",
-                    $"Calling Builder.Establish() (mtu={DefaultMtu}, address={tunAddress}, mode={appRulesMode}, packages={appPackages.Length})...");
-                ParcelFileDescriptor? tunInterface = builder.Establish();
-                if (tunInterface == null)
-                    throw new InvalidOperationException("Android VPN interface could not be established (Builder.Establish returned null). "
-                        + "Verify the VPN consent dialog was accepted and that no other always-on VPN is owning the tunnel.");
-                DiagnosticLog.Write("AndroidVpnService", "Builder.Establish() returned a TUN file descriptor");
+            DiagnosticLog.Write(
+                "AndroidVpnService",
+                $"Calling Builder.Establish() (mtu={DefaultMtu}, address={tunAddress}, mode={appRulesMode}, packages={appPackages.Length})...");
+            // Must stay off the Android UI thread. Posting Establish() to the main looper
+            // caused ANR when the user left the app (FocusEvent hasFocus=false waited 10s)
+            // — that is the "crashed while opening 2ip.io" report.
+            ParcelFileDescriptor? tunInterface = builder.Establish();
+            if (tunInterface == null)
+            {
+                Thread.Sleep(400);
+                tunInterface = builder.Establish();
+            }
+            if (tunInterface == null)
+                throw new InvalidOperationException("Android VPN interface could not be established (Builder.Establish returned null). "
+                    + "Verify the VPN consent dialog was accepted and that no other always-on VPN is owning the tunnel.");
+            DiagnosticLog.Write("AndroidVpnService", "Builder.Establish() returned a TUN file descriptor");
 
-                int tunFd = tunInterface.DetachFd();
-                tunInterface.Dispose();
+            int tunFd = tunInterface.DetachFd();
+            tunInterface.Dispose();
 
+            lock (SyncRoot)
+            {
                 if (httpProxyPort > 0)
                 {
                     try
@@ -274,24 +292,45 @@ namespace InvisibleGorillaXRay.Android.Services
         private void EnsureHealthTimer()
         {
             healthTimer?.Dispose();
+            int generation = Interlocked.Increment(ref healthGeneration);
+            healthMisses = 0;
+            tunHealthySinceMs = System.Environment.TickCount64;
             healthTimer = new Timer(
-                callback: static state =>
-                {
-                    if (state is not AndroidVpnService service)
-                        return;
-
-                    if (XRayCoreWrapper.IsAndroidTunnelRunning())
-                        return;
-
-                    string message = XRayCoreWrapper.GetAndroidTunnelLastError()
-                        ?? "Android tunnel bridge stopped unexpectedly.";
-                    DiagnosticLog.Write("AndroidVpnService", message);
-                    service.StopVpn(message);
-                    service.StopSelf();
-                },
-                state: this,
-                dueTime: TimeSpan.FromSeconds(2),
+                _ => OnHealthTimerTick(generation),
+                state: null,
+                dueTime: TimeSpan.FromSeconds(3),
                 period: TimeSpan.FromSeconds(2));
+        }
+
+        private void OnHealthTimerTick(int generation)
+        {
+            if (Volatile.Read(ref healthGeneration) != generation)
+                return;
+
+            if (XRayCoreWrapper.IsAndroidTunnelRunning())
+            {
+                healthMisses = 0;
+                return;
+            }
+
+            // After Wi-Fi/cell flaps the TUN fd can drop for a few seconds.
+            // Killing the service here made the next RUN end in Stopped.
+            if (System.Environment.TickCount64 - tunHealthySinceMs < 15000)
+                return;
+
+            healthMisses++;
+            if (healthMisses < 4)
+            {
+                DiagnosticLog.Write(
+                    "AndroidVpnService",
+                    $"tun2socks not running ({healthMisses}/4), waiting");
+                return;
+            }
+
+            string message = XRayCoreWrapper.GetAndroidTunnelLastError()
+                ?? "Android tunnel bridge stopped unexpectedly.";
+            DiagnosticLog.Write("AndroidVpnService", message);
+            StopVpn(message);
         }
 
         private void StopVpn(string reason)
@@ -302,8 +341,20 @@ namespace InvisibleGorillaXRay.Android.Services
             }
         }
 
+        public override void OnRevoke()
+        {
+            DiagnosticLog.Write("AndroidVpnService", "VPN revoked");
+            _ = Task.Run(() =>
+            {
+                try { StopVpn("Android VPN revoked"); }
+                catch (Exception ex) { DiagnosticLog.WriteException("AndroidVpnService.OnRevoke", ex); }
+            });
+            base.OnRevoke();
+        }
+
         private void ResetVpnCore(string reason)
         {
+            Interlocked.Increment(ref healthGeneration);
             healthTimer?.Dispose();
             healthTimer = null;
 
@@ -319,6 +370,7 @@ namespace InvisibleGorillaXRay.Android.Services
 
         private void StopVpnCore(string reason)
         {
+            Interlocked.Increment(ref healthGeneration);
             healthTimer?.Dispose();
             healthTimer = null;
 

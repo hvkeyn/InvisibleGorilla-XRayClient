@@ -328,6 +328,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="80" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="64" />
         </Grid.RowDefinitions>
 
@@ -551,31 +552,6 @@
                                        FontSize="14" />
                 </StackPanel>
                     </Button>
-
-                    <Button x:Name="RunButton"
-                            Width="200"
-                            Height="40"
-                            Margin="0,26,0,0"
-                            Content="RUN"
-                            Theme="{StaticResource GreenActionButton}"
-                            FontWeight="Bold"
-                            FontSize="15"
-                            Foreground="#252526"
-                            HorizontalAlignment="Center"
-                            Click="OnRunClick" />
-
-                    <Button x:Name="StopButton"
-                            Width="200"
-                            Height="40"
-                            Margin="0,26,0,0"
-                            Content="STOP"
-                            Theme="{StaticResource RedActionButton}"
-                            FontWeight="Bold"
-                            FontSize="15"
-                            Foreground="#252526"
-                            HorizontalAlignment="Center"
-                            IsVisible="False"
-                            Click="OnStopClick" />
 
                     <Border x:Name="ConnectionInfoPanel"
                             Margin="0,18,0,0"
@@ -1944,7 +1920,7 @@
 
         <Border x:Name="AppRulesEditorOverlayBorder"
                 Grid.Row="1"
-                Grid.RowSpan="2"
+                Grid.RowSpan="3"
                 Background="#B0000000"
                 IsVisible="False">
             <Grid Margin="14">
@@ -2098,7 +2074,7 @@
 
         <Border x:Name="AppPickerOverlayBorder"
                 Grid.Row="1"
-                Grid.RowSpan="2"
+                Grid.RowSpan="3"
                 Background="#B0000000"
                 IsVisible="False">
             <Grid Margin="14">
@@ -2192,7 +2168,39 @@
             </Grid>
         </Border>
 
-        <Border Grid.Row="2"
+        <Border x:Name="HomeActionBar"
+                Grid.Row="2"
+                Background="{StaticResource SurfaceDark}"
+                Padding="20,10,20,10"
+                ZIndex="30">
+            <Grid>
+                <Button x:Name="RunButton"
+                        Width="220"
+                        Height="48"
+                        Content="RUN"
+                        Theme="{StaticResource GreenActionButton}"
+                        FontWeight="Bold"
+                        FontSize="16"
+                        Foreground="#252526"
+                        HorizontalAlignment="Center"
+                        IsHitTestVisible="True"
+                        Click="OnRunClick" />
+                <Button x:Name="StopButton"
+                        Width="220"
+                        Height="48"
+                        Content="STOP"
+                        Theme="{StaticResource RedActionButton}"
+                        FontWeight="Bold"
+                        FontSize="16"
+                        Foreground="#252526"
+                        HorizontalAlignment="Center"
+                        IsVisible="False"
+                        IsHitTestVisible="True"
+                        Click="OnStopClick" />
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="3"
                 Background="{StaticResource SurfaceLight}"
                 BoxShadow="0 -2 6 0 #55000000">
             <StackPanel Orientation="Horizontal"

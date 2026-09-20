@@ -389,9 +389,14 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
                 {
                     int pid = 0;
                     try { pid = running.Id; } catch { }
+                    // entireProcessTree uses kill(-pid) on Android and shares the app
+                    // process group — that freezes or kills Gorilla itself on STOP.
                     try
                     {
-                        running.Kill(entireProcessTree: true);
+                        if (OperatingSystem.IsAndroid())
+                            running.Kill();
+                        else
+                            running.Kill(entireProcessTree: true);
                     }
                     catch
                     {
@@ -399,7 +404,7 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
                     }
                     if (pid > 0)
                         TryNativeKill(pid);
-                    running.WaitForExit(waitExitMs);
+                    running.WaitForExit(OperatingSystem.IsAndroid() ? Math.Min(waitExitMs, 400) : waitExitMs);
                 }
             }
             catch (Exception ex)
@@ -506,6 +511,9 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
 
         private static void KillOrphanSidecars()
         {
+            if (OperatingSystem.IsAndroid())
+                return;
+
             try
             {
                 foreach (Process candidate in Process.GetProcesses())

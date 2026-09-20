@@ -52,6 +52,12 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.22
+
+- **Android STOP/RUN no longer freezes or ANRs** — teardown stays off the UI thread, OpenFlux kill no longer takes the app process group with it, and leaving the app for a site like 2ip.io does not hang the main looper.
+- **OpenFlux page refresh and video start are less sticky** — more parallel SOCKS streams (24) and dials (6), faster idle-socket evict. Xray / Goida / Tor stay on the unlimited path.
+- **SOCKS5/VLESS connection check works again** on Android TUN (session user/pass handshake).
+
 ## What's new in v3.6.20
 
 - **Android OpenFlux no longer freezes the UI or the channel when you skip videos** — idle YouTube sockets are dropped, new CONNECTs are queued two at a time, and live streams are left alone. Xray / Goida / Tor keep the unlimited tun2socks path.

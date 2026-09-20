@@ -23,7 +23,7 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
         private TcpListener listener;
         private CancellationTokenSource cts;
         private int socksPort;
-        private readonly SemaphoreSlim socksGate = new SemaphoreSlim(10, 10);
+        private readonly SemaphoreSlim socksGate = new SemaphoreSlim(24, 24);
         private readonly ConcurrentDictionary<string, ConcurrentQueue<TcpClient>> warmPool = new();
         private static readonly string[] WarmHosts =
         {

@@ -59,6 +59,8 @@ namespace InvisibleGorillaXRay.Android
         private static MainActivity? currentActivity;
         private static TaskCompletionSource<bool>? vpnPermissionRequest;
         private static int globalHandlersRegistered;
+        internal static bool IsInForeground { get; private set; } = true;
+        internal static event Action<bool>? ForegroundChanged;
 
         protected override void OnCreate(Bundle? savedInstanceState)
         {
@@ -176,6 +178,15 @@ namespace InvisibleGorillaXRay.Android
         {
             base.OnResume();
             SetCurrentActivity(this);
+            IsInForeground = true;
+            try { ForegroundChanged?.Invoke(true); } catch { }
+        }
+
+        protected override void OnPause()
+        {
+            IsInForeground = false;
+            try { ForegroundChanged?.Invoke(false); } catch { }
+            base.OnPause();
         }
 
         protected override void OnDestroy()

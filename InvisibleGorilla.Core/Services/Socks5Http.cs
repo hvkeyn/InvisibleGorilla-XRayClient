@@ -41,12 +41,25 @@ namespace InvisibleGorillaXRay.Services
             if (handler == null || !TryGetEndpoint(proxy, out string host, out int port))
                 return;
 
+            TryGetCredentials(proxy, out string user, out string pass);
             handler.UseProxy = false;
             handler.Proxy = null;
-            handler.ConnectCallback = (context, token) => new ValueTask<Stream>(ConnectAsync(host, port, context.DnsEndPoint, token));
+            handler.ConnectCallback = (context, token) =>
+                new ValueTask<Stream>(ConnectAsync(host, port, context.DnsEndPoint, user, pass, token));
         }
 
         public static async Task<Stream> ConnectAsync(string proxyHost, int proxyPort, DnsEndPoint destination, CancellationToken token)
+        {
+            return await ConnectAsync(proxyHost, proxyPort, destination, null, null, token).ConfigureAwait(false);
+        }
+
+        public static async Task<Stream> ConnectAsync(
+            string proxyHost,
+            int proxyPort,
+            DnsEndPoint destination,
+            string username,
+            string password,
+            CancellationToken token)
         {
             TcpClient client = new TcpClient { NoDelay = true };
             try
@@ -57,7 +70,7 @@ namespace InvisibleGorillaXRay.Services
 
                 await client.ConnectAsync(proxyHost, proxyPort, connectCts.Token).ConfigureAwait(false);
                 NetworkStream stream = new NetworkStream(client.Client, ownsSocket: true);
-                await HandshakeAsync(stream, destination.Host, destination.Port, token).ConfigureAwait(false);
+                await HandshakeAsync(stream, destination.Host, destination.Port, username, password, token).ConfigureAwait(false);
                 return stream;
             }
             catch
@@ -74,7 +87,7 @@ namespace InvisibleGorillaXRay.Services
             {
                 UseProxy = false,
                 ConnectTimeout = TimeSpan.FromMilliseconds(Math.Max(1000, timeoutMs)),
-                ConnectCallback = (context, token) => new ValueTask<Stream>(ConnectAsync(proxyHost, proxyPort, context.DnsEndPoint, token))
+                ConnectCallback = (context, token) => new ValueTask<Stream>(ConnectAsync(proxyHost, proxyPort, context.DnsEndPoint, null, null, token))
             };
             using HttpClient client = new HttpClient(handler, disposeHandler: true)
             {
@@ -93,7 +106,7 @@ namespace InvisibleGorillaXRay.Services
                 {
                     client.ConnectAsync(proxyHost, proxyPort, cts.Token).AsTask().GetAwaiter().GetResult();
                     using NetworkStream raw = new NetworkStream(client.Client, ownsSocket: false);
-                    HandshakeAsync(raw, destHost, 443, cts.Token).GetAwaiter().GetResult();
+                    HandshakeAsync(raw, destHost, 443, null, null, cts.Token).GetAwaiter().GetResult();
                     using SslStream ssl = new SslStream(raw, leaveInnerStreamOpen: true, static (_, _, _, _) => true);
                     ssl.AuthenticateAsClient(destHost);
                     string request = "GET " + (string.IsNullOrWhiteSpace(path) ? "/" : path) +
@@ -151,12 +164,78 @@ namespace InvisibleGorillaXRay.Services
             return body.Length >= length;
         }
 
-        private static async Task HandshakeAsync(Stream stream, string destHost, int destPort, CancellationToken token)
+        private static bool TryGetCredentials(IWebProxy proxy, out string username, out string password)
         {
-            await stream.WriteAsync(new byte[] { 0x05, 0x01, 0x00 }, token).ConfigureAwait(false);
+            username = "";
+            password = "";
+            if (proxy == null)
+                return false;
+
+            if (proxy.Credentials is NetworkCredential credential
+                && !string.IsNullOrWhiteSpace(credential.UserName)
+                && !string.IsNullOrWhiteSpace(credential.Password))
+            {
+                username = credential.UserName;
+                password = credential.Password;
+                return true;
+            }
+
+            if (proxy is WebProxy web && web.Address != null && !string.IsNullOrEmpty(web.Address.UserInfo))
+            {
+                string[] parts = web.Address.UserInfo.Split(':', 2);
+                if (parts.Length == 2)
+                {
+                    username = Uri.UnescapeDataString(parts[0]);
+                    password = Uri.UnescapeDataString(parts[1]);
+                    return username.Length > 0 && password.Length > 0;
+                }
+            }
+
+            return false;
+        }
+
+        private static async Task HandshakeAsync(
+            Stream stream,
+            string destHost,
+            int destPort,
+            string username,
+            string password,
+            CancellationToken token)
+        {
+            bool offerUserPass = !string.IsNullOrWhiteSpace(username) && !string.IsNullOrWhiteSpace(password);
+            byte[] hello = offerUserPass
+                ? new byte[] { 0x05, 0x02, 0x00, 0x02 }
+                : new byte[] { 0x05, 0x01, 0x00 };
+            await stream.WriteAsync(hello, token).ConfigureAwait(false);
             byte[] method = await ReadExactAsync(stream, 2, token).ConfigureAwait(false);
-            if (method[0] != 0x05 || method[1] != 0x00)
-                throw new IOException($"SOCKS5 auth rejected ({method[0]:X2} {method[1]:X2})");
+            if (method[0] != 0x05)
+                throw new IOException($"SOCKS5 auth rejected ({method[0]:X2} {method[1]:X2}) ({destHost}:{destPort})");
+
+            if (method[1] == 0x02)
+            {
+                if (!offerUserPass)
+                    throw new IOException($"SOCKS5 auth rejected ({method[0]:X2} {method[1]:X2}) ({destHost}:{destPort})");
+
+                byte[] userBytes = Encoding.UTF8.GetBytes(username);
+                byte[] passBytes = Encoding.UTF8.GetBytes(password);
+                if (userBytes.Length > 255 || passBytes.Length > 255)
+                    throw new IOException("SOCKS5 credentials are too long");
+
+                byte[] auth = new byte[3 + userBytes.Length + passBytes.Length];
+                auth[0] = 0x01;
+                auth[1] = (byte)userBytes.Length;
+                Buffer.BlockCopy(userBytes, 0, auth, 2, userBytes.Length);
+                auth[2 + userBytes.Length] = (byte)passBytes.Length;
+                Buffer.BlockCopy(passBytes, 0, auth, 3 + userBytes.Length, passBytes.Length);
+                await stream.WriteAsync(auth, token).ConfigureAwait(false);
+                byte[] authReply = await ReadExactAsync(stream, 2, token).ConfigureAwait(false);
+                if (authReply[1] != 0x00)
+                    throw new IOException($"SOCKS5 username/password rejected ({destHost}:{destPort})");
+            }
+            else if (method[1] != 0x00)
+            {
+                throw new IOException($"SOCKS5 auth rejected ({method[0]:X2} {method[1]:X2}) ({destHost}:{destPort})");
+            }
 
             byte[] hostBytes = Encoding.ASCII.GetBytes(destHost ?? "");
             if (hostBytes.Length == 0 || hostBytes.Length > 255)

@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace InvisibleGorillaXRay.Core
 {
@@ -392,9 +393,9 @@ namespace InvisibleGorillaXRay.Core
             {
                 try
                 {
-                    using (var client = new TcpClient())
+                    using (var client = new TcpClient(AddressFamily.InterNetwork))
                     {
-                        client.Connect("127.0.0.1", port);
+                        client.Connect(IPAddress.Loopback, port);
                         DiagnosticLog.Write("WaitForPort", $"Port {port} is active after {elapsed}ms");
                         return true;
                     }
@@ -412,10 +413,16 @@ namespace InvisibleGorillaXRay.Core
 
         public void Stop()
         {
-            XRayCoreWrapper.StopServer();
-            torManager.Stop();
-            openFluxManager.Stop();
-            AnalyticsService.SendEvent(new StoppedEvent());
+            // OpenFlux first: StopServer is a no-op for that mode but can block native
+            // tun2socks teardown and never reach the sidecar kill.
+            try { openFluxManager.Stop(); }
+            catch (Exception ex) { DiagnosticLog.WriteException("Stop.OpenFlux", ex); }
+            try { torManager.Stop(); }
+            catch (Exception ex) { DiagnosticLog.WriteException("Stop.Tor", ex); }
+            try { _ = Task.Run(XRayCoreWrapper.StopServer); }
+            catch (Exception ex) { DiagnosticLog.WriteException("Stop.Server", ex); }
+            try { AnalyticsService.SendEvent(new StoppedEvent()); }
+            catch { }
         }
 
         public void Cancel()
@@ -650,6 +657,12 @@ namespace InvisibleGorillaXRay.Core
                     profile.DocUrl = OpenFluxUrl.Trim(profile.DocUrl);
                     profile.EncryptionKey = OpenFluxUrl.DeriveKey(profile.DocUrl);
                     Status start = openFluxManager.Start(profile, getLogPath.Invoke());
+                    for (int attempt = 0; start.Code != Code.SUCCESS && attempt < 2; attempt++)
+                    {
+                        DiagnosticLog.Write("Run", $"OpenFlux start retry {attempt + 1}: {start.Content}");
+                        Thread.Sleep(1000);
+                        start = openFluxManager.Start(profile, getLogPath.Invoke());
+                    }
                     if (start.Code != Code.SUCCESS)
                     {
                         throw new InvalidOperationException(

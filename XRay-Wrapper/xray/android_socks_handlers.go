@@ -29,11 +29,12 @@ const (
 	// max IP packet size - min IP header size - min UDP header size - min SOCKS5 header size
 	androidMaxUdpPayloadSize = 65535 - 20 - 8 - 7
 
-	// Yandex OpenFlux mux dies when a browser opens dozens of parallel TCP
-	// streams. Cap concurrent SOCKS relays so pages can finish.
-	androidMaxConcurrentSocks = 10
-	androidMaxConcurrentDials = 2
-	androidSocksIdleEvict     = 3 * time.Second
+	// Yandex OpenFlux mux dies on a Chrome flood, but 10/2 made refresh and
+	// video start wait on idle googlevideo shells. 24 streams / 6 dials is
+	// enough for a page + one video without starving the mux.
+	androidMaxConcurrentSocks = 24
+	androidMaxConcurrentDials = 6
+	androidSocksIdleEvict     = 2 * time.Second
 	androidSocksHotWindow     = 2 * time.Second
 	androidSocksReadIdle      = 20 * time.Second
 )
