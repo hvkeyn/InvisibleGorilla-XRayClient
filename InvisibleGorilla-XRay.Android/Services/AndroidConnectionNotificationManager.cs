@@ -146,6 +146,16 @@ namespace InvisibleGorillaXRay.Android.Services
             CancelNotification();
         }
 
+        internal static Notification BuildMinimalForegroundNotification(Context context)
+        {
+            lock (SyncRoot)
+            {
+                EnsureChannelLocked();
+            }
+
+            return BuildFallbackNotification(context);
+        }
+
         internal static Notification BuildForegroundNotification(Context context)
         {
             lock (SyncRoot)

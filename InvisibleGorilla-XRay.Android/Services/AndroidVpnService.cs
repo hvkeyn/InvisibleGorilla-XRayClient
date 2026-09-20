@@ -90,7 +90,7 @@ namespace InvisibleGorillaXRay.Android.Services
 
             try
             {
-                StartForegroundCompat();
+                StartForegroundFast();
                 _ = StartVpnAsync(intent!, startId);
                 return StartCommandResult.Sticky;
             }
@@ -272,10 +272,14 @@ namespace InvisibleGorillaXRay.Android.Services
                 $"Android VPN established with proxyPort={proxyPort}, tunAddress={tunAddress}, dns={dns}, udpEnabled={udpEnabled}, authEnabled={localProxyCredentials.HasValue}, appRulesMode={appRulesMode}, appPackages={string.Join(",", appPackages)}");
         }
 
-        private void StartForegroundCompat()
+        private void StartForegroundFast()
         {
-            Notification notification = AndroidConnectionNotificationManager.BuildForegroundNotification(this);
+            Notification notification = AndroidConnectionNotificationManager.BuildMinimalForegroundNotification(this);
+            StartForegroundCompat(notification);
+        }
 
+        private void StartForegroundCompat(Notification notification)
+        {
             if (Build.VERSION.SdkInt >= BuildVersionCodes.Q)
             {
                 StartForeground(

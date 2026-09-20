@@ -2129,17 +2129,14 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private bool TrySaveSettings(bool showSuccessMessage)
         {
-            EnsureSettingsControlsCreated();
-
-            // If the Settings panel was never opened this session, the controls hold no
-            // user input (they were never populated). Reading them here would wipe the
-            // persisted Tor bridges / ports, so keep the saved settings untouched.
             if (!isSettingsLoadedIntoControls)
             {
                 if (showSuccessMessage)
                     SetStatus(Localize("Lang.Android.Status.SettingsSaved"));
                 return true;
             }
+
+            EnsureSettingsControlsCreated();
 
             if (!TryParseProxyPort(ProxyPortInput.Text, out int proxyPort))
                 return false;
@@ -2407,7 +2404,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     ConnectionStateIndicatorDot.Background = StartingBrush;
                     ConnectionStateTitleText.Text = Localize("Lang.Status.WaitForRun");
                     ConnectionStateSubtitleText.Text = Localize("Lang.Android.Home.Subtitle.Starting");
-                    break;
+                    return;
 
                 case ConnectionState.Running:
                     ConnectionHeroGlowBorder.IsVisible = true;
@@ -2819,6 +2816,9 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void ShowSection(NavigationSection section)
         {
+            try { CloseAppRulesEditor(); } catch { }
+            try { CloseAppPicker(); } catch { }
+
             HomeSectionScroll.IsVisible = section == NavigationSection.Home;
             ServersSectionScroll.IsVisible = section == NavigationSection.Servers;
             GoidaSectionScroll.IsVisible = section == NavigationSection.Goida;

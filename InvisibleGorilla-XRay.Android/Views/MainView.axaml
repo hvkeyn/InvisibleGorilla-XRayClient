@@ -1920,8 +1920,8 @@
 
         <Border x:Name="AppRulesEditorOverlayBorder"
                 Grid.Row="1"
-                Grid.RowSpan="3"
                 Background="#B0000000"
+                ZIndex="25"
                 IsVisible="False">
             <Grid Margin="14">
                 <Border Padding="16,14"
@@ -1931,8 +1931,32 @@
                         BorderBrush="{StaticResource SurfaceBright}"
                         BorderThickness="1"
                         CornerRadius="14">
-                    <Grid RowDefinitions="*,50">
-                        <ScrollViewer Grid.Row="0"
+                    <Grid RowDefinitions="50,*">
+                        <Grid Grid.Row="0"
+                              ColumnDefinitions="*,10,*"
+                              Margin="0,0,0,10">
+                            <Button x:Name="CancelAppRulesEditorButton"
+                                    Grid.Column="0"
+                                    Height="40"
+                                    Theme="{StaticResource GrayActionButton}"
+                                    Click="OnCancelAppRulesEditorClick">
+                                <TextBlock Text="Cancel"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center" />
+                            </Button>
+                            <Button x:Name="SaveAppRulesEditorButton"
+                                    Grid.Column="2"
+                                    Height="40"
+                                    Theme="{StaticResource GreenActionButton}"
+                                    Foreground="#252526"
+                                    FontWeight="Bold"
+                                    Click="OnSaveAppRulesEditorClick">
+                                <TextBlock Text="Save"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center" />
+                            </Button>
+                        </Grid>
+                        <ScrollViewer Grid.Row="1"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
                             <StackPanel Spacing="10">
@@ -2043,30 +2067,6 @@
                                 </Button>
         </StackPanel>
     </ScrollViewer>
-
-                        <Grid Grid.Row="1"
-                              ColumnDefinitions="*,10,*">
-                            <Button x:Name="CancelAppRulesEditorButton"
-                                    Grid.Column="0"
-                                    Height="40"
-                                    Theme="{StaticResource GrayActionButton}"
-                                    Click="OnCancelAppRulesEditorClick">
-                                <TextBlock Text="Cancel"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center" />
-                            </Button>
-                            <Button x:Name="SaveAppRulesEditorButton"
-                                    Grid.Column="2"
-                                    Height="40"
-                                    Theme="{StaticResource GreenActionButton}"
-                                    Foreground="#252526"
-                                    FontWeight="Bold"
-                                    Click="OnSaveAppRulesEditorClick">
-                                <TextBlock Text="Save app rules"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center" />
-                            </Button>
-                        </Grid>
                     </Grid>
                 </Border>
             </Grid>
@@ -2074,8 +2074,8 @@
 
         <Border x:Name="AppPickerOverlayBorder"
                 Grid.Row="1"
-                Grid.RowSpan="3"
                 Background="#B0000000"
+                ZIndex="26"
                 IsVisible="False">
             <Grid Margin="14">
                 <Border Padding="16,14"
