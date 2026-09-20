@@ -84,8 +84,9 @@ namespace InvisibleGorillaXRay.Android.Services
 
                 EnsureChannelLocked();
                 EnsureTimerLocked();
-                PublishNotificationLocked();
             }
+
+            PublishNotification();
         }
 
         public static void MarkRunning()
@@ -97,8 +98,9 @@ namespace InvisibleGorillaXRay.Android.Services
 
                 currentState = AndroidConnectionNotificationState.Running;
                 DiagnosticLog.Write("AndroidConnectionNotification", $"MarkRunning config={currentSession.ConfigName}");
-                PublishNotificationLocked();
             }
+
+            PublishNotification();
         }
 
         public static void MarkStopping()
@@ -110,8 +112,9 @@ namespace InvisibleGorillaXRay.Android.Services
 
                 currentState = AndroidConnectionNotificationState.Stopping;
                 DiagnosticLog.Write("AndroidConnectionNotification", $"MarkStopping config={currentSession.ConfigName}");
-                PublishNotificationLocked();
             }
+
+            PublishNotification();
         }
 
         public static void MarkStopped()
@@ -125,8 +128,9 @@ namespace InvisibleGorillaXRay.Android.Services
                 updateTimer = null;
                 currentState = AndroidConnectionNotificationState.Stopped;
                 DiagnosticLog.Write("AndroidConnectionNotification", $"MarkStopped config={currentSession.ConfigName}");
-                PublishNotificationLocked();
             }
+
+            PublishNotification();
         }
 
         public static void Stop()
@@ -137,8 +141,9 @@ namespace InvisibleGorillaXRay.Android.Services
                 updateTimer = null;
                 DiagnosticLog.Write("AndroidConnectionNotification", "Stop and clear notification state");
                 currentSession = null;
-                CancelNotificationLocked();
             }
+
+            CancelNotification();
         }
 
         internal static Notification BuildForegroundNotification(Context context)
@@ -194,19 +199,13 @@ namespace InvisibleGorillaXRay.Android.Services
 
         private static void OnTimerTick()
         {
-            lock (SyncRoot)
-            {
-                if (currentSession == null)
-                    return;
-
-                PublishNotificationLocked();
-            }
+            PublishNotification();
         }
 
-        private static void PublishNotificationLocked()
+        private static void PublishNotification()
         {
             Context? context = global::Android.App.Application.Context;
-            if (context == null || currentSession == null)
+            if (context == null)
                 return;
 
             if (!CanPostNotifications(context))
@@ -215,9 +214,17 @@ namespace InvisibleGorillaXRay.Android.Services
             if (context.GetSystemService(Context.NotificationService) is not NotificationManager manager)
                 return;
 
+            Notification notification;
+            lock (SyncRoot)
+            {
+                if (currentSession == null)
+                    return;
+                notification = BuildNotificationLocked(context);
+            }
+
             try
             {
-                manager.Notify(NotificationId, BuildNotificationLocked(context));
+                manager.Notify(NotificationId, notification);
             }
             catch (Exception ex)
             {
@@ -225,7 +232,7 @@ namespace InvisibleGorillaXRay.Android.Services
             }
         }
 
-        private static void CancelNotificationLocked()
+        private static void CancelNotification()
         {
             Context? context = global::Android.App.Application.Context;
             if (context?.GetSystemService(Context.NotificationService) is not NotificationManager manager)

@@ -179,7 +179,15 @@ namespace InvisibleGorillaXRay.Android
             base.OnResume();
             SetCurrentActivity(this);
             IsInForeground = true;
-            try { ForegroundChanged?.Invoke(true); } catch { }
+            // FocusEvent (hasFocus true/false) runs on this looper. Pushing Avalonia
+            // connection-info work in the same turn caused the 10s "app frozen" ANR
+            // when the user came back from Chrome/YouTube after a second VLESS RUN.
+            new Handler(Looper.MainLooper).PostDelayed(() =>
+            {
+                if (!IsInForeground)
+                    return;
+                try { ForegroundChanged?.Invoke(true); } catch { }
+            }, 400);
         }
 
         protected override void OnPause()

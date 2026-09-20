@@ -52,6 +52,10 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.23
+
+- **Android no longer ANRs when you come back from Chrome/YouTube after a second VLESS RUN** — VPN notification updates no longer block the main looper, and the IP widget waits until window focus is done.
+
 ## What's new in v3.6.22
 
 - **Android STOP/RUN no longer freezes or ANRs** — teardown stays off the UI thread, OpenFlux kill no longer takes the app process group with it, and leaving the app for a site like 2ip.io does not hang the main looper.

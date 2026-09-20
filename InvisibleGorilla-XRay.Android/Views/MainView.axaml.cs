@@ -2551,10 +2551,32 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void OnAppForegroundChanged(bool foreground)
         {
-            if (foreground)
+            if (!foreground)
+            {
+                try { connectionInfoLookupCancellation?.Cancel(); } catch { }
+                try { connectionInfoTimer?.Stop(); } catch { }
                 return;
+            }
 
-            try { connectionInfoLookupCancellation?.Cancel(); } catch { }
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(800).ConfigureAwait(false);
+                    if (!global::InvisibleGorillaXRay.Android.MainActivity.IsInForeground)
+                        return;
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (!global::InvisibleGorillaXRay.Android.MainActivity.IsInForeground)
+                            return;
+                        try { connectionInfoTimer?.Start(); } catch { }
+                        _ = RefreshConnectionInfoAsync();
+                    }, DispatcherPriority.Background);
+                }
+                catch
+                {
+                }
+            });
         }
 
         private async Task RefreshConnectionInfoAsync()
@@ -3163,7 +3185,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 if (epoch != Volatile.Read(ref connectionEpoch))
                     return;
                 action();
-            });
+            }, DispatcherPriority.Background);
         }
 
         private void OnRunClick(object? sender, RoutedEventArgs e)

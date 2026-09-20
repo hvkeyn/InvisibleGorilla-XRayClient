@@ -221,13 +221,13 @@ namespace InvisibleGorillaXRay.Android.Views
                 if (token.IsCancellationRequested)
                     return;
 
-                await Dispatcher.UIThread.InvokeAsync(() =>
+                Dispatcher.UIThread.Post(() =>
                 {
                     if (!string.IsNullOrWhiteSpace(check.Error))
                         OpenFluxStatusText.Text = MapOpenFluxCheckError(check.Error);
                     else if (check.LatencyMs > 0)
                         OpenFluxStatusText.Text = string.Format(Localize("Lang.OpenFlux.Status.UrlOk"), check.LatencyMs);
-                });
+                }, DispatcherPriority.Background);
             }
             catch (TaskCanceledException)
             {

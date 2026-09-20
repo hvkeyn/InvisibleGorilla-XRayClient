@@ -333,14 +333,6 @@ namespace InvisibleGorillaXRay.Android.Services
             StopVpn(message);
         }
 
-        private void StopVpn(string reason)
-        {
-            lock (SyncRoot)
-            {
-                StopVpnCore(reason);
-            }
-        }
-
         public override void OnRevoke()
         {
             DiagnosticLog.Write("AndroidVpnService", "VPN revoked");
@@ -386,7 +378,18 @@ namespace InvisibleGorillaXRay.Android.Services
             try { OpenFluxHttpBridge.Shared.Stop(); } catch { }
 
             AndroidVpnServiceController.NotifyStopped(reason);
+        }
 
+        private void StopVpn(string reason)
+        {
+            lock (SyncRoot)
+            {
+                StopVpnCore(reason);
+            }
+
+            // Binder calls must not run while SyncRoot is held: OnStartCommand
+            // (main looper) waits on the same lock for StartForeground, which is
+            // the FocusEvent ANR when the user switches back to Gorilla.
             try
             {
                 StopForeground(StopForegroundFlags.Remove);
