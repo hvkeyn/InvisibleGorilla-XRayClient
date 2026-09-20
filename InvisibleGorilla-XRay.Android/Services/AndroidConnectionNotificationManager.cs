@@ -56,6 +56,7 @@ namespace InvisibleGorillaXRay.Android.Services
         private static Timer? updateTimer;
         private static AndroidConnectionNotificationSession? currentSession;
         private static AndroidConnectionNotificationState currentState;
+        private static int sessionGeneration;
         private static DateTime startedAtUtc;
         private static DateTime lastSampleUtc;
         private static long baseRxBytes;
@@ -64,14 +65,16 @@ namespace InvisibleGorillaXRay.Android.Services
         private static long lastTxBytes;
         private static bool channelCreated;
 
-        public static void ShowStarting(AndroidConnectionNotificationSession session)
+        public static int ShowStarting(AndroidConnectionNotificationSession session)
         {
+            int generation;
             lock (SyncRoot)
             {
                 currentSession = session;
                 currentState = AndroidConnectionNotificationState.Starting;
+                generation = ++sessionGeneration;
                 startedAtUtc = DateTime.UtcNow;
-                DiagnosticLog.Write("AndroidConnectionNotification", $"ShowStarting config={session.ConfigName}");
+                DiagnosticLog.Write("AndroidConnectionNotification", $"ShowStarting config={session.ConfigName} gen={generation}");
 
                 long rxBytes = ReadUidRxBytes();
                 long txBytes = ReadUidTxBytes();
@@ -87,6 +90,7 @@ namespace InvisibleGorillaXRay.Android.Services
             }
 
             PublishNotification();
+            return generation;
         }
 
         public static void MarkRunning()
@@ -117,10 +121,13 @@ namespace InvisibleGorillaXRay.Android.Services
             PublishNotification();
         }
 
-        public static void MarkStopped()
+        public static void MarkStopped(int expectedGeneration = -1)
         {
             lock (SyncRoot)
             {
+                if (expectedGeneration >= 0 && expectedGeneration != sessionGeneration)
+                    return;
+
                 if (currentSession == null)
                     return;
 
@@ -135,15 +142,25 @@ namespace InvisibleGorillaXRay.Android.Services
 
         public static void Stop()
         {
+            MarkStopped();
+        }
+
+        public static void Clear()
+        {
             lock (SyncRoot)
             {
                 updateTimer?.Dispose();
                 updateTimer = null;
-                DiagnosticLog.Write("AndroidConnectionNotification", "Stop and clear notification state");
+                DiagnosticLog.Write("AndroidConnectionNotification", "Clear notification state");
                 currentSession = null;
             }
 
             CancelNotification();
+        }
+
+        public static void Republish()
+        {
+            PublishNotification(refreshForeground: false);
         }
 
         internal static Notification BuildMinimalForegroundNotification(Context context)
@@ -209,11 +226,14 @@ namespace InvisibleGorillaXRay.Android.Services
 
         private static void OnTimerTick()
         {
-            PublishNotification();
+            PublishNotification(refreshForeground: false);
         }
 
-        private static void PublishNotification()
+        private static void PublishNotification(bool refreshForeground = true)
         {
+            if (refreshForeground && AndroidVpnService.TryRefreshForegroundNotification())
+                return;
+
             Context? context = global::Android.App.Application.Context;
             if (context == null)
                 return;
@@ -299,7 +319,7 @@ namespace InvisibleGorillaXRay.Android.Services
                 : new Notification.Builder(context);
 
             builder
-                .SetContentTitle(session.Text.AppName)
+                .SetContentTitle($"{session.Text.AppName} — {stateText}")
                 .SetContentText(contentText)
                 .SetStyle(new Notification.BigTextStyle().BigText(expandedText.ToString()))
                 .SetSmallIcon(Resource.Drawable.ic_notification_connection)

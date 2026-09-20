@@ -42,6 +42,7 @@ namespace InvisibleGorillaXRay.Android.Services
         private const int DefaultIpv6PrefixLength = 126;
         private static readonly object SyncRoot = new();
         private static AndroidVpnService? current;
+        private static int vpnGeneration;
 
         private Timer? healthTimer;
         private int healthGeneration;
@@ -74,6 +75,12 @@ namespace InvisibleGorillaXRay.Android.Services
             return intent;
         }
 
+        private static bool IsMainLooper()
+        {
+            Looper? main = Looper.MainLooper;
+            return main != null && Looper.MyLooper() == main;
+        }
+
         internal static void StopFromClient(string reason)
         {
             AndroidVpnService? service = current;
@@ -83,11 +90,36 @@ namespace InvisibleGorillaXRay.Android.Services
                 return;
             }
 
-            _ = Task.Run(() =>
+            int generation = Volatile.Read(ref vpnGeneration);
+            void RunStop()
             {
-                try { service.StopVpn(reason); }
+                try { service.StopVpn(reason, generation); }
                 catch (Exception ex) { DiagnosticLog.WriteException("AndroidVpnService.StopFromClient", ex); }
-            });
+            }
+
+            if (IsMainLooper())
+                _ = Task.Run(RunStop);
+            else
+                RunStop();
+        }
+
+        internal static bool TryRefreshForegroundNotification()
+        {
+            AndroidVpnService? service = current;
+            if (service == null)
+                return false;
+
+            try
+            {
+                Notification notification = AndroidConnectionNotificationManager.BuildForegroundNotification(service);
+                service.StartForegroundCompat(notification);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("AndroidVpnService.RefreshNotification", ex);
+                return false;
+            }
         }
 
         public override void OnCreate()
@@ -103,9 +135,10 @@ namespace InvisibleGorillaXRay.Android.Services
 
             if (string.Equals(action, ActionStop, StringComparison.Ordinal))
             {
+                int stopGeneration = Volatile.Read(ref vpnGeneration);
                 _ = Task.Run(() =>
                 {
-                    try { StopVpn("Stop requested"); }
+                    try { StopVpn("Stop requested", stopGeneration); }
                     catch (Exception ex) { DiagnosticLog.WriteException("AndroidVpnService.StopQueued", ex); }
                 });
                 return StartCommandResult.NotSticky;
@@ -116,20 +149,28 @@ namespace InvisibleGorillaXRay.Android.Services
 
             try
             {
+                int startGeneration = Interlocked.Increment(ref vpnGeneration);
                 StartForegroundFast();
                 Intent capturedIntent = intent!;
                 _ = Task.Run(() =>
                 {
                     try
                     {
+                        if (Volatile.Read(ref vpnGeneration) != startGeneration)
+                            return;
+
                         StartVpn(capturedIntent);
+                        if (Volatile.Read(ref vpnGeneration) != startGeneration)
+                            return;
+
                         AndroidVpnServiceController.NotifyStarted();
+                        TryRefreshForegroundNotification();
                     }
                     catch (Exception ex)
                     {
                         DiagnosticLog.WriteException("AndroidVpnService.StartQueued", ex);
                         AndroidVpnServiceController.NotifyStartFailed(ex.Message);
-                        try { StopVpn(ex.Message); } catch { }
+                        try { StopVpn(ex.Message, startGeneration); } catch { }
                     }
                 });
                 return StartCommandResult.Sticky;
@@ -286,11 +327,11 @@ namespace InvisibleGorillaXRay.Android.Services
 
         private void StartForegroundFast()
         {
-            Notification notification = AndroidConnectionNotificationManager.BuildMinimalForegroundNotification(this);
+            Notification notification = AndroidConnectionNotificationManager.BuildForegroundNotification(this);
             StartForegroundCompat(notification);
         }
 
-        private void StartForegroundCompat(Notification notification)
+        internal void StartForegroundCompat(Notification notification)
         {
             if (Build.VERSION.SdkInt >= BuildVersionCodes.Q)
             {
@@ -346,15 +387,16 @@ namespace InvisibleGorillaXRay.Android.Services
             string message = XRayCoreWrapper.GetAndroidTunnelLastError()
                 ?? "Android tunnel bridge stopped unexpectedly.";
             DiagnosticLog.Write("AndroidVpnService", message);
-            StopVpn(message);
+            StopVpn(message, Volatile.Read(ref vpnGeneration));
         }
 
         public override void OnRevoke()
         {
             DiagnosticLog.Write("AndroidVpnService", "VPN revoked");
+            int revokeGeneration = Volatile.Read(ref vpnGeneration);
             _ = Task.Run(() =>
             {
-                try { StopVpn("Android VPN revoked"); }
+                try { StopVpn("Android VPN revoked", revokeGeneration); }
                 catch (Exception ex) { DiagnosticLog.WriteException("AndroidVpnService.OnRevoke", ex); }
             });
             base.OnRevoke();
@@ -396,15 +438,31 @@ namespace InvisibleGorillaXRay.Android.Services
             AndroidVpnServiceController.NotifyStopped(reason);
         }
 
-        private void StopVpn(string reason)
+        private void StopVpn(string reason, int expectedGeneration = -1)
         {
+            int currentGeneration = Volatile.Read(ref vpnGeneration);
+            if (expectedGeneration >= 0 && expectedGeneration != currentGeneration)
+            {
+                DiagnosticLog.Write(
+                    "AndroidVpnService",
+                    $"Skip stale stop gen={expectedGeneration} current={currentGeneration} reason={reason}");
+                return;
+            }
+
             lock (SyncRoot)
             {
+                currentGeneration = Volatile.Read(ref vpnGeneration);
+                if (expectedGeneration >= 0 && expectedGeneration != currentGeneration)
+                    return;
+
                 StopVpnCore(reason);
             }
 
-            // Must stay off the main looper. Posting StopForeground/StopSelf there
-            // is the delayed STOP ANR (3-4s freeze, then FocusEvent ANR).
+            if (expectedGeneration >= 0 && expectedGeneration != Volatile.Read(ref vpnGeneration))
+                return;
+
+            AndroidConnectionNotificationManager.MarkStopped();
+
             try
             {
                 StopForeground(StopForegroundFlags.Detach);
@@ -414,7 +472,7 @@ namespace InvisibleGorillaXRay.Android.Services
                 DiagnosticLog.WriteException("AndroidVpnService.StopForeground", ex);
             }
 
-            AndroidConnectionNotificationManager.Stop();
+            AndroidConnectionNotificationManager.Republish();
         }
 
         private static string[] SplitDnsServers(string dns)

@@ -52,6 +52,10 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.27
+
+- **Android status in the notification shade follows RUN/STOP** — the foreground notification is refreshed with the live state instead of staying on "Preparing…".
+
 ## What's new in v3.6.26
 
 - **Android STOP/RUN no longer ANRs** — VPN start and stop stay off the UI thread. `StopForeground` is not posted to the main looper, so STOP does not freeze 3–4 seconds later or trip FocusEvent when you come back.

@@ -3212,6 +3212,7 @@ namespace InvisibleGorillaXRay.Android.Views
             bool started = false;
             string? failureMessage = null;
             string activeConfig = string.Empty;
+            int notificationGeneration = 0;
             try
             {
                 if (!connectionOpLock.Wait(15000))
@@ -3264,7 +3265,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 }
 
                 activeConfig = configStatus.Content?.ToString() ?? string.Empty;
-                AndroidConnectionNotificationManager.ShowStarting(
+                notificationGeneration = AndroidConnectionNotificationManager.ShowStarting(
                     BuildConnectionNotificationSession(activeConfig, notificationText));
 
                 Status modeStatus = core.EnableMode();
@@ -3317,7 +3318,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 }
 
                 if (!AndroidVpnServiceController.IsRunning && !AndroidVpnServiceController.IsStopping)
-                    AndroidConnectionNotificationManager.Stop();
+                    AndroidConnectionNotificationManager.MarkStopped(notificationGeneration);
 
                 if (started)
                     LogGoidaConnectionEvent(connected: false);
@@ -3361,7 +3362,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 return;
             }
 
-            Interlocked.Increment(ref connectionEpoch);
+            int stopEpoch = Interlocked.Increment(ref connectionEpoch);
             isStopWorkerBusy = true;
             isRunWorkerBusy = false;
             global::InvisibleGorillaXRay.Android.MainActivity.SuppressForegroundChangedUntilUtc =
@@ -3374,7 +3375,10 @@ namespace InvisibleGorillaXRay.Android.Views
             {
                 try
                 {
-                    AndroidConnectionNotificationManager.Stop();
+                    if (stopEpoch != Volatile.Read(ref connectionEpoch))
+                        return;
+
+                    AndroidConnectionNotificationManager.MarkStopping();
                     StopCoreAndVpn();
                 }
                 catch (Exception ex) { DiagnosticLog.WriteException("MainView.RequestStop", ex); }
