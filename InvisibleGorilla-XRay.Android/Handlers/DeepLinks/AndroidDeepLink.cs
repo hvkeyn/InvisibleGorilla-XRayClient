@@ -41,6 +41,10 @@ namespace InvisibleGorillaXRay.Android.Handlers.DeepLinks
         private static Action<AndroidPendingImport>? onImportReceived;
 
         public static Action<string> OnReceiveArg = _ => { };
+        internal static Action? OnDebugRunRequested;
+        internal static Action? OnDebugStopRequested;
+        internal static Action? OnDebugSelectOpenFluxRequested;
+        internal static Action? OnDebugSelectVlessRequested;
 
         internal static void Register(Action<AndroidPendingImport> handler)
         {
@@ -68,6 +72,34 @@ namespace InvisibleGorillaXRay.Android.Handlers.DeepLinks
             string normalizedValue = value?.Trim() ?? string.Empty;
             if (string.IsNullOrWhiteSpace(normalizedValue))
                 return false;
+
+            if (normalizedValue.Equals("invxray://run", StringComparison.OrdinalIgnoreCase)
+                || normalizedValue.Equals("invxray://run/", StringComparison.OrdinalIgnoreCase))
+            {
+                Dispatcher.UIThread.Post(() => OnDebugRunRequested?.Invoke());
+                return true;
+            }
+
+            if (normalizedValue.Equals("invxray://stop", StringComparison.OrdinalIgnoreCase)
+                || normalizedValue.Equals("invxray://stop/", StringComparison.OrdinalIgnoreCase))
+            {
+                Dispatcher.UIThread.Post(() => OnDebugStopRequested?.Invoke());
+                return true;
+            }
+
+            if (normalizedValue.Equals("invxray://openflux", StringComparison.OrdinalIgnoreCase)
+                || normalizedValue.Equals("invxray://openflux/", StringComparison.OrdinalIgnoreCase))
+            {
+                Dispatcher.UIThread.Post(() => OnDebugSelectOpenFluxRequested?.Invoke());
+                return true;
+            }
+
+            if (normalizedValue.Equals("invxray://vless", StringComparison.OrdinalIgnoreCase)
+                || normalizedValue.Equals("invxray://vless/", StringComparison.OrdinalIgnoreCase))
+            {
+                Dispatcher.UIThread.Post(() => OnDebugSelectVlessRequested?.Invoke());
+                return true;
+            }
 
             if (normalizedValue.StartsWith(InvisibleGorillaXRay.Values.DeepLink.CONFIG, StringComparison.OrdinalIgnoreCase))
             {

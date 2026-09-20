@@ -61,8 +61,7 @@ namespace InvisibleGorillaXRay.Services
         private static readonly string[] TunnelLookupEndpoints =
         {
             "https://api.ipify.org?format=json",
-            "https://ipwho.is/",
-            "https://ipinfo.io/json"
+            "https://ipwho.is/"
         };
 
         private static readonly SemaphoreSlim LookupGate = new(1, 1);
@@ -76,7 +75,7 @@ namespace InvisibleGorillaXRay.Services
             {
                 bool throughTunnel = proxy != null;
                 string[] endpoints = throughTunnel ? TunnelLookupEndpoints : LookupEndpoints;
-                int timeoutSeconds = throughTunnel ? 18 : 12;
+                int timeoutSeconds = throughTunnel ? 8 : 12;
                 ConnectionInfo lastFailure = new ConnectionInfo { Ok = false, Error = "all endpoints failed" };
                 ConnectionInfo ipOnlyFallback = null;
 

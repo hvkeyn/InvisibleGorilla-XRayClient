@@ -23,6 +23,7 @@
     <x:String x:Key="Lang.ConnectionInfo.ProtectedTor">IP changed. Traffic exits through the Tor bridge.</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Exposed">IP did not change. Traffic may still be exposed.</x:String>
     <x:String x:Key="Lang.ConnectionInfo.TunnelProbeUnavailable">Could not verify IP through the tunnel. Tap Refresh.</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.OpenFluxNoLocation">OpenFlux is connected. City is optional — ping in server settings is the live check.</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Idle">Not connected. This IP is used as the baseline.</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Mode">Mode:</x:String>
     <x:String x:Key="Lang.ConnectionInfo.IpLabel">IP address</x:String>

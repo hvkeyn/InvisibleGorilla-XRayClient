@@ -52,6 +52,37 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.42
+
+- **Android no longer freezes on STOP or on the next RUN.** The Go tun2socks DNS path called back into managed code to run `VpnService.protect()`; that binder call blocked on the system_server VPN lock during teardown and stalled the whole Mono runtime (measured: 26 s of a completely frozen app, followed by an ANR). The app is already excluded from its own TUN in every app-rules mode, so the callback is no longer registered, and it is unbound before teardown on the devices that still need it. Teardown now takes 0.3-2 s with a responsive UI.
+- **OpenFlux home widget shows the exit IP** through SOCKS once after RUN (same channel as traffic). City lookup stays off the mux.
+- **Windows / Linux / macOS** ship the same Core: OpenFlux no longer probes ipify at start, YouTube is not prewarmed on the mux, and STOP times each teardown step.
+
+## What's new in v3.6.41
+
+- **Android OpenFlux home widget reads the exit IP through SOCKS once** after RUN. STOP tears down leftover VPN/OpenFlux so VLESS RUN does not sit on Loading config until timeout.
+
+## What's new in v3.6.40
+
+- **Android OpenFlux home widget reads the exit IP through SOCKS once** after RUN, then looks up city off-mux. STOP kills leftover OpenFlux without freezing the UI so VLESS can start next.
+
+## What's new in v3.6.39
+
+- **Android OpenFlux home widget reads the exit IP through SOCKS once** after RUN, then looks up city off-mux. Switching to VLESS waits for OpenFlux/TUN teardown so RUN does not hang.
+
+## What's new in v3.6.37
+
+- **Android OpenFlux sidecar matches the live exit again** — v3.6.35 rebuilt the client from older source, so SOCKS accepted connections but the document mux never forwarded. Traffic path is the same as the 3.6.27 sidecar that last worked.
+
+## What's new in v3.6.36
+
+- **Android OpenFlux no longer pins Chrome to a dead HTTP proxy** — VpnService `setHttpProxy` to `10.0.236.10:18080` never reached the TUN fd, so Chrome had no internet while Gorilla showed Running. Traffic now uses the same SOCKS tun2socks path as VLESS. Mux limiting stays.
+
+## What's new in v3.6.35
+
+- **Android OpenFlux no longer kills its own mux at RUN** — startup does not ipify/YouTube through the single pipe, and the sidecar no longer drops idle streams after 20s. Ping in server settings is the live check; the home IP line is optional.
+- **Android OpenFlux and VLESS start path restored to v3.6.27** — experimental IP probes after 3.6.27 made OpenFlux dead and VLESS intermittent. Shade RUN/STOP status from 3.6.27 stays.
+
 ## What's new in v3.6.27
 
 - **Android status in the notification shade follows RUN/STOP** — the foreground notification is refreshed with the live state instead of staying on "Preparing…".

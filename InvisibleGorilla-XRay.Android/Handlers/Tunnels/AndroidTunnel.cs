@@ -28,23 +28,22 @@ namespace InvisibleGorillaXRay.Android.Handlers.Tunnels
 
             (AppRulesMode appRulesMode, string[] appPackages) = GetAppRulePackages();
             bool openFlux = IsOpenFluxConfig();
-            int httpProxyPort = 0;
             if (openFlux)
             {
                 DiagnosticLog.Write(
                     "AndroidTunnel",
-                    "OpenFlux TUN: IPv4-only, UDP associate disabled (Yandex mux dies on SOCKS UDP/IPv6 floods)");
-                httpProxyPort = OpenFluxHttpProxyPort;
+                    "OpenFlux TUN: IPv4-only, UDP associate disabled, no VpnService HTTP proxy (Chrome PAC to 10.0.236.10:18080 never hits the TUN fd)");
             }
 
             Status startStatus = AndroidVpnServiceController.Start(new AndroidVpnStartOptions
             {
                 ProxyPort = port,
-                HttpProxyPort = httpProxyPort,
+                HttpProxyPort = 0,
                 ProxyUsername = localProxyCredentials?.Username ?? string.Empty,
                 ProxyPassword = localProxyCredentials?.Password ?? string.Empty,
                 UdpEnabled = !openFlux,
                 EnableIpv6 = !openFlux,
+                LimitMux = openFlux,
                 TunAddress = address,
                 // DNS must not be the TUN address itself: packets to 10.0.236.10
                 // never appear on the TUN fd, so names never resolve.

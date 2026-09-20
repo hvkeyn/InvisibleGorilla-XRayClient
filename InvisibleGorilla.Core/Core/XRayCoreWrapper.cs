@@ -177,8 +177,10 @@ namespace InvisibleGorillaXRay.Core
 
             if (protect == null)
             {
-                androidProtectDelegate = null;
+                // Clear the native pointer first: dropping the delegate while the Go side can
+                // still reach it would let the GC collect a callback that is about to be called.
                 SetAndroidSocketProtectNative(IntPtr.Zero);
+                androidProtectDelegate = null;
                 return;
             }
 

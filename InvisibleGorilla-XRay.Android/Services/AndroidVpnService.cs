@@ -28,6 +28,7 @@ namespace InvisibleGorillaXRay.Android.Services
         private const string ActionStop = "io.invisiblegorilla.xray.action.STOP_VPN";
         private const string ExtraProxyPort = "proxy_port";
         private const string ExtraHttpProxyPort = "http_proxy_port";
+        private const string ExtraLimitMux = "limit_mux";
         private const string ExtraProxyUsername = "proxy_username";
         private const string ExtraProxyPassword = "proxy_password";
         private const string ExtraUdpEnabled = "udp_enabled";
@@ -44,6 +45,8 @@ namespace InvisibleGorillaXRay.Android.Services
         private static AndroidVpnService? current;
         private static int vpnGeneration;
 
+        private static int protectAllowed;
+
         private Timer? healthTimer;
         private int healthGeneration;
         private int healthMisses;
@@ -55,6 +58,7 @@ namespace InvisibleGorillaXRay.Android.Services
             intent.SetAction(ActionStart);
             intent.PutExtra(ExtraProxyPort, options.ProxyPort);
             intent.PutExtra(ExtraHttpProxyPort, options.HttpProxyPort);
+            intent.PutExtra(ExtraLimitMux, options.LimitMux);
             intent.PutExtra(ExtraProxyUsername, options.ProxyUsername);
             intent.PutExtra(ExtraProxyPassword, options.ProxyPassword);
             intent.PutExtra(ExtraUdpEnabled, options.UdpEnabled);
@@ -149,6 +153,9 @@ namespace InvisibleGorillaXRay.Android.Services
 
             try
             {
+                try { StopVpn("Replaced by new start"); }
+                catch (Exception ex) { DiagnosticLog.WriteException("AndroidVpnService.StopBeforeStart", ex); }
+
                 int startGeneration = Interlocked.Increment(ref vpnGeneration);
                 StartForegroundFast();
                 Intent capturedIntent = intent!;
@@ -207,6 +214,7 @@ namespace InvisibleGorillaXRay.Android.Services
 
             int proxyPort = intent.GetIntExtra(ExtraProxyPort, 0);
             int httpProxyPort = intent.GetIntExtra(ExtraHttpProxyPort, 0);
+            bool limitMux = intent.GetBooleanExtra(ExtraLimitMux, httpProxyPort > 0);
             if (proxyPort <= 0)
                 throw new InvalidOperationException("Android VPN proxy port is missing.");
 
@@ -267,7 +275,7 @@ namespace InvisibleGorillaXRay.Android.Services
             else
                 DiagnosticLog.Write("AndroidVpnService", "IPv6 TUN routes skipped (OpenFlux / IPv4-only)");
 
-            ApplyApplicationRules(builder, appRulesMode, appPackages);
+            bool ownProcessExcluded = ApplyApplicationRules(builder, appRulesMode, appPackages);
 
             DiagnosticLog.Write(
                 "AndroidVpnService",
@@ -304,13 +312,31 @@ namespace InvisibleGorillaXRay.Android.Services
                     }
                 }
 
-                XRayCoreWrapper.BindAndroidSocketProtect(Protect);
+                // Every reverse call from the Go tun2socks threads into managed code attaches
+                // that Go thread to the Mono runtime, and a Mono stop-the-world then has to
+                // suspend it. When VpnService.protect() blocks on the system_server VPN lock
+                // (which happens exactly while the tunnel is being torn down) the whole app
+                // freezes until that binder call returns. The app is never routed into its own
+                // TUN — it is disallowed in bypass mode and skipped in whitelist mode — so the
+                // callback is only registered on the devices where that exclusion failed.
+                if (ownProcessExcluded)
+                {
+                    XRayCoreWrapper.BindAndroidSocketProtect(null);
+                    DiagnosticLog.Write("AndroidVpnService", "Socket protect callback not needed (own process excluded from TUN)");
+                }
+                else
+                {
+                    Volatile.Write(ref protectAllowed, 1);
+                    XRayCoreWrapper.BindAndroidSocketProtect(ProtectSocketSafe);
+                    DiagnosticLog.Write("AndroidVpnService", "Socket protect callback bound (own process is inside the TUN)");
+                }
+
                 string? bridgeError = XRayCoreWrapper.StartAndroidTunnel(
                     tunFd,
                     proxyPort,
                     udpEnabled,
                     localProxyCredentials,
-                    limitMux: httpProxyPort > 0);
+                    limitMux: limitMux);
                 if (!string.IsNullOrWhiteSpace(bridgeError))
                 {
                     XRayCoreWrapper.StopAndroidTunnel();
@@ -402,11 +428,37 @@ namespace InvisibleGorillaXRay.Android.Services
             base.OnRevoke();
         }
 
+        private bool ProtectSocketSafe(int fileDescriptor)
+        {
+            if (fileDescriptor <= 0 || Volatile.Read(ref protectAllowed) == 0)
+                return false;
+
+            try
+            {
+                return Protect(fileDescriptor);
+            }
+            catch (Exception ex)
+            {
+                // This runs on a Go thread; letting the exception escape into cgo kills the process.
+                DiagnosticLog.WriteException("AndroidVpnService.Protect", ex);
+                return false;
+            }
+        }
+
+        private static void UnbindSocketProtect()
+        {
+            Volatile.Write(ref protectAllowed, 0);
+            try { XRayCoreWrapper.BindAndroidSocketProtect(null); }
+            catch (Exception ex) { DiagnosticLog.WriteException("AndroidVpnService.UnbindProtect", ex); }
+        }
+
         private void ResetVpnCore(string reason)
         {
             Interlocked.Increment(ref healthGeneration);
             healthTimer?.Dispose();
             healthTimer = null;
+
+            UnbindSocketProtect();
 
             try
             {
@@ -424,6 +476,11 @@ namespace InvisibleGorillaXRay.Android.Services
             healthTimer?.Dispose();
             healthTimer = null;
 
+            // Must happen before the tunnel teardown: a protect() call racing with the
+            // system_server VPN teardown is what used to freeze the whole process.
+            UnbindSocketProtect();
+
+            long startedMs = System.Environment.TickCount64;
             try
             {
                 XRayCoreWrapper.StopAndroidTunnel();
@@ -432,6 +489,8 @@ namespace InvisibleGorillaXRay.Android.Services
             {
                 DiagnosticLog.WriteException("AndroidVpnService.StopTunnel", ex);
             }
+            long elapsedMs = System.Environment.TickCount64 - startedMs;
+            DiagnosticLog.Write("AndroidVpnService", $"StopAndroidTunnel took {elapsedMs}ms");
 
             try { OpenFluxHttpBridge.Shared.Stop(); } catch { }
 
@@ -486,7 +545,8 @@ namespace InvisibleGorillaXRay.Android.Services
             return servers.Length == 0 ? new[] { "8.8.8.8" } : servers;
         }
 
-        private void ApplyApplicationRules(Builder builder, AppRulesMode mode, IEnumerable<string> packages)
+        /// <returns><c>true</c> when this app's own traffic is guaranteed to stay outside the TUN.</returns>
+        private bool ApplyApplicationRules(Builder builder, AppRulesMode mode, IEnumerable<string> packages)
         {
             string[] packageArray = packages as string[] ?? packages.ToArray();
             DiagnosticLog.Write($"[AppRules] ApplyApplicationRules: mode={mode}, packageCount={packageArray.Length}");
@@ -518,23 +578,27 @@ namespace InvisibleGorillaXRay.Android.Services
                         + "Open Settings → App rules → Manage and re-pick the applications you want to route through the VPN.");
                 }
 
-                return;
+                // A whitelist never contains this app, so its sockets stay off the TUN.
+                return true;
             }
 
             DiagnosticLog.Write("[AppRules] → TryExcludeOwnProcess + TryExcludeUserSelectedApplications (AddDisallowedApplication)");
-            TryExcludeOwnProcess(builder);
+            bool ownProcessExcluded = TryExcludeOwnProcess(builder);
             TryExcludeUserSelectedApplications(builder, packageArray);
+            return ownProcessExcluded;
         }
 
-        private void TryExcludeOwnProcess(Builder builder)
+        private bool TryExcludeOwnProcess(Builder builder)
         {
             try
             {
                 builder.AddDisallowedApplication(PackageName!);
+                return true;
             }
             catch (Exception ex)
             {
                 DiagnosticLog.WriteException("AndroidVpnService.AddDisallowedApplication", ex);
+                return false;
             }
         }
 

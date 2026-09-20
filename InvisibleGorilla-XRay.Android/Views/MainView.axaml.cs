@@ -126,6 +126,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private int connectionInfoRefreshBusy;
         private string lastOpenFluxGeoIp = string.Empty;
         private ConnectionInfo? lastOpenFluxGeo;
+        private int openFluxExitIpProbeBusy;
         private bool resumeServerAfterNativeTest;
 
         public MainView()
@@ -184,6 +185,24 @@ namespace InvisibleGorillaXRay.Android.Views
             InitializeControls();
             ApplyLocalizedText();
             AndroidDeepLinkDispatcher.Register(HandlePendingImport);
+            AndroidDeepLinkDispatcher.OnDebugRunRequested = () =>
+            {
+                if (!isRunWorkerBusy && !AndroidVpnServiceController.IsRunning)
+                    OnRunClick(null, new RoutedEventArgs());
+            };
+            AndroidDeepLinkDispatcher.OnDebugStopRequested = RequestStop;
+            AndroidDeepLinkDispatcher.OnDebugSelectOpenFluxRequested = () =>
+            {
+                TrySelectConfigByPath(OpenFluxProfilePaths.MarkerPath, showStatus: true);
+            };
+            AndroidDeepLinkDispatcher.OnDebugSelectVlessRequested = () =>
+            {
+                Config? vless = configHandler.GetAllGeneralConfigs().Find(config =>
+                    !OpenFluxProfilePaths.IsMarker(config.Path)
+                    && !GoidaProfilePaths.IsMarker(config.Path));
+                if (vless != null)
+                    TrySelectConfigByPath(vless.Path, showStatus: true);
+            };
             global::InvisibleGorillaXRay.Android.MainActivity.ForegroundChanged += OnAppForegroundChanged;
             DiagnosticLog.Write("MainView", "Controls initialized");
 
@@ -2427,10 +2446,11 @@ namespace InvisibleGorillaXRay.Android.Views
                     lastOpenFluxGeo = null;
                     lastOpenFluxGeoIp = string.Empty;
                     StopGoidaLiveHealthMonitor();
+                    ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(1));
                     return;
             }
 
-            TimeSpan delay = IsOpenFluxProfileActive() ? TimeSpan.FromSeconds(20) : TimeSpan.FromSeconds(3);
+            TimeSpan delay = IsOpenFluxProfileActive() ? TimeSpan.FromSeconds(8) : TimeSpan.FromSeconds(3);
             ScheduleConnectionInfoRefresh(delay);
 
             if (IsGoidaProfileActive())
@@ -2606,10 +2626,35 @@ namespace InvisibleGorillaXRay.Android.Views
 
             bool connected = isConnectionInfoConnected;
 
-            if (connected && IsOpenFluxProfileActive() && lastOpenFluxGeo != null)
+            if (connected && IsOpenFluxProfileActive())
             {
-                ConnectionInfo cached = lastOpenFluxGeo;
-                Dispatcher.UIThread.Post(() => ApplyConnectionInfo(cached));
+                if (lastOpenFluxGeo != null)
+                {
+                    ConnectionInfo cached = lastOpenFluxGeo;
+                    Dispatcher.UIThread.Post(() => ApplyConnectionInfo(cached));
+                    return;
+                }
+
+                ConnectionInfo? openFluxInfo = await TryLookupOpenFluxExitIpAsync(token).ConfigureAwait(false);
+                if (token.IsCancellationRequested)
+                    return;
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (openFluxInfo != null)
+                    {
+                        connectionInfoFailureRetries = 0;
+                        ApplyConnectionInfo(openFluxInfo);
+                    }
+                    else
+                    {
+                        ApplyOpenFluxConnectedWithoutLocation();
+                        if (connectionInfoFailureRetries < 3)
+                        {
+                            connectionInfoFailureRetries++;
+                            ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(6));
+                        }
+                    }
+                });
                 return;
             }
 
@@ -2667,16 +2712,6 @@ namespace InvisibleGorillaXRay.Android.Views
             ConnectionInfo info;
             if (connected)
             {
-                if (IsOpenFluxProfileActive())
-                {
-                    ConnectionInfo? openFluxInfo = await TryLookupOpenFluxExitIpAsync(token).ConfigureAwait(false);
-                    if (token.IsCancellationRequested)
-                        return;
-                    Dispatcher.UIThread.Post(() => ApplyConnectionInfo(
-                        openFluxInfo ?? new ConnectionInfo { Ok = false, Error = "SOCKS timeout" }));
-                    return;
-                }
-
                 ConnectionInfo tunnelInfo = await connectionInfoService
                     .LookupThroughTunnelAsync(probeProxy!, token)
                     .ConfigureAwait(false);
@@ -2733,8 +2768,11 @@ namespace InvisibleGorillaXRay.Android.Views
                 {
                     if (!string.IsNullOrWhiteSpace(ConnectionInfoIpText.Text)
                         && !string.Equals(ConnectionInfoIpText.Text, Localize("Lang.ConnectionInfo.Checking"), StringComparison.Ordinal)
-                        && !string.Equals(ConnectionInfoIpText.Text, Localize("Lang.ConnectionInfo.Unknown"), StringComparison.Ordinal))
+                        && !string.Equals(ConnectionInfoIpText.Text, Localize("Lang.ConnectionInfo.Unknown"), StringComparison.Ordinal)
+                        && !string.Equals(ConnectionInfoIpText.Text, "—", StringComparison.Ordinal))
                         return;
+                    ApplyOpenFluxConnectedWithoutLocation();
+                    return;
                 }
 
                 // A failed lookup must not leave a permanently stale "unknown location" in the
@@ -3174,6 +3212,12 @@ namespace InvisibleGorillaXRay.Android.Views
             catch (Exception ex) { DiagnosticLog.WriteException("MainView.StopCore", ex); }
             try { AndroidVpnServiceController.Stop(); }
             catch (Exception ex) { DiagnosticLog.WriteException("MainView.StopVpn.Retry", ex); }
+            for (int i = 0; i < 30; i++)
+            {
+                if (!AndroidVpnServiceController.IsRunning && !AndroidVpnServiceController.IsStopping)
+                    break;
+                Thread.Sleep(100);
+            }
         }
 
         private void PostConnectionUi(int epoch, Action action)
@@ -3397,6 +3441,15 @@ namespace InvisibleGorillaXRay.Android.Views
             TrySaveSettings(showSuccessMessage: true);
         }
 
+        private void ApplyOpenFluxConnectedWithoutLocation()
+        {
+            ConnectionInfoDotControl.Background = AvailabilitySuccessBrush;
+            ConnectionInfoIpText.Text = "—";
+            ConnectionInfoLocationText.Text = string.Empty;
+            ConnectionInfoOrgText.Text = string.Empty;
+            ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.OpenFluxNoLocation");
+        }
+
         private async Task<ConnectionInfo?> TryLookupOpenFluxExitIpAsync(CancellationToken token)
         {
             try
@@ -3406,19 +3459,27 @@ namespace InvisibleGorillaXRay.Android.Views
                 if (!manager.IsRunning || port <= 0)
                     return null;
 
-                string cached = manager.LastExitIp;
-                string ip = cached;
+                string ip = manager.LastExitIp;
                 if (ip.Length < 7 || ip.IndexOf('.') < 0)
                 {
-                    // One short SOCKS probe only when we have never seen the exit IP.
-                    // A live video already owns the mux; a second ipify hangs the UI.
-                    string body = await Task.Run(() => Socks5Http.GetHttpsBody(
-                        "127.0.0.1",
-                        port,
-                        "api.ipify.org",
-                        "/",
-                        4000), token).ConfigureAwait(false);
-                    ip = (body ?? "").Trim();
+                    if (System.Threading.Interlocked.CompareExchange(ref openFluxExitIpProbeBusy, 1, 0) != 0)
+                        return null;
+                    try
+                    {
+                        // One SOCKS ipify after the mux is up. A loop at RUN used to starve Chrome.
+                        string body = await Task.Run(() => Socks5Http.GetHttpsBody(
+                            "127.0.0.1",
+                            port,
+                            "api.ipify.org",
+                            "/",
+                            5000), token).ConfigureAwait(false);
+                        ip = (body ?? "").Trim();
+                        manager.RememberExitIp(ip);
+                    }
+                    finally
+                    {
+                        System.Threading.Interlocked.Exchange(ref openFluxExitIpProbeBusy, 0);
+                    }
                 }
 
                 if (ip.Length < 7 || ip.IndexOf('.') < 0)

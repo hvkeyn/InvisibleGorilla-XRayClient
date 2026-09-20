@@ -415,12 +415,21 @@ namespace InvisibleGorillaXRay.Core
         {
             // OpenFlux first: StopServer is a no-op for that mode but can block native
             // tun2socks teardown and never reach the sidecar kill.
+            long stopStartedMs = Environment.TickCount64;
             try { openFluxManager.Stop(); }
             catch (Exception ex) { DiagnosticLog.WriteException("Stop.OpenFlux", ex); }
+            DiagnosticLog.Write("Stop", $"OpenFlux stopped at {Environment.TickCount64 - stopStartedMs}ms");
+            if (OperatingSystem.IsAndroid())
+            {
+                try { XRayCoreWrapper.StopAndroidTunnel(); }
+                catch (Exception ex) { DiagnosticLog.WriteException("Stop.AndroidTunnel", ex); }
+                DiagnosticLog.Write("Stop", $"Android tunnel stopped at {Environment.TickCount64 - stopStartedMs}ms");
+            }
             try { torManager.Stop(); }
             catch (Exception ex) { DiagnosticLog.WriteException("Stop.Tor", ex); }
             try { _ = Task.Run(XRayCoreWrapper.StopServer); }
             catch (Exception ex) { DiagnosticLog.WriteException("Stop.Server", ex); }
+            DiagnosticLog.Write("Stop", $"Stop sequence issued in {Environment.TickCount64 - stopStartedMs}ms");
             try { AnalyticsService.SendEvent(new StoppedEvent()); }
             catch { }
         }

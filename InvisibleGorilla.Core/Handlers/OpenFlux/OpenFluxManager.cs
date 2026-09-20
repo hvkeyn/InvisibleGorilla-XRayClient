@@ -73,6 +73,15 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
             get { lock (sync) return lastExitIp ?? ""; }
         }
 
+        public void RememberExitIp(string ip)
+        {
+            string trimmed = (ip ?? "").Trim();
+            if (trimmed.Length < 7 || trimmed.IndexOf('.') < 0)
+                return;
+            lock (sync)
+                lastExitIp = trimmed;
+        }
+
         public OpenFluxClientStatus Status
         {
             get { lock (sync) return status; }
@@ -162,15 +171,7 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
                 }
 
                 if (Status != OpenFluxClientStatus.Error)
-                {
                     SetStatus(OpenFluxClientStatus.Connected, "listen");
-                    int probePort = port;
-                    ThreadPool.QueueUserWorkItem(_ =>
-                    {
-                        if (ProbePeer(probePort, 12000))
-                            SetStatus(OpenFluxClientStatus.Connected, "");
-                    });
-                }
 
                 DiagnosticLog.Write(Tag, $"SOCKS5 listening on 127.0.0.1:{port} transport={transport}");
                 return new Status(Code.SUCCESS, SubCode.SUCCESS, port);
@@ -336,7 +337,6 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
         private static bool IsKeepAliveNoise(string line)
         {
             return line.IndexOf("fail 0", StringComparison.OrdinalIgnoreCase) >= 0
-                || line.IndexOf("BATCH decode error", StringComparison.OrdinalIgnoreCase) >= 0
                 || line.IndexOf("req/s", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
@@ -393,7 +393,7 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
                     // process group — that freezes or kills Gorilla itself on STOP.
                     try
                     {
-                        if (OperatingSystem.IsAndroid())
+                        if (IsAndroidRuntime())
                             running.Kill();
                         else
                             running.Kill(entireProcessTree: true);
@@ -404,7 +404,7 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
                     }
                     if (pid > 0)
                         TryNativeKill(pid);
-                    running.WaitForExit(OperatingSystem.IsAndroid() ? Math.Min(waitExitMs, 400) : waitExitMs);
+                    running.WaitForExit(IsAndroidRuntime() ? Math.Min(waitExitMs, 1500) : waitExitMs);
                 }
             }
             catch (Exception ex)
@@ -499,6 +499,27 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
             return false;
         }
 
+        private static bool IsAndroidRuntime()
+        {
+            try
+            {
+                if (OperatingSystem.IsAndroid())
+                    return true;
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                return File.Exists("/system/build.prop");
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         [DllImport("libc", SetLastError = true, EntryPoint = "kill")]
         private static extern int NativeKillSignal(int pid, int signal);
 
@@ -511,8 +532,11 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
 
         private static void KillOrphanSidecars()
         {
-            if (OperatingSystem.IsAndroid())
+            if (IsAndroidRuntime())
+            {
+                KillAndroidOpenFluxOrphans();
                 return;
+            }
 
             try
             {
@@ -537,6 +561,45 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
             catch (Exception ex)
             {
                 DiagnosticLog.Write(Tag, $"orphan kill: {ex.Message}");
+            }
+        }
+
+        private static void KillAndroidOpenFluxOrphans()
+        {
+            int self = Environment.ProcessId;
+            DateTime deadline = DateTime.UtcNow.AddMilliseconds(250);
+            int checkedPids = 0;
+            try
+            {
+                foreach (string dir in System.IO.Directory.GetDirectories("/proc"))
+                {
+                    if (DateTime.UtcNow > deadline || checkedPids > 80)
+                        break;
+                    string baseName = IoPath.GetFileName(dir);
+                    if (!int.TryParse(baseName, out int pid) || pid <= 1 || pid == self)
+                        continue;
+                    checkedPids++;
+                    string cmd = "";
+                    try
+                    {
+                        cmd = File.ReadAllText(IoPath.Combine(dir, "cmdline")).Replace('\0', ' ');
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+
+                    if (cmd.IndexOf("openflux", StringComparison.OrdinalIgnoreCase) < 0
+                        && cmd.IndexOf("libopenflux", StringComparison.OrdinalIgnoreCase) < 0)
+                        continue;
+
+                    DiagnosticLog.Write(Tag, $"orphan kill android pid={pid}");
+                    TryNativeKill(pid);
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.Write(Tag, $"orphan kill android: {ex.Message}");
             }
         }
 

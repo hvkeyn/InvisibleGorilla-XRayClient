@@ -31,6 +31,7 @@ namespace InvisibleGorillaXRay.Core
             try
             {
                 PendingLines.Enqueue($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}");
+                try { Console.WriteLine("[IGX] " + message); } catch { }
                 if (Interlocked.Exchange(ref flushScheduled, 1) == 0)
                     ThreadPool.QueueUserWorkItem(static _ => FlushPending());
             }

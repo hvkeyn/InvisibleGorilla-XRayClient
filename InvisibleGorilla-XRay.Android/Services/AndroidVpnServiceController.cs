@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Android.Content;
 using Android.OS;
@@ -11,6 +12,7 @@ namespace InvisibleGorillaXRay.Android.Services
     {
         public int ProxyPort { get; init; }
         public int HttpProxyPort { get; init; }
+        public bool LimitMux { get; init; }
         public string ProxyUsername { get; init; } = string.Empty;
         public string ProxyPassword { get; init; } = string.Empty;
         public bool UdpEnabled { get; init; }
@@ -38,6 +40,14 @@ namespace InvisibleGorillaXRay.Android.Services
 
             if (global::Android.Net.VpnService.Prepare(context) != null)
                 return CreateError("Android VPN permission has not been granted.");
+
+            Stop();
+            for (int i = 0; i < 25; i++)
+            {
+                if (!IsRunning && !IsStopping)
+                    break;
+                Thread.Sleep(80);
+            }
 
             TaskCompletionSource<Status> completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
             lock (SyncRoot)
@@ -88,7 +98,7 @@ namespace InvisibleGorillaXRay.Android.Services
         {
             lock (SyncRoot)
             {
-                if (!isRunning || isStopping)
+                if (!isRunning && !isStopping)
                     return;
 
                 isStopping = true;

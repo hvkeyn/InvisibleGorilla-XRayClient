@@ -23,6 +23,7 @@
     <x:String x:Key="Lang.ConnectionInfo.ProtectedTor">IP изменился. Трафик идёт через Tor-мост.</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Exposed">IP не изменился. Трафик может идти мимо туннеля.</x:String>
     <x:String x:Key="Lang.ConnectionInfo.TunnelProbeUnavailable">Не удалось проверить IP через туннель. Нажмите Refresh.</x:String>
+    <x:String x:Key="Lang.ConnectionInfo.OpenFluxNoLocation">OpenFlux подключён. Город не обязателен — живая проверка это пинг в настройках сервера.</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Idle">Нет подключения. Этот IP используется как исходный.</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Mode">Режим:</x:String>
     <x:String x:Key="Lang.ConnectionInfo.IpLabel">IP-адрес</x:String>

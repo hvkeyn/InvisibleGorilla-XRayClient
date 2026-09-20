@@ -27,10 +27,7 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
         private readonly SemaphoreSlim dialGate = new SemaphoreSlim(6, 6);
         private readonly ConcurrentDictionary<string, ConcurrentQueue<WarmEntry>> warmPool = new();
         private readonly ConcurrentDictionary<ActiveRelay, byte> activeRelays = new();
-        private static readonly string[] WarmHosts =
-        {
-            "www.youtube.com"
-        };
+        private static readonly string[] WarmHosts = Array.Empty<string>();
 
         private sealed class WarmEntry
         {
