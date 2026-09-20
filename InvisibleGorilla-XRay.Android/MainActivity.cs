@@ -60,6 +60,7 @@ namespace InvisibleGorillaXRay.Android
         private static TaskCompletionSource<bool>? vpnPermissionRequest;
         private static int globalHandlersRegistered;
         internal static bool IsInForeground { get; private set; } = true;
+        internal static DateTime SuppressForegroundChangedUntilUtc { get; set; }
         internal static event Action<bool>? ForegroundChanged;
 
         protected override void OnCreate(Bundle? savedInstanceState)
@@ -179,15 +180,16 @@ namespace InvisibleGorillaXRay.Android
             base.OnResume();
             SetCurrentActivity(this);
             IsInForeground = true;
-            // FocusEvent (hasFocus true/false) runs on this looper. Pushing Avalonia
-            // connection-info work in the same turn caused the 10s "app frozen" ANR
-            // when the user came back from Chrome/YouTube after a second VLESS RUN.
+            // FocusEvent runs on this looper. Any Avalonia work in the same turn
+            // ANRs when the user comes back from Chrome or the ANR dialog.
             new Handler(Looper.MainLooper).PostDelayed(() =>
             {
                 if (!IsInForeground)
                     return;
+                if (DateTime.UtcNow < SuppressForegroundChangedUntilUtc)
+                    return;
                 try { ForegroundChanged?.Invoke(true); } catch { }
-            }, 400);
+            }, 2000);
         }
 
         protected override void OnPause()

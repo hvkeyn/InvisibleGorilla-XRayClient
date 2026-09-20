@@ -2422,30 +2422,23 @@ namespace InvisibleGorillaXRay.Android.Views
                     ConnectionStateIndicatorDot.Background = StoppedBrush;
                     ConnectionStateTitleText.Text = Localize("Lang.Status.Stopped");
                     ConnectionStateSubtitleText.Text = Localize("Lang.Android.Home.Subtitle.Stopped");
-                    break;
+                    if (connectionInfoTimer != null)
+                        connectionInfoTimer.Interval = TimeSpan.FromSeconds(45);
+                    lastOpenFluxGeo = null;
+                    lastOpenFluxGeoIp = string.Empty;
+                    StopGoidaLiveHealthMonitor();
+                    return;
             }
 
-            TimeSpan delay = state == ConnectionState.Running
-                ? (IsOpenFluxProfileActive() ? TimeSpan.FromSeconds(20) : TimeSpan.FromSeconds(3))
-                : TimeSpan.FromMilliseconds(200);
+            TimeSpan delay = IsOpenFluxProfileActive() ? TimeSpan.FromSeconds(20) : TimeSpan.FromSeconds(3);
             ScheduleConnectionInfoRefresh(delay);
 
-            if (state == ConnectionState.Running)
-            {
-                if (IsGoidaProfileActive())
-                    goidaSwitchGraceUntil = DateTime.UtcNow.AddSeconds(20);
-                connectionInfoTimer!.Interval = IsGoidaProfileActive()
-                    ? TimeSpan.FromSeconds(8)
-                    : TimeSpan.FromSeconds(45);
-                StartGoidaLiveHealthMonitor();
-            }
-            else
-            {
-                connectionInfoTimer!.Interval = TimeSpan.FromSeconds(45);
-                lastOpenFluxGeo = null;
-                lastOpenFluxGeoIp = string.Empty;
-                StopGoidaLiveHealthMonitor();
-            }
+            if (IsGoidaProfileActive())
+                goidaSwitchGraceUntil = DateTime.UtcNow.AddSeconds(20);
+            connectionInfoTimer!.Interval = IsGoidaProfileActive()
+                ? TimeSpan.FromSeconds(8)
+                : TimeSpan.FromSeconds(45);
+            StartGoidaLiveHealthMonitor();
         }
 
         private bool TryPauseForNativeTest()
@@ -2559,15 +2552,20 @@ namespace InvisibleGorillaXRay.Android.Views
             {
                 try
                 {
-                    await Task.Delay(800).ConfigureAwait(false);
+                    await Task.Delay(1500).ConfigureAwait(false);
                     if (!global::InvisibleGorillaXRay.Android.MainActivity.IsInForeground)
+                        return;
+                    if (isStopWorkerBusy)
                         return;
                     Dispatcher.UIThread.Post(() =>
                     {
                         if (!global::InvisibleGorillaXRay.Android.MainActivity.IsInForeground)
                             return;
+                        if (isStopWorkerBusy)
+                            return;
                         try { connectionInfoTimer?.Start(); } catch { }
-                        _ = RefreshConnectionInfoAsync();
+                        if (isConnectionInfoConnected)
+                            _ = RefreshConnectionInfoAsync();
                     }, DispatcherPriority.Background);
                 }
                 catch
@@ -3209,8 +3207,11 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void RunConnectionSession(int epoch, AndroidConnectionNotificationText notificationText)
         {
-            // Unblock a leftover session from the previous toggle, then take the lock.
             StopCoreAndVpn();
+            bool lockHeld = false;
+            bool started = false;
+            string? failureMessage = null;
+            string activeConfig = string.Empty;
             try
             {
                 if (!connectionOpLock.Wait(15000))
@@ -3224,17 +3225,8 @@ namespace InvisibleGorillaXRay.Android.Views
                     });
                     return;
                 }
-            }
-            catch (Exception ex)
-            {
-                DiagnosticLog.WriteException("MainView.Run.Lock", ex);
-                return;
-            }
 
-            bool started = false;
-            string? failureMessage = null;
-            try
-            {
+                lockHeld = true;
                 if (epoch != Volatile.Read(ref connectionEpoch))
                     return;
 
@@ -3254,11 +3246,11 @@ namespace InvisibleGorillaXRay.Android.Views
                     return;
 
                 StopCoreAndVpn();
-                for (int i = 0; i < 50; i++)
+                for (int i = 0; i < 20; i++)
                 {
                     if (!AndroidVpnServiceController.IsRunning && !AndroidVpnServiceController.IsStopping)
                         break;
-                    Thread.Sleep(100);
+                    Thread.Sleep(50);
                 }
 
                 if (epoch != Volatile.Read(ref connectionEpoch))
@@ -3271,7 +3263,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     return;
                 }
 
-                string activeConfig = configStatus.Content?.ToString() ?? string.Empty;
+                activeConfig = configStatus.Content?.ToString() ?? string.Empty;
                 AndroidConnectionNotificationManager.ShowStarting(
                     BuildConnectionNotificationSession(activeConfig, notificationText));
 
@@ -3291,6 +3283,17 @@ namespace InvisibleGorillaXRay.Android.Views
                 started = true;
                 AndroidConnectionNotificationManager.MarkRunning();
                 LogGoidaConnectionEvent(connected: true);
+
+                try
+                {
+                    connectionOpLock.Release();
+                    lockHeld = false;
+                }
+                catch (SemaphoreFullException)
+                {
+                    lockHeld = false;
+                }
+
                 core.Run(activeConfig, () =>
                 {
                     PostConnectionUi(epoch, () =>
@@ -3312,53 +3315,30 @@ namespace InvisibleGorillaXRay.Android.Views
                     isRunWorkerBusy = false;
                     isStopWorkerBusy = false;
                 }
-                if (AndroidVpnServiceController.IsStopping)
-                {
-                }
-                else if (AndroidVpnServiceController.IsRunning)
-                {
-                    AndroidConnectionNotificationManager.MarkRunning();
-                }
-                else if (started)
-                {
-                    AndroidConnectionNotificationManager.MarkStopped();
-                }
-                else
-                {
+
+                if (!AndroidVpnServiceController.IsRunning && !AndroidVpnServiceController.IsStopping)
                     AndroidConnectionNotificationManager.Stop();
-                }
 
                 if (started)
                     LogGoidaConnectionEvent(connected: false);
                 ResumeGoidaProbingAfterConnection();
 
-                try { connectionOpLock.Release(); }
-                catch (SemaphoreFullException) { }
+                if (lockHeld)
+                {
+                    try { connectionOpLock.Release(); }
+                    catch (SemaphoreFullException) { }
+                }
 
                 PostConnectionUi(epoch, () =>
                 {
                     SetRunningState(false);
                     StopActionButton.IsEnabled = true;
                     SetConnectionState(ConnectionState.Stopped);
-                    UpdateRuntimeSummary();
 
                     if (!string.IsNullOrWhiteSpace(failureMessage))
                         SetStatus(failureMessage);
                     else if (started)
                         SetStatus("Lang.Status.Stopped");
-                });
-
-                _ = Task.Run(() =>
-                {
-                    try
-                    {
-                        var ext = global::Android.App.Application.Context.GetExternalFilesDir(null);
-                        if (ext != null)
-                            DiagnosticLog.CopySnapshot(System.IO.Path.Combine(ext.AbsolutePath, "diagnostic.log"));
-                    }
-                    catch
-                    {
-                    }
                 });
             }
         }
@@ -3384,22 +3364,26 @@ namespace InvisibleGorillaXRay.Android.Views
             Interlocked.Increment(ref connectionEpoch);
             isStopWorkerBusy = true;
             isRunWorkerBusy = false;
+            global::InvisibleGorillaXRay.Android.MainActivity.SuppressForegroundChangedUntilUtc =
+                DateTime.UtcNow.AddSeconds(8);
             SetRunningState(false);
             SetConnectionState(ConnectionState.Stopped);
             SetStatus("Lang.Status.Stopped");
-            AndroidConnectionNotificationManager.MarkStopped();
 
             _ = Task.Run(() =>
             {
-                try { StopCoreAndVpn(); }
+                try
+                {
+                    AndroidConnectionNotificationManager.Stop();
+                    StopCoreAndVpn();
+                }
                 catch (Exception ex) { DiagnosticLog.WriteException("MainView.RequestStop", ex); }
                 finally
                 {
                     Dispatcher.UIThread.Post(() =>
                     {
                         isStopWorkerBusy = false;
-                        UpdateRuntimeSummary();
-                    });
+                    }, DispatcherPriority.Background);
                 }
             });
         }

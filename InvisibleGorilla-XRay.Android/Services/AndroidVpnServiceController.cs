@@ -86,30 +86,15 @@ namespace InvisibleGorillaXRay.Android.Services
 
         public static void Stop()
         {
-            Context? context = global::Android.App.Application.Context;
-            if (context == null)
-                return;
-
             lock (SyncRoot)
             {
-                if (!isRunning && !isStopping)
+                if (!isRunning || isStopping)
                     return;
 
                 isStopping = true;
             }
 
-            try
-            {
-                context.StartService(AndroidVpnService.CreateStopIntent(context));
-            }
-            catch (Exception ex)
-            {
-                lock (SyncRoot)
-                {
-                    lastError = ex.Message;
-                    isRunning = false;
-                }
-            }
+            AndroidVpnService.StopFromClient("Stop requested");
         }
 
         public static bool IsRunning

@@ -41,6 +41,7 @@ namespace InvisibleGorillaXRay.Android.Services
         private const string DefaultIpv6Address = "fdfe:dcba:9876::1";
         private const int DefaultIpv6PrefixLength = 126;
         private static readonly object SyncRoot = new();
+        private static AndroidVpnService? current;
 
         private Timer? healthTimer;
         private int healthGeneration;
@@ -73,6 +74,28 @@ namespace InvisibleGorillaXRay.Android.Services
             return intent;
         }
 
+        internal static void StopFromClient(string reason)
+        {
+            AndroidVpnService? service = current;
+            if (service == null)
+            {
+                AndroidVpnServiceController.NotifyStopped(reason);
+                return;
+            }
+
+            _ = Task.Run(() =>
+            {
+                try { service.StopVpn(reason); }
+                catch (Exception ex) { DiagnosticLog.WriteException("AndroidVpnService.StopFromClient", ex); }
+            });
+        }
+
+        public override void OnCreate()
+        {
+            base.OnCreate();
+            current = this;
+        }
+
         public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
         {
             string? action = intent?.Action;
@@ -80,8 +103,11 @@ namespace InvisibleGorillaXRay.Android.Services
 
             if (string.Equals(action, ActionStop, StringComparison.Ordinal))
             {
-                AndroidConnectionNotificationManager.MarkStopping();
-                _ = StopVpnAsync("Stop requested", startId);
+                _ = Task.Run(() =>
+                {
+                    try { StopVpn("Stop requested"); }
+                    catch (Exception ex) { DiagnosticLog.WriteException("AndroidVpnService.StopQueued", ex); }
+                });
                 return StartCommandResult.NotSticky;
             }
 
@@ -91,15 +117,31 @@ namespace InvisibleGorillaXRay.Android.Services
             try
             {
                 StartForegroundFast();
-                _ = StartVpnAsync(intent!, startId);
+                Intent capturedIntent = intent!;
+                _ = Task.Run(() =>
+                {
+                    try
+                    {
+                        StartVpn(capturedIntent);
+                        AndroidVpnServiceController.NotifyStarted();
+                    }
+                    catch (Exception ex)
+                    {
+                        DiagnosticLog.WriteException("AndroidVpnService.StartQueued", ex);
+                        AndroidVpnServiceController.NotifyStartFailed(ex.Message);
+                        try { StopVpn(ex.Message); } catch { }
+                    }
+                });
                 return StartCommandResult.Sticky;
             }
             catch (Exception ex)
             {
                 DiagnosticLog.WriteException("AndroidVpnService.Start", ex);
                 AndroidVpnServiceController.NotifyStartFailed(ex.Message);
-                StopVpn(ex.Message);
-                StopSelfResult(startId);
+                _ = Task.Run(() =>
+                {
+                    try { StopVpn(ex.Message); } catch { }
+                });
                 return StartCommandResult.NotSticky;
             }
         }
@@ -107,44 +149,14 @@ namespace InvisibleGorillaXRay.Android.Services
         public override void OnDestroy()
         {
             DiagnosticLog.Write("AndroidVpnService", "Foreground VPN service destroyed");
+            if (ReferenceEquals(current, this))
+                current = null;
             _ = Task.Run(() =>
             {
                 try { StopVpn("Android VPN service destroyed"); }
                 catch (Exception ex) { DiagnosticLog.WriteException("AndroidVpnService.OnDestroy", ex); }
             });
             base.OnDestroy();
-        }
-
-        private async Task StartVpnAsync(Intent intent, int startId)
-        {
-            try
-            {
-                await Task.Run(() => StartVpn(intent));
-                AndroidVpnServiceController.NotifyStarted();
-            }
-            catch (Exception ex)
-            {
-                DiagnosticLog.WriteException("AndroidVpnService.StartAsync", ex);
-                AndroidVpnServiceController.NotifyStartFailed(ex.Message);
-                StopVpn(ex.Message);
-                StopSelfResult(startId);
-            }
-        }
-
-        private async Task StopVpnAsync(string reason, int startId)
-        {
-            try
-            {
-                await Task.Run(() => StopVpn(reason));
-            }
-            catch (Exception ex)
-            {
-                DiagnosticLog.WriteException("AndroidVpnService.StopAsync", ex);
-            }
-            finally
-            {
-                StopSelfResult(startId);
-            }
         }
 
         private void StartVpn(Intent intent)
@@ -391,19 +403,18 @@ namespace InvisibleGorillaXRay.Android.Services
                 StopVpnCore(reason);
             }
 
-            // Binder calls must not run while SyncRoot is held: OnStartCommand
-            // (main looper) waits on the same lock for StartForeground, which is
-            // the FocusEvent ANR when the user switches back to Gorilla.
+            // Must stay off the main looper. Posting StopForeground/StopSelf there
+            // is the delayed STOP ANR (3-4s freeze, then FocusEvent ANR).
             try
             {
-                StopForeground(StopForegroundFlags.Remove);
+                StopForeground(StopForegroundFlags.Detach);
             }
             catch (Exception ex)
             {
                 DiagnosticLog.WriteException("AndroidVpnService.StopForeground", ex);
             }
 
-            AndroidConnectionNotificationManager.MarkStopped();
+            AndroidConnectionNotificationManager.Stop();
         }
 
         private static string[] SplitDnsServers(string dns)
