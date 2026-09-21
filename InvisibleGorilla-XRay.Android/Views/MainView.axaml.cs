@@ -2522,6 +2522,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     ConnectionStateIndicatorDot.Background = StartingBrush;
                     ConnectionStateTitleText.Text = Localize("Lang.Status.WaitForRun");
                     ConnectionStateSubtitleText.Text = Localize("Lang.Android.Home.Subtitle.Starting");
+                    ShowLiveConnectionCard(tracking: true);
                     return;
 
                 case ConnectionState.Running:
@@ -2532,6 +2533,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     ConnectionStateIndicatorDot.Background = RunningBrush;
                     ConnectionStateTitleText.Text = Localize("Lang.Status.Running");
                     ConnectionStateSubtitleText.Text = Localize("Lang.Android.Home.Subtitle.Running");
+                    ShowLiveConnectionCard(tracking: true);
                     break;
 
                 default:
@@ -2549,14 +2551,13 @@ namespace InvisibleGorillaXRay.Android.Views
                     StopGoidaLiveHealthMonitor();
                     if (stateChanged)
                     {
-                        ShowDisconnectedConnectionCard();
+                        ShowLiveConnectionCard(tracking: false);
                         ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(1));
                     }
                     return;
             }
 
-            TimeSpan delay = IsOpenFluxProfileActive() ? TimeSpan.FromSeconds(8) : TimeSpan.FromSeconds(3);
-            ScheduleConnectionInfoRefresh(delay);
+            ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(1));
 
             if (IsGoidaProfileActive())
                 goidaSwitchGraceUntil = DateTime.UtcNow.AddSeconds(20);
@@ -2689,8 +2690,7 @@ namespace InvisibleGorillaXRay.Android.Views
                         if (isStopWorkerBusy)
                             return;
                         try { connectionInfoTimer?.Start(); } catch { }
-                        if (isConnectionInfoConnected)
-                            _ = RefreshConnectionInfoAsync();
+                        _ = RefreshConnectionInfoAsync();
                     }, DispatcherPriority.Background);
                 }
                 catch
@@ -2705,20 +2705,63 @@ namespace InvisibleGorillaXRay.Android.Views
             try { connectionInfoLookupCancellation?.Cancel(); } catch { }
         }
 
-        private void ShowDisconnectedConnectionCard()
+        private string CurrentConnectionModeText()
         {
-            ConnectionInfoDotControl.Background = AvailabilityPendingBrush;
-            ConnectionInfoIpText.Text = Localize("Lang.ConnectionInfo.Checking");
+            try
+            {
+                UserSettings settings = settingsHandler.UserSettings;
+                string outbound = ConnectionProbe.DetectOutboundProtocol(settings.GetCurrentConfigPath());
+                return ConnectionProbe.DescribeMode(
+                    settings.GetMode(),
+                    settings.GetProtocol(),
+                    settings.GetTorSettings(),
+                    outbound);
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private void ApplyConnectionModeLine()
+        {
+            if (!isConnectionInfoConnected)
+            {
+                ConnectionInfoModeText.Text = string.Empty;
+                return;
+            }
+
+            string mode = CurrentConnectionModeText();
+            ConnectionInfoModeText.Text = string.IsNullOrEmpty(mode)
+                ? string.Empty
+                : $"{Localize("Lang.ConnectionInfo.Mode")} {mode}";
+        }
+
+        private void ShowLiveConnectionCard(bool tracking)
+        {
             ConnectionInfoLocationText.Text = string.Empty;
             ConnectionInfoOrgText.Text = string.Empty;
-            ConnectionInfoModeText.Text = string.Empty;
+            ConnectionInfoDotControl.Background = AvailabilityPendingBrush;
+            if (!tracking)
+            {
+                ConnectionInfoModeText.Text = string.Empty;
+                ConnectionInfoIpText.Text = "—";
+                ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Idle");
+                return;
+            }
+
+            ApplyConnectionModeLine();
+            ConnectionInfoIpText.Text = Localize("Lang.ConnectionInfo.Checking");
             ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Checking");
         }
 
         private async Task RefreshConnectionInfoAsync()
         {
             if (!global::InvisibleGorillaXRay.Android.MainActivity.IsInForeground)
+            {
+                System.Threading.Interlocked.Exchange(ref connectionInfoRefreshPending, 1);
                 return;
+            }
 
             if (System.Threading.Interlocked.CompareExchange(ref connectionInfoRefreshBusy, 1, 0) != 0)
             {
@@ -2806,14 +2849,11 @@ namespace InvisibleGorillaXRay.Android.Views
             // always leaks the real ISP IP. When connected, probe through the running xray
             // local SOCKS listener so the reported IP matches the actual tunnel exit.
             IWebProxy probeProxy = null;
-            string modeText = string.Empty;
             try
             {
                 UserSettings settings = settingsHandler.UserSettings;
                 if (connected)
                     probeProxy = core.CreateActiveProbeProxy();
-                string outbound = ConnectionProbe.DetectOutboundProtocol(settings.GetCurrentConfigPath());
-                modeText = ConnectionProbe.DescribeMode(settings.GetMode(), settings.GetProtocol(), settings.GetTorSettings(), outbound);
                 isConnectionInfoTor = settings.GetTorSettings().GetEnabled();
             }
             catch
@@ -2824,12 +2864,17 @@ namespace InvisibleGorillaXRay.Android.Views
             {
                 if (!StillCurrent())
                     return;
+                ApplyConnectionModeLine();
+                string shownIp = ConnectionInfoIpText.Text ?? string.Empty;
+                bool hasLiveIp = shownIp.Length > 6
+                    && shownIp.IndexOf('.') > 0
+                    && !string.Equals(shownIp, Localize("Lang.ConnectionInfo.Checking"), StringComparison.Ordinal)
+                    && !string.Equals(shownIp, Localize("Lang.ConnectionInfo.Unknown"), StringComparison.Ordinal);
+                if (hasLiveIp)
+                    return;
                 ConnectionInfoDotControl.Background = AvailabilityPendingBrush;
                 ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Checking");
                 ConnectionInfoIpText.Text = Localize("Lang.ConnectionInfo.Checking");
-                ConnectionInfoModeText.Text = connected && !string.IsNullOrEmpty(modeText)
-                    ? $"{Localize("Lang.ConnectionInfo.Mode")} {modeText}"
-                    : string.Empty;
             });
 
             if (!StillCurrent())
@@ -2959,6 +3004,7 @@ namespace InvisibleGorillaXRay.Android.Views
             }
 
             connectionInfoFailureRetries = 0;
+            ApplyConnectionModeLine();
 
             if (string.IsNullOrWhiteSpace(baselineIp) && !isConnectionInfoConnected)
                 baselineIp = info.Ip;
@@ -3605,6 +3651,7 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void ApplyOpenFluxConnectedWithoutLocation()
         {
+            ApplyConnectionModeLine();
             ConnectionInfoDotControl.Background = AvailabilitySuccessBrush;
             ConnectionInfoIpText.Text = "—";
             ConnectionInfoLocationText.Text = string.Empty;

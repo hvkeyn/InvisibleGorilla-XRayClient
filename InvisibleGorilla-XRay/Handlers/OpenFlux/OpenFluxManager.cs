@@ -36,6 +36,7 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
             "{\"remarks\":\"OpenFlux\",\"inbounds\":[],\"outbounds\":[]}";
 
         private readonly object sync = new object();
+        private readonly object logGate = new object();
         private Process process;
         private StreamWriter logWriter;
         private volatile bool sessionStop;
@@ -53,10 +54,8 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
         {
             get
             {
-                lock (sync)
-                {
-                    return process != null && !process.HasExited;
-                }
+                Process running = CurrentProcess();
+                return running != null && !HasExitedSafe(running);
             }
         }
 
@@ -190,11 +189,9 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
                     return;
                 }
 
-                lock (sync)
-                {
-                    if (process == null || process.HasExited)
-                        return;
-                }
+                Process running = CurrentProcess();
+                if (running == null || HasExitedSafe(running))
+                    return;
 
                 Thread.Sleep(200);
             }
@@ -232,11 +229,11 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
 
         public bool SameLiveUrl(string url)
         {
+            string current;
             lock (sync)
-            {
-                return IsRunning
-                    && string.Equals(lastUrl, OpenFluxUrl.Trim(url), StringComparison.Ordinal);
-            }
+                current = lastUrl;
+            return IsRunning
+                && string.Equals(current, OpenFluxUrl.Trim(url), StringComparison.Ordinal);
         }
 
         private bool StartProcess(string url, string transport, string codec, int port, string keyFile, string logPath)
@@ -346,7 +343,7 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
         {
             try
             {
-                lock (sync)
+                lock (logGate)
                 {
                     logWriter ??= new StreamWriter(new FileStream(logPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite), Encoding.UTF8)
                     {
@@ -376,12 +373,15 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
                 return;
             }
 
+            try { running.CancelOutputRead(); } catch { }
+            try { running.CancelErrorRead(); } catch { }
+
             try
             {
-                if (!running.HasExited)
+                if (!HasExitedSafe(running))
                 {
                     running.Kill(entireProcessTree: true);
-                    running.WaitForExit(waitExitMs);
+                    WaitForExitBounded(running, waitExitMs);
                 }
             }
             catch (Exception ex)
@@ -395,12 +395,37 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
 
         private void CloseLog()
         {
-            lock (sync)
+            lock (logGate)
             {
                 try { logWriter?.Flush(); } catch { }
                 try { logWriter?.Dispose(); } catch { }
                 logWriter = null;
             }
+        }
+
+        private Process CurrentProcess()
+        {
+            lock (sync)
+                return process;
+        }
+
+        private static bool HasExitedSafe(Process running)
+        {
+            try { return running.HasExited; }
+            catch { return true; }
+        }
+
+        private void WaitForExitBounded(Process running, int waitExitMs)
+        {
+            DateTime deadline = DateTime.UtcNow.AddMilliseconds(Math.Max(200, waitExitMs));
+            while (DateTime.UtcNow < deadline)
+            {
+                if (HasExitedSafe(running))
+                    return;
+                Thread.Sleep(50);
+            }
+
+            DiagnosticLog.Write(Tag, "OpenFlux exit wait timed out");
         }
 
         private void SetStatus(OpenFluxClientStatus next, string detail)

@@ -52,6 +52,12 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.45
+
+- **RUN no longer sits on "Wait for running" for every profile.** OpenFlux was waiting on its own log lock, so OpenFlux and VLESS both froze at start. STOP and the next RUN now finish.
+- **The Android connection card follows the live tunnel.** As soon as RUN starts it shows the current mode, then the exit IP. STOP drops the previous exit and type.
+- **The Android notification shade stays in sync.** A new VPN start no longer freezes the panel on Stopped with zero traffic. While the tunnel is up the title says Running and RX/TX keep moving.
+
 ## What's new in v3.6.44
 
 - **Android hero pulses like a Wi-Fi signal while the tunnel is up.** Three rings expand outward from the gorilla and the green disc behind it breathes. Stopped state stays still.

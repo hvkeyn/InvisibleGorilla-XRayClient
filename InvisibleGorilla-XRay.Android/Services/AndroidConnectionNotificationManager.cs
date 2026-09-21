@@ -63,6 +63,7 @@ namespace InvisibleGorillaXRay.Android.Services
         private static long baseTxBytes;
         private static long lastRxBytes;
         private static long lastTxBytes;
+        private static bool usingTunCounters;
         private static bool channelCreated;
 
         public static int ShowStarting(AndroidConnectionNotificationSession session)
@@ -83,6 +84,7 @@ namespace InvisibleGorillaXRay.Android.Services
                 baseTxBytes = txBytes;
                 lastRxBytes = rxBytes;
                 lastTxBytes = txBytes;
+                usingTunCounters = false;
                 lastSampleUtc = startedAtUtc;
 
                 EnsureChannelLocked();
@@ -101,6 +103,8 @@ namespace InvisibleGorillaXRay.Android.Services
                     return;
 
                 currentState = AndroidConnectionNotificationState.Running;
+                if (updateTimer == null)
+                    EnsureTimerLocked();
                 DiagnosticLog.Write("AndroidConnectionNotification", $"MarkRunning config={currentSession.ConfigName}");
             }
 
@@ -133,6 +137,7 @@ namespace InvisibleGorillaXRay.Android.Services
 
                 updateTimer?.Dispose();
                 updateTimer = null;
+                usingTunCounters = false;
                 currentState = AndroidConnectionNotificationState.Stopped;
                 DiagnosticLog.Write("AndroidConnectionNotification", $"MarkStopped config={currentSession.ConfigName}");
             }
@@ -283,8 +288,28 @@ namespace InvisibleGorillaXRay.Android.Services
             AndroidConnectionNotificationSession session = currentSession ?? new AndroidConnectionNotificationSession();
             DateTime now = DateTime.UtcNow;
 
-            long currentRxBytes = ReadUidRxBytes();
-            long currentTxBytes = ReadUidTxBytes();
+            long currentRxBytes;
+            long currentTxBytes;
+            if (currentState == AndroidConnectionNotificationState.Running
+                && TryReadTunBytes(out long tunRx, out long tunTx))
+            {
+                if (!usingTunCounters)
+                {
+                    baseRxBytes = tunRx;
+                    baseTxBytes = tunTx;
+                    lastRxBytes = tunRx;
+                    lastTxBytes = tunTx;
+                    usingTunCounters = true;
+                }
+
+                currentRxBytes = tunRx;
+                currentTxBytes = tunTx;
+            }
+            else
+            {
+                currentRxBytes = ReadUidRxBytes();
+                currentTxBytes = ReadUidTxBytes();
+            }
 
             long totalRxBytes = Math.Max(0, currentRxBytes - baseRxBytes);
             long totalTxBytes = Math.Max(0, currentTxBytes - baseTxBytes);
@@ -369,6 +394,39 @@ namespace InvisibleGorillaXRay.Android.Services
                 return true;
 
             return context.CheckSelfPermission(global::Android.Manifest.Permission.PostNotifications) == Permission.Granted;
+        }
+
+        private static bool TryReadTunBytes(out long rxBytes, out long txBytes)
+        {
+            rxBytes = 0;
+            txBytes = 0;
+            try
+            {
+                foreach (string line in System.IO.File.ReadLines("/proc/net/dev"))
+                {
+                    int colon = line.IndexOf(':');
+                    if (colon <= 0)
+                        continue;
+
+                    string name = line.Substring(0, colon).Trim();
+                    if (!name.StartsWith("tun", StringComparison.Ordinal))
+                        continue;
+
+                    string[] parts = line.Substring(colon + 1).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length < 9)
+                        continue;
+
+                    if (!long.TryParse(parts[0], out rxBytes) || !long.TryParse(parts[8], out txBytes))
+                        continue;
+
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
         }
 
         private static long ReadUidRxBytes()

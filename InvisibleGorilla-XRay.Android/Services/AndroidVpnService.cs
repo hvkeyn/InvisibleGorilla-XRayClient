@@ -153,7 +153,7 @@ namespace InvisibleGorillaXRay.Android.Services
 
             try
             {
-                try { StopVpn("Replaced by new start"); }
+                try { StopVpn("Replaced by new start", endSession: false); }
                 catch (Exception ex) { DiagnosticLog.WriteException("AndroidVpnService.StopBeforeStart", ex); }
 
                 int startGeneration = Interlocked.Increment(ref vpnGeneration);
@@ -171,6 +171,7 @@ namespace InvisibleGorillaXRay.Android.Services
                             return;
 
                         AndroidVpnServiceController.NotifyStarted();
+                        AndroidConnectionNotificationManager.MarkRunning();
                         TryRefreshForegroundNotification();
                     }
                     catch (Exception ex)
@@ -497,7 +498,7 @@ namespace InvisibleGorillaXRay.Android.Services
             AndroidVpnServiceController.NotifyStopped(reason);
         }
 
-        private void StopVpn(string reason, int expectedGeneration = -1)
+        private void StopVpn(string reason, int expectedGeneration = -1, bool endSession = true)
         {
             int currentGeneration = Volatile.Read(ref vpnGeneration);
             if (expectedGeneration >= 0 && expectedGeneration != currentGeneration)
@@ -516,6 +517,9 @@ namespace InvisibleGorillaXRay.Android.Services
 
                 StopVpnCore(reason);
             }
+
+            if (!endSession)
+                return;
 
             if (expectedGeneration >= 0 && expectedGeneration != Volatile.Read(ref vpnGeneration))
                 return;
