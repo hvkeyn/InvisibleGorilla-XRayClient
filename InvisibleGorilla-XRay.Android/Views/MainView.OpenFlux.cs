@@ -23,6 +23,8 @@ namespace InvisibleGorillaXRay.Android.Views
         private TextBox OpenFluxKeyInput => GetRequiredControl<TextBox>("OpenFluxKeyTextBox");
         private ComboBox OpenFluxTransportSelector => GetRequiredControl<ComboBox>("OpenFluxTransportComboBox");
         private Button OpenFluxApplyActionButton => GetRequiredControl<Button>("OpenFluxApplyButton");
+        private Button OpenFluxCopyUrlActionButton => GetRequiredControl<Button>("OpenFluxCopyUrlButton");
+        private Button OpenFluxCopyKeyActionButton => GetRequiredControl<Button>("OpenFluxCopyKeyButton");
         private TextBlock OpenFluxStatusText => GetRequiredControl<TextBlock>("OpenFluxStatusTextBlock");
         private TextBlock OpenFluxHintText => GetRequiredControl<TextBlock>("OpenFluxHintTextBlock");
         private TextBlock OpenFluxUrlLabelText => GetRequiredControl<TextBlock>("OpenFluxUrlLabelTextBlock");
@@ -59,6 +61,8 @@ namespace InvisibleGorillaXRay.Android.Views
             OpenFluxKeyLabelText.Text = Localize("Lang.OpenFlux.KeyLabel");
             OpenFluxHintText.Text = Localize("Lang.OpenFlux.Hint");
             OpenFluxApplyActionButton.Content = Localize("Lang.OpenFlux.Apply");
+            OpenFluxCopyUrlActionButton.Content = Localize("Lang.OpenFlux.CopyUrl");
+            OpenFluxCopyKeyActionButton.Content = Localize("Lang.OpenFlux.CopyKey");
             OpenFluxUrlInput.Watermark = "https://disk.yandex.ru/edit/d/...";
             OpenFluxKeyInput.Watermark = Localize("Lang.OpenFlux.KeyHint");
         }
@@ -137,6 +141,32 @@ namespace InvisibleGorillaXRay.Android.Views
                 _ => OpenFluxTransportMode.Auto
             };
             return profile;
+        }
+
+        private void OnOpenFluxCopyUrlClick(object? sender, RoutedEventArgs e)
+        {
+            string url = OpenFluxUrl.Trim(OpenFluxUrlInput.Text);
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                SetStatus("Lang.OpenFlux.CopyEmpty");
+                return;
+            }
+
+            CopyTextToClipboard(url, "OpenFlux URL");
+            SetStatus("Lang.OpenFlux.Copied");
+        }
+
+        private void OnOpenFluxCopyKeyClick(object? sender, RoutedEventArgs e)
+        {
+            string key = (OpenFluxKeyInput.Text ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                SetStatus("Lang.OpenFlux.CopyEmpty");
+                return;
+            }
+
+            CopyTextToClipboard(key, "OpenFlux key");
+            SetStatus("Lang.OpenFlux.Copied");
         }
 
         private async void OnOpenFluxApplyClick(object? sender, RoutedEventArgs e)
@@ -262,8 +292,9 @@ namespace InvisibleGorillaXRay.Android.Views
                 OpenFluxClientStatus.Connecting => Localize("Lang.OpenFlux.Status.Connecting"),
                 OpenFluxClientStatus.WaitingPeer => Localize("Lang.OpenFlux.Status.WaitingPeer"),
                 OpenFluxClientStatus.Connected => Localize("Lang.OpenFlux.Status.Live"),
+                OpenFluxClientStatus.Stopped => Localize("Lang.OpenFlux.Status.Stopped"),
                 OpenFluxClientStatus.Error => Localize(MapOpenFluxApplyError(detail)),
-                _ => OpenFluxStatusText.Text
+                _ => Localize("Lang.OpenFlux.Status.Stopped")
             };
         }
 

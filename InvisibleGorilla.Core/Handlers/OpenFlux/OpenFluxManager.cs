@@ -192,10 +192,21 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
 
         public void WaitSession()
         {
+            // Yandex document login on the sidecar dies after about a day while the
+            // process still looks healthy. Recycle it so the next start authorizes again.
+            DateTime recycleAt = DateTime.UtcNow.AddHours(3);
             while (!sessionStop)
             {
                 if (restartFlag)
                     return;
+
+                if (DateTime.UtcNow >= recycleAt)
+                {
+                    DiagnosticLog.Write(Tag, "OpenFlux session reached 3h; restarting to refresh the Yandex login");
+                    restartFlag = true;
+                    StopProcess(waitExitMs: 3000);
+                    return;
+                }
 
                 lock (sync)
                 {

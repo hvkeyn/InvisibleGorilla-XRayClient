@@ -52,6 +52,13 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.44
+
+- **Android hero pulses like a Wi-Fi signal while the tunnel is up.** Three rings expand outward from the gorilla and the green disc behind it breathes. Stopped state stays still.
+- **OpenFlux client refreshes its Yandex login every 3 hours** by restarting the sidecar. The exit unit on the server already recycles every 4 hours, so a phone left connected overnight does not sit on a dead session.
+- **Android connection card clears the exit IP on STOP** and ignores a late lookup that would paint the tunnel result after disconnect.
+- **OpenFlux editor can copy the document URL and the derived key.**
+
 ## What's new in v3.6.42
 
 - **Android no longer freezes on STOP or on the next RUN.** The Go tun2socks DNS path called back into managed code to run `VpnService.protect()`; that binder call blocked on the system_server VPN lock during teardown and stalled the whole Mono runtime (measured: 26 s of a completely frozen app, followed by an ANR). The app is already excluded from its own TUN in every app-rules mode, so the callback is no longer registered, and it is unbound before teardown on the devices that still need it. Teardown now takes 0.3-2 s with a responsive UI.

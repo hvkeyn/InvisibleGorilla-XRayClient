@@ -346,6 +346,10 @@
     <x:String x:Key="Lang.OpenFlux.ServerListHint">Yandex document</x:String>
     <x:String x:Key="Lang.OpenFlux.UrlLabel">Yandex document URL</x:String>
     <x:String x:Key="Lang.OpenFlux.Apply">Apply URL</x:String>
+    <x:String x:Key="Lang.OpenFlux.CopyUrl">Copy URL</x:String>
+    <x:String x:Key="Lang.OpenFlux.CopyKey">Copy key</x:String>
+    <x:String x:Key="Lang.OpenFlux.Copied">Copied</x:String>
+    <x:String x:Key="Lang.OpenFlux.CopyEmpty">Nothing to copy yet</x:String>
     <x:String x:Key="Lang.OpenFlux.KeyLabel">Key (derived from the URL, copy if needed)</x:String>
     <x:String x:Key="Lang.OpenFlux.KeyHint">The key is derived from the document URL. Another client only needs the same link.</x:String>
     <x:String x:Key="Lang.OpenFlux.Hint">One Yandex document URL is enough: key and exit are derived from it. Apply checks the link, pings it, and registers the exit.</x:String>

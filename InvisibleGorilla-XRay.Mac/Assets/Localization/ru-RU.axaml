@@ -346,6 +346,10 @@
     <x:String x:Key="Lang.OpenFlux.ServerListHint">Документ Яндекса</x:String>
     <x:String x:Key="Lang.OpenFlux.UrlLabel">Ссылка на документ Яндекса</x:String>
     <x:String x:Key="Lang.OpenFlux.Apply">Применить</x:String>
+    <x:String x:Key="Lang.OpenFlux.CopyUrl">Копировать ссылку</x:String>
+    <x:String x:Key="Lang.OpenFlux.CopyKey">Копировать ключ</x:String>
+    <x:String x:Key="Lang.OpenFlux.Copied">Скопировано</x:String>
+    <x:String x:Key="Lang.OpenFlux.CopyEmpty">Пока нечего копировать</x:String>
     <x:String x:Key="Lang.OpenFlux.KeyLabel">Ключ (считается из ссылки, копируй если нужно)</x:String>
     <x:String x:Key="Lang.OpenFlux.KeyHint">Ключ сам получается из ссылки на документ. Другому клиенту достаточно той же ссылки.</x:String>
     <x:String x:Key="Lang.OpenFlux.Hint">Одной ссылки на документ Яндекса достаточно: ключ и exit считаются из неё. Применить проверяет ссылку, пинг и регистрирует на сервере.</x:String>

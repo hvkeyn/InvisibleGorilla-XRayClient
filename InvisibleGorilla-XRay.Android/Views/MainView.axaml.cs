@@ -115,6 +115,9 @@ namespace InvisibleGorillaXRay.Android.Views
         private ReleaseAsset? pendingUpdateAsset;
         private string? pendingUpdateLocalApkPath;
         private DispatcherTimer? connectionInfoTimer;
+        private DispatcherTimer? heroWifiPulseTimer;
+        private int heroWifiPulseTick;
+        private bool heroWifiPulseHooked;
         private CancellationTokenSource? connectionInfoLookupCancellation;
         private string baselineIp = string.Empty;
         private bool isConnectionInfoConnected;
@@ -124,6 +127,9 @@ namespace InvisibleGorillaXRay.Android.Views
         private const int ConnectionInfoMaxProxyWaitRetries = 8;
         private bool isConnectionInfoTor;
         private int connectionInfoRefreshBusy;
+        private int connectionInfoRefreshPending;
+        private int connectionInfoGeneration;
+        private ConnectionState? displayedConnectionState;
         private string lastOpenFluxGeoIp = string.Empty;
         private ConnectionInfo? lastOpenFluxGeo;
         private int openFluxExitIpProbeBusy;
@@ -243,6 +249,9 @@ namespace InvisibleGorillaXRay.Android.Views
         private StackPanel AddConfigContainer => GetRequiredControl<StackPanel>("AddConfigPanel");
         private StackPanel AddSubscriptionContainer => GetRequiredControl<StackPanel>("AddSubscriptionPanel");
         private Border ConnectionHeroGlowBorder => GetRequiredControl<Border>("ConnectionHeroGlow");
+        private Ellipse HeroPulseRingInnerShape => GetRequiredControl<Ellipse>("HeroPulseRingInner");
+        private Ellipse HeroPulseRingMiddleShape => GetRequiredControl<Ellipse>("HeroPulseRingMiddle");
+        private Ellipse HeroPulseRingOuterShape => GetRequiredControl<Ellipse>("HeroPulseRingOuter");
         private Grid StoppedHeroIconShape => GetRequiredControl<Grid>("StoppedHeroIcon");
         private Grid RunningHeroIconShape => GetRequiredControl<Grid>("RunningHeroIcon");
         private Border ConnectionStateIndicatorDot => GetRequiredControl<Border>("ConnectionStateIndicator");
@@ -2404,6 +2413,91 @@ namespace InvisibleGorillaXRay.Android.Views
             container.IsVisible = !string.IsNullOrWhiteSpace(message);
         }
 
+        private void SetHeroWifiPulse(bool enabled)
+        {
+            Ellipse inner = HeroPulseRingInnerShape;
+            Ellipse middle = HeroPulseRingMiddleShape;
+            Ellipse outer = HeroPulseRingOuterShape;
+            EnsureHeroRingTransform(inner);
+            EnsureHeroRingTransform(middle);
+            EnsureHeroRingTransform(outer);
+
+            if (!enabled)
+            {
+                heroWifiPulseTimer?.Stop();
+                heroWifiPulseTick = 0;
+                ConnectionHeroGlowBorder.Opacity = 0.22;
+                HideHeroRing(inner);
+                HideHeroRing(middle);
+                HideHeroRing(outer);
+                return;
+            }
+
+            inner.IsVisible = true;
+            middle.IsVisible = true;
+            outer.IsVisible = true;
+            heroWifiPulseTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+            if (!heroWifiPulseHooked)
+            {
+                heroWifiPulseTimer.Tick += (_, _) => AdvanceHeroWifiPulse();
+                heroWifiPulseHooked = true;
+            }
+
+            if (!heroWifiPulseTimer.IsEnabled)
+                heroWifiPulseTimer.Start();
+        }
+
+        private void AdvanceHeroWifiPulse()
+        {
+            heroWifiPulseTick = (heroWifiPulseTick + 1) % 40;
+            double t = heroWifiPulseTick / 40.0;
+            ApplyHeroRing(HeroPulseRingInnerShape, HeroWifiWave(t, 0.10));
+            ApplyHeroRing(HeroPulseRingMiddleShape, HeroWifiWave(t, 0.32));
+            ApplyHeroRing(HeroPulseRingOuterShape, HeroWifiWave(t, 0.54));
+            ConnectionHeroGlowBorder.Opacity = 0.16 + 0.18 * (0.5 + 0.5 * Math.Sin(t * Math.PI * 2));
+        }
+
+        private static double HeroWifiWave(double t, double center)
+        {
+            double distance = Math.Abs(t - center);
+            if (distance > 0.5)
+                distance = 1 - distance;
+
+            double wave = Math.Max(0, 1 - distance / 0.16);
+            return wave * wave;
+        }
+
+        private static void ApplyHeroRing(Ellipse ring, double wave)
+        {
+            ring.Opacity = wave;
+            if (ring.RenderTransform is ScaleTransform scale)
+            {
+                double size = 0.78 + 0.22 * wave;
+                scale.ScaleX = size;
+                scale.ScaleY = size;
+            }
+        }
+
+        private static void HideHeroRing(Ellipse ring)
+        {
+            ring.IsVisible = false;
+            ring.Opacity = 0;
+            if (ring.RenderTransform is ScaleTransform scale)
+            {
+                scale.ScaleX = 0.78;
+                scale.ScaleY = 0.78;
+            }
+        }
+
+        private static void EnsureHeroRingTransform(Ellipse ring)
+        {
+            if (ring.RenderTransform is ScaleTransform)
+                return;
+
+            ring.RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative);
+            ring.RenderTransform = new ScaleTransform(0.78, 0.78);
+        }
+
         private void SetRunningState(bool isRunning)
         {
             RunActionButton.IsVisible = !isRunning;
@@ -2412,11 +2506,16 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void SetConnectionState(ConnectionState state)
         {
+            bool stateChanged = displayedConnectionState != state;
+            displayedConnectionState = state;
             isConnectionInfoConnected = state == ConnectionState.Running;
+            if (stateChanged)
+                CancelConnectionInfoLookup();
 
             switch (state)
             {
                 case ConnectionState.Starting:
+                    SetHeroWifiPulse(false);
                     ConnectionHeroGlowBorder.IsVisible = false;
                     StoppedHeroIconShape.IsVisible = true;
                     RunningHeroIconShape.IsVisible = false;
@@ -2427,6 +2526,7 @@ namespace InvisibleGorillaXRay.Android.Views
 
                 case ConnectionState.Running:
                     ConnectionHeroGlowBorder.IsVisible = true;
+                    SetHeroWifiPulse(true);
                     StoppedHeroIconShape.IsVisible = false;
                     RunningHeroIconShape.IsVisible = true;
                     ConnectionStateIndicatorDot.Background = RunningBrush;
@@ -2435,6 +2535,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     break;
 
                 default:
+                    SetHeroWifiPulse(false);
                     ConnectionHeroGlowBorder.IsVisible = false;
                     StoppedHeroIconShape.IsVisible = true;
                     RunningHeroIconShape.IsVisible = false;
@@ -2446,7 +2547,11 @@ namespace InvisibleGorillaXRay.Android.Views
                     lastOpenFluxGeo = null;
                     lastOpenFluxGeoIp = string.Empty;
                     StopGoidaLiveHealthMonitor();
-                    ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(1));
+                    if (stateChanged)
+                    {
+                        ShowDisconnectedConnectionCard();
+                        ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(1));
+                    }
                     return;
             }
 
@@ -2594,52 +2699,91 @@ namespace InvisibleGorillaXRay.Android.Views
             });
         }
 
+        private void CancelConnectionInfoLookup()
+        {
+            System.Threading.Interlocked.Increment(ref connectionInfoGeneration);
+            try { connectionInfoLookupCancellation?.Cancel(); } catch { }
+        }
+
+        private void ShowDisconnectedConnectionCard()
+        {
+            ConnectionInfoDotControl.Background = AvailabilityPendingBrush;
+            ConnectionInfoIpText.Text = Localize("Lang.ConnectionInfo.Checking");
+            ConnectionInfoLocationText.Text = string.Empty;
+            ConnectionInfoOrgText.Text = string.Empty;
+            ConnectionInfoModeText.Text = string.Empty;
+            ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Checking");
+        }
+
         private async Task RefreshConnectionInfoAsync()
         {
             if (!global::InvisibleGorillaXRay.Android.MainActivity.IsInForeground)
                 return;
 
             if (System.Threading.Interlocked.CompareExchange(ref connectionInfoRefreshBusy, 1, 0) != 0)
+            {
+                System.Threading.Interlocked.Exchange(ref connectionInfoRefreshPending, 1);
                 return;
+            }
 
             try
             {
+                System.Threading.Interlocked.Exchange(ref connectionInfoRefreshPending, 0);
                 if (Dispatcher.UIThread.CheckAccess())
-                {
                     await Task.Run(RefreshConnectionInfoBodyAsync).ConfigureAwait(false);
-                    return;
-                }
-
-                await RefreshConnectionInfoBodyAsync().ConfigureAwait(false);
+                else
+                    await RefreshConnectionInfoBodyAsync().ConfigureAwait(false);
             }
             finally
             {
                 System.Threading.Interlocked.Exchange(ref connectionInfoRefreshBusy, 0);
+                if (System.Threading.Interlocked.Exchange(ref connectionInfoRefreshPending, 0) == 1
+                    && global::InvisibleGorillaXRay.Android.MainActivity.IsInForeground)
+                {
+                    Dispatcher.UIThread.Post(() => { _ = RefreshConnectionInfoAsync(); });
+                }
             }
         }
 
         private async Task RefreshConnectionInfoBodyAsync()
         {
-            connectionInfoLookupCancellation?.Cancel();
-            connectionInfoLookupCancellation = new CancellationTokenSource();
-            CancellationToken token = connectionInfoLookupCancellation.Token;
-
+            int generation = System.Threading.Volatile.Read(ref connectionInfoGeneration);
             bool connected = isConnectionInfoConnected;
+            bool StillCurrent() =>
+                generation == System.Threading.Volatile.Read(ref connectionInfoGeneration)
+                && connected == isConnectionInfoConnected;
+
+            CancellationTokenSource lookup = new CancellationTokenSource();
+            CancellationTokenSource? previous = System.Threading.Interlocked.Exchange(ref connectionInfoLookupCancellation, lookup);
+            try { previous?.Cancel(); } catch { }
+            if (!StillCurrent())
+            {
+                lookup.Cancel();
+                return;
+            }
+
+            CancellationToken token = lookup.Token;
 
             if (connected && IsOpenFluxProfileActive())
             {
                 if (lastOpenFluxGeo != null)
                 {
                     ConnectionInfo cached = lastOpenFluxGeo;
-                    Dispatcher.UIThread.Post(() => ApplyConnectionInfo(cached));
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (StillCurrent())
+                            ApplyConnectionInfo(cached);
+                    });
                     return;
                 }
 
                 ConnectionInfo? openFluxInfo = await TryLookupOpenFluxExitIpAsync(token).ConfigureAwait(false);
-                if (token.IsCancellationRequested)
+                if (!StillCurrent() || token.IsCancellationRequested)
                     return;
                 Dispatcher.UIThread.Post(() =>
                 {
+                    if (!StillCurrent())
+                        return;
                     if (openFluxInfo != null)
                     {
                         connectionInfoFailureRetries = 0;
@@ -2678,6 +2822,8 @@ namespace InvisibleGorillaXRay.Android.Views
 
             Dispatcher.UIThread.Post(() =>
             {
+                if (!StillCurrent())
+                    return;
                 ConnectionInfoDotControl.Background = AvailabilityPendingBrush;
                 ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Checking");
                 ConnectionInfoIpText.Text = Localize("Lang.ConnectionInfo.Checking");
@@ -2685,6 +2831,9 @@ namespace InvisibleGorillaXRay.Android.Views
                     ? $"{Localize("Lang.ConnectionInfo.Mode")} {modeText}"
                     : string.Empty;
             });
+
+            if (!StillCurrent())
+                return;
 
             if (connected && probeProxy == null)
             {
@@ -2698,6 +2847,8 @@ namespace InvisibleGorillaXRay.Android.Views
                 connectionInfoProxyWaitRetries = 0;
                 Dispatcher.UIThread.Post(() =>
                 {
+                    if (!StillCurrent())
+                        return;
                     ConnectionInfoDotControl.Background = AvailabilityErrorBrush;
                     ConnectionInfoIpText.Text = Localize("Lang.ConnectionInfo.Unknown");
                     ConnectionInfoLocationText.Text = string.Empty;
@@ -2715,19 +2866,23 @@ namespace InvisibleGorillaXRay.Android.Views
                 ConnectionInfo tunnelInfo = await connectionInfoService
                     .LookupThroughTunnelAsync(probeProxy!, token)
                     .ConfigureAwait(false);
-                if (token.IsCancellationRequested)
+                if (!StillCurrent() || token.IsCancellationRequested)
                     return;
 
                 if (!tunnelInfo.Ok)
                 {
-                    Dispatcher.UIThread.Post(() => ApplyConnectionInfo(tunnelInfo));
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (StillCurrent())
+                            ApplyConnectionInfo(tunnelInfo);
+                    });
                     return;
                 }
 
                 ConnectionInfo directInfo = await connectionInfoService
                     .LookupAsync(null, token)
                     .ConfigureAwait(false);
-                if (token.IsCancellationRequested)
+                if (!StillCurrent() || token.IsCancellationRequested)
                     return;
 
                 if (directInfo.Ok
@@ -2751,11 +2906,15 @@ namespace InvisibleGorillaXRay.Android.Views
             else
             {
                 info = await connectionInfoService.LookupAsync(null, token).ConfigureAwait(false);
-                if (token.IsCancellationRequested)
+                if (!StillCurrent() || token.IsCancellationRequested)
                     return;
             }
 
-            Dispatcher.UIThread.Post(() => ApplyConnectionInfo(info));
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (StillCurrent())
+                    ApplyConnectionInfo(info);
+            });
         }
 
         private void ApplyConnectionInfo(ConnectionInfo info)
@@ -3407,6 +3566,7 @@ namespace InvisibleGorillaXRay.Android.Views
             }
 
             int stopEpoch = Interlocked.Increment(ref connectionEpoch);
+            CancelConnectionInfoLookup();
             isStopWorkerBusy = true;
             isRunWorkerBusy = false;
             global::InvisibleGorillaXRay.Android.MainActivity.SuppressForegroundChangedUntilUtc =
@@ -3423,6 +3583,8 @@ namespace InvisibleGorillaXRay.Android.Views
                         return;
 
                     AndroidConnectionNotificationManager.MarkStopping();
+                    try { connectionInfoLookupCancellation?.Cancel(); } catch { }
+                    System.Threading.Thread.Sleep(250);
                     StopCoreAndVpn();
                 }
                 catch (Exception ex) { DiagnosticLog.WriteException("MainView.RequestStop", ex); }
@@ -3474,6 +3636,8 @@ namespace InvisibleGorillaXRay.Android.Views
                             "/",
                             5000), token).ConfigureAwait(false);
                         ip = (body ?? "").Trim();
+                        if (ip.Length < 7 || ip.IndexOf('.') < 0)
+                            DiagnosticLog.Write("ConnectionInfo.OpenFlux", "SOCKS ipify returned no IP");
                         manager.RememberExitIp(ip);
                     }
                     finally

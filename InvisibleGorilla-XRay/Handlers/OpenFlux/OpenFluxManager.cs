@@ -176,10 +176,19 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
 
         public void WaitSession()
         {
+            DateTime recycleAt = DateTime.UtcNow.AddHours(3);
             while (!sessionStop)
             {
                 if (restartFlag)
                     return;
+
+                if (DateTime.UtcNow >= recycleAt)
+                {
+                    DiagnosticLog.Write(Tag, "OpenFlux session reached 3h; restarting to refresh the Yandex login");
+                    restartFlag = true;
+                    StopProcess(waitExitMs: 3000);
+                    return;
+                }
 
                 lock (sync)
                 {
