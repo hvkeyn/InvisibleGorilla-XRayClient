@@ -1029,6 +1029,9 @@ namespace InvisibleGorillaXRay.Android.Views
             {
                 try
                 {
+                    // Path changes here without TrySelectConfigByPath, so the OpenFlux
+                    // editor would stay on screen with the last "Tunnel is up" line.
+                    ApplyOpenFluxPanel();
                     UpdateCurrentConfigSummary();
                     if (!IsGoidaConnectionRestartSuppressed && IsConnectionActive())
                         _ = RestartConnectionAfterSettingsChangeAsync();

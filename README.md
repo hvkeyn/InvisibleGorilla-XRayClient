@@ -52,6 +52,10 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.47
+
+- **The OpenFlux editor hides when a Goida node takes over.** Switching servers no longer leaves "Tunnel is up" on the server page after the tunnel has moved on or stopped.
+
 ## What's new in v3.6.46
 
 - **Android no longer dies when you switch Goida servers.** Avalonia 11.0.10's virtualizing list threw during layout about 40 seconds after the tunnel stopped and killed the process. The node list now draws as a plain stack (capped at 250 rows) and updates the same collection in place.
