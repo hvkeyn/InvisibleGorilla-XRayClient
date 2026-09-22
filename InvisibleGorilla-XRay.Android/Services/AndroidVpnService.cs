@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using Android.App;
@@ -35,6 +36,7 @@ namespace InvisibleGorillaXRay.Android.Services
         private const string ExtraEnableIpv6 = "enable_ipv6";
         private const string ExtraTunAddress = "tun_address";
         private const string ExtraDns = "dns";
+        private const string ExtraBypassServer = "bypass_server";
         private const string ExtraSessionName = "session_name";
         private const string ExtraAppRulesMode = "app_rules_mode";
         private const string ExtraAppPackages = "app_packages";
@@ -65,6 +67,7 @@ namespace InvisibleGorillaXRay.Android.Services
             intent.PutExtra(ExtraEnableIpv6, options.EnableIpv6);
             intent.PutExtra(ExtraTunAddress, options.TunAddress);
             intent.PutExtra(ExtraDns, options.Dns);
+            intent.PutExtra(ExtraBypassServer, options.BypassServer ?? string.Empty);
             intent.PutExtra(ExtraSessionName, options.SessionName);
             intent.PutExtra(ExtraAppRulesMode, (int)options.AppRulesMode);
             if (options.AppPackages.Count > 0)
@@ -231,6 +234,7 @@ namespace InvisibleGorillaXRay.Android.Services
             bool enableIpv6 = intent.GetBooleanExtra(ExtraEnableIpv6, true);
             string tunAddress = intent.GetStringExtra(ExtraTunAddress)?.Trim() ?? "10.0.236.10";
             string dns = intent.GetStringExtra(ExtraDns)?.Trim() ?? "8.8.8.8";
+            string bypassServer = intent.GetStringExtra(ExtraBypassServer)?.Trim() ?? string.Empty;
             string sessionName = intent.GetStringExtra(ExtraSessionName)?.Trim() ?? "Invisible Gorilla XRay";
             AppRulesMode appRulesMode = NormalizeAppRulesMode(intent.GetIntExtra(ExtraAppRulesMode, (int)AppRulesMode.ALL_APPS));
             string[] appPackages = intent.GetStringArrayListExtra(ExtraAppPackages)?
@@ -270,6 +274,8 @@ namespace InvisibleGorillaXRay.Android.Services
 
             foreach (string dnsServer in SplitDnsServers(dns))
                 builder.AddDnsServer(dnsServer);
+
+            ExcludeServerFromTunnel(builder, bypassServer);
 
             if (enableIpv6)
                 TryEnableIpv6(builder);
@@ -536,6 +542,75 @@ namespace InvisibleGorillaXRay.Android.Services
             }
 
             AndroidConnectionNotificationManager.Republish();
+        }
+
+        private static void ExcludeServerFromTunnel(Builder builder, string server)
+        {
+            if (string.IsNullOrWhiteSpace(server))
+            {
+                DiagnosticLog.Write("AndroidVpnService", "No server address to exclude from the TUN");
+                return;
+            }
+
+            if (Build.VERSION.SdkInt < BuildVersionCodes.Tiramisu)
+            {
+                DiagnosticLog.Write(
+                    "AndroidVpnService",
+                    $"Server bypass route needs Android 13+, current API={Build.VERSION.SdkInt}, server={server}");
+                return;
+            }
+
+            foreach (string ip in ResolveBypassAddresses(server))
+            {
+                if (IPAddress.TryParse(ip, out IPAddress parsed) && IPAddress.IsLoopback(parsed))
+                {
+                    DiagnosticLog.Write("AndroidVpnService", $"Skip loopback {ip}; it is not a TUN bypass route");
+                    continue;
+                }
+
+                try
+                {
+                    Java.Net.InetAddress address = Java.Net.InetAddress.GetByName(ip);
+                    int prefix = address is Java.Net.Inet6Address ? 128 : 32;
+                    builder.ExcludeRoute(new IpPrefix(address, prefix));
+                    DiagnosticLog.Write("AndroidVpnService", $"Excluded {ip}/{prefix} from the TUN so the tunnel can reach its server");
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("AndroidVpnService.ExcludeRoute", ex);
+                }
+            }
+        }
+
+        private static IEnumerable<string> ResolveBypassAddresses(string server)
+        {
+            HashSet<string> addresses = new(StringComparer.OrdinalIgnoreCase);
+            foreach (string part in server.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                string candidate = part.Trim();
+                if (candidate.StartsWith('[') && candidate.Contains(']'))
+                    candidate = candidate.Substring(1, candidate.IndexOf(']') - 1);
+                else if (candidate.Count(ch => ch == ':') == 1)
+                    candidate = candidate.Substring(0, candidate.IndexOf(':'));
+
+                if (IPAddress.TryParse(candidate, out IPAddress parsed))
+                {
+                    addresses.Add(parsed.ToString());
+                    continue;
+                }
+
+                try
+                {
+                    foreach (IPAddress resolved in Dns.GetHostAddresses(candidate))
+                        addresses.Add(resolved.ToString());
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("AndroidVpnService.ResolveBypass", ex);
+                }
+            }
+
+            return addresses;
         }
 
         private static string[] SplitDnsServers(string dns)

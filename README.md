@@ -52,6 +52,11 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.48
+
+- **A second Android RUN no longer needs a phone reboot.** The active config's server address is excluded from the TUN (`/32` or `/128`) before the tunnel comes up, so traffic to the entry stays on Wi-Fi or mobile data.
+- **Windows split tunnel no longer dials itself.** sing-box keeps that server off the OS route table, and the adapter DNS is the configured resolver instead of `10.0.236.11`.
+
 ## What's new in v3.6.47
 
 - **The OpenFlux editor hides when a Goida node takes over.** Switching servers no longer leaves "Tunnel is up" on the server page after the tunnel has moved on or stopped.

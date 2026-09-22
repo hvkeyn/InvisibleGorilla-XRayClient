@@ -19,6 +19,7 @@ namespace InvisibleGorillaXRay.Android.Services
         public bool EnableIpv6 { get; init; } = true;
         public string TunAddress { get; init; } = string.Empty;
         public string Dns { get; init; } = string.Empty;
+        public string BypassServer { get; init; } = string.Empty;
         public string SessionName { get; init; } = "Invisible Gorilla XRay";
         public AppRulesMode AppRulesMode { get; init; } = AppRulesMode.ALL_APPS;
         public IReadOnlyList<string> AppPackages { get; init; } = Array.Empty<string>();

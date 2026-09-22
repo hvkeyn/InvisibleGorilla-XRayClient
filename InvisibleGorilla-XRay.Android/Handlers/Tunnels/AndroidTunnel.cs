@@ -45,6 +45,7 @@ namespace InvisibleGorillaXRay.Android.Handlers.Tunnels
                 EnableIpv6 = !openFlux,
                 LimitMux = openFlux,
                 TunAddress = address,
+                BypassServer = server,
                 // DNS must not be the TUN address itself: packets to 10.0.236.10
                 // never appear on the TUN fd, so names never resolve.
                 Dns = openFlux ? "1.1.1.1" : dns,
