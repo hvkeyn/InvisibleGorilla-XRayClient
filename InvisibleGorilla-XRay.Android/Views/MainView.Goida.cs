@@ -559,8 +559,26 @@ namespace InvisibleGorillaXRay.Android.Views
             suppressGoidaPoolCheckBoxEvents = true;
             try
             {
-                goidaNodesListRows = new ObservableCollection<GoidaNodeRow>(rows);
-                GoidaNodesListBox.ItemsSource = goidaNodesListRows;
+                string? selectedId = (GoidaNodesListBox.SelectedItem as GoidaNodeRow)?.Id;
+                if (goidaNodesListRows == null || !ReferenceEquals(GoidaNodesListBox.ItemsSource, goidaNodesListRows))
+                {
+                    goidaNodesListRows = new ObservableCollection<GoidaNodeRow>(rows);
+                    GoidaNodesListBox.ItemsSource = goidaNodesListRows;
+                }
+                else
+                {
+                    goidaNodesListRows.Clear();
+                    foreach (GoidaNodeRow row in rows)
+                        goidaNodesListRows.Add(row);
+                }
+
+                if (string.IsNullOrWhiteSpace(selectedId))
+                    return;
+
+                GoidaNodeRow? match = goidaNodesListRows.FirstOrDefault(row =>
+                    string.Equals(row.Id, selectedId, StringComparison.OrdinalIgnoreCase));
+                if (match != null && !ReferenceEquals(GoidaNodesListBox.SelectedItem, match))
+                    GoidaNodesListBox.SelectedItem = match;
             }
             finally
             {
