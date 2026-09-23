@@ -72,6 +72,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             try
             {
                 System.IO.Directory.CreateDirectory(dataDir);
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(logFile) ?? Directory.TOR_DATA);
                 if (File.Exists(cookieFile))
                     File.Delete(cookieFile);
 
@@ -174,7 +175,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             while (elapsed < maxWaitMs)
             {
                 if (!IsRunning)
-                    return new Status(Code.ERROR, SubCode.CANT_CONNECT, "Tor process exited during startup. Check tor.log.");
+                    return Exited("Tor process exited during startup.");
 
                 if (IsPortActive(controlPort) && File.Exists(cookieFile))
                     break;
@@ -187,7 +188,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             while (elapsed < maxWaitMs)
             {
                 if (!IsRunning)
-                    return new Status(Code.ERROR, SubCode.CANT_CONNECT, "Tor process exited during bootstrap. Check tor.log.");
+                    return Exited("Tor process exited during bootstrap.");
 
                 using (var control = new TorControlClient())
                 {
@@ -211,6 +212,51 @@ namespace InvisibleGorillaXRay.Handlers.Tor
 
             return new Status(Code.ERROR, SubCode.CANT_CONNECT,
                 $"Tor did not finish bootstrapping within {maxWaitMs / 1000}s (reached {BootstrapPercent}%). Try different bridges.");
+        }
+
+        private Status Exited(string headline)
+        {
+            int exitCode = -1;
+            lock (sync)
+            {
+                try
+                {
+                    if (torProcess != null && torProcess.HasExited)
+                        exitCode = torProcess.ExitCode;
+                }
+                catch { }
+            }
+
+            string tail = ReadLogTail(System.IO.Path.Combine(Directory.TOR_DATA, "tor.log"));
+            DiagnosticLog.Write(Tag, $"{headline} exit={exitCode} log={tail}");
+            string detail = string.IsNullOrWhiteSpace(tail) ? headline : headline + " " + tail;
+            if (detail.Length > 500)
+                detail = detail.Substring(0, 500);
+            return new Status(Code.ERROR, SubCode.CANT_CONNECT, detail);
+        }
+
+        private static string ReadLogTail(string path)
+        {
+            try
+            {
+                if (!File.Exists(path))
+                    return "(no tor.log)";
+
+                string[] lines = File.ReadAllLines(path);
+                int start = Math.Max(0, lines.Length - 12);
+                var sb = new System.Text.StringBuilder();
+                for (int i = start; i < lines.Length; i++)
+                {
+                    if (sb.Length > 0)
+                        sb.Append(" || ");
+                    sb.Append(lines[i]);
+                }
+                return sb.ToString();
+            }
+            catch (Exception ex)
+            {
+                return ex.Message;
+            }
         }
 
         /// <summary>

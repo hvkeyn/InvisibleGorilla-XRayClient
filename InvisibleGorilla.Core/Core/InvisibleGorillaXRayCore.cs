@@ -16,6 +16,7 @@ namespace InvisibleGorillaXRay.Core
     using Utilities;
     using Services;
     using Services.OpenFlux;
+    using Services.Tor;
     using Services.Analytics.Core;
 
     public class InvisibleGorillaXRayCore
@@ -112,6 +113,9 @@ namespace InvisibleGorillaXRay.Core
         {
             if (OpenFluxProfilePaths.IsMarker(path))
                 return new Status(Code.SUCCESS, SubCode.SUCCESS, OpenFluxManager.DummyConfig);
+
+            if (TorProfilePaths.IsMarker(path))
+                return new Status(Code.SUCCESS, SubCode.SUCCESS, "{\"outbounds\":[]}");
 
             if (!XRayCoreWrapper.IsFileExists(path))
             {
@@ -491,6 +495,13 @@ namespace InvisibleGorillaXRay.Core
                 return configStatus;
 
             string server = ResolveTunnelServerAddress(configStatus.Content?.ToString());
+            if (string.IsNullOrWhiteSpace(server) && getTorSettings?.Invoke()?.GetEnabled() == true)
+            {
+                // Tor dials the bridge from this process, which is excluded from the VPN.
+                // The xray outbound is only the local SOCKS port, so there is no remote address to bypass.
+                server = Global.LOCAL_HOST;
+                DiagnosticLog.Write("EnableTunnel", "Tor egress stays in the excluded app process; no remote bypass route.");
+            }
             if (string.IsNullOrWhiteSpace(server))
             {
                 DiagnosticLog.Write("EnableTunnel", "Failed to resolve outbound server address for TUN bypass route.");

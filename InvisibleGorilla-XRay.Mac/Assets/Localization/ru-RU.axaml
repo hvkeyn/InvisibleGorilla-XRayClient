@@ -84,6 +84,7 @@
     <!-- Tor / Мосты -->
     <x:String x:Key="Lang.Tor.Enable">Пускать трафик через Tor</x:String>
     <x:String x:Key="Lang.Tor.HowTo">Выберите «Спросить Tor» или метод моста, нажмите «ПОДТВЕРДИТЬ», затем «ЗАПУСК». Если Горилла уже работает, она переподключится автоматически.</x:String>
+    <x:String x:Key="Lang.Tor.HowTo.Card">Метод этого профиля Tor. Сохраняется на карточке. Нажмите «ЗАПУСК», чтобы подключиться.</x:String>
     <x:String x:Key="Lang.Tor.Mode">Режим</x:String>
     <x:String x:Key="Lang.Tor.BridgeType">Тип моста</x:String>
     <x:String x:Key="Lang.Tor.SocksPort">SOCKS-порт Tor</x:String>
@@ -344,6 +345,8 @@
     <x:String x:Key="Lang.Goida.ServerListNameWithNode">Goida · {0}</x:String>
     <x:String x:Key="Lang.OpenFlux.ServerListName">OpenFlux</x:String>
     <x:String x:Key="Lang.OpenFlux.ServerListHint">Документ Яндекса</x:String>
+    <x:String x:Key="Lang.Tor.ServerListName">Мосты Tor</x:String>
+    <x:String x:Key="Lang.Tor.ServerListHint">snowflake</x:String>
     <x:String x:Key="Lang.OpenFlux.UrlLabel">Ссылка на документ Яндекса</x:String>
     <x:String x:Key="Lang.OpenFlux.Apply">Применить</x:String>
     <x:String x:Key="Lang.OpenFlux.CopyUrl">Копировать ссылку</x:String>

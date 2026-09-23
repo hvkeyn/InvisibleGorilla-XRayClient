@@ -32,11 +32,13 @@ namespace InvisibleGorillaXRay.Android.Views
     using InvisibleGorillaXRay.Core;
     using InvisibleGorillaXRay.Handlers;
     using InvisibleGorillaXRay.Handlers.SmartInput;
+    using InvisibleGorillaXRay.Android.Platforms;
     using InvisibleGorillaXRay.Handlers.Tor;
     using InvisibleGorillaXRay.Models;
     using InvisibleGorillaXRay.Services;
     using InvisibleGorillaXRay.Services.Goida;
     using InvisibleGorillaXRay.Services.OpenFlux;
+    using InvisibleGorillaXRay.Services.Tor;
     using InvisibleGorillaXRay.Utilities;
     using InvisibleGorillaXRay.Values;
 
@@ -187,6 +189,7 @@ namespace InvisibleGorillaXRay.Android.Views
             goidaHandler.Manager.NodesUpdated += OnGoidaNodesUpdated;
             TrySetupStep("InitializeGoidaControls", InitializeGoidaControls);
             TrySetupStep("InitializeOpenFluxControls", InitializeOpenFluxControls);
+            TrySetupStep("ApplyTorEditorPanel", ApplyTorEditorPanel);
 
             InitializeControls();
             ApplyLocalizedText();
@@ -563,7 +566,7 @@ namespace InvisibleGorillaXRay.Android.Views
             TunDescriptionText.Text = Localize("Lang.Android.Settings.TunDescription");
             GetRequiredControl<TextBlock>("TorTitleTextBlock").Text = Localize("Lang.Window.Settings.Tor");
             TorEnabledToggle.Content = Localize("Lang.Tor.Enable");
-            GetRequiredControl<TextBlock>("TorHowToTextBlock").Text = Localize("Lang.Tor.HowTo");
+            GetRequiredControl<TextBlock>("TorHowToTextBlock").Text = Localize("Lang.Tor.HowTo.Card");
             GetRequiredControl<TextBlock>("TorModeTitleTextBlock").Text = Localize("Lang.Tor.Mode");
             GetRequiredControl<TextBlock>("BridgeTypeTitleTextBlock").Text = Localize("Lang.Tor.BridgeType");
             GetRequiredControl<TextBlock>("TorSocksPortTitleTextBlock").Text = Localize("Lang.Tor.SocksPort");
@@ -768,17 +771,83 @@ namespace InvisibleGorillaXRay.Android.Views
             isSettingsLoadedIntoControls = true;
         }
 
+        private bool isApplyingTorUi;
+
         private void LoadTorSettingsIntoControls(UserSettings settings)
         {
+            EnsureSettingsControlsCreated();
             TorSettings tor = settings.GetTorSettings();
-            TorEnabledToggle.IsChecked = tor.GetEnabled();
-            TorModeSelector.SelectedIndex = TorModeOptions.Keys.ToList().IndexOf(tor.GetMode());
-            BridgeTypeSelector.SelectedIndex = BridgeTypeOptions.Keys.ToList().IndexOf(tor.GetBridgeType());
-            TorSocksPortInput.Text = tor.GetSocksPort().ToString();
-            BridgesInput.Text = string.Join(Environment.NewLine, tor.GetBridgeLines());
+            isApplyingTorUi = true;
+            try
+            {
+                TorEnabledToggle.IsChecked = tor.GetEnabled();
+                TorModeSelector.SelectedIndex = TorModeOptions.Keys.ToList().IndexOf(tor.GetMode());
+                BridgeTypeSelector.SelectedIndex = BridgeTypeOptions.Keys.ToList().IndexOf(tor.GetBridgeType());
+                TorSocksPortInput.Text = tor.GetSocksPort().ToString();
+                BridgesInput.Text = string.Join(Environment.NewLine, tor.GetBridgeLines());
+            }
+            finally
+            {
+                isApplyingTorUi = false;
+            }
+
             TorStatusText.Text = torManager.IsAvailable
                 ? Localize("Lang.Tor.Status.Ready")
                 : Localize("Lang.Tor.Status.Unavailable");
+        }
+
+        /// <summary>
+        /// The Tor card owns its method, the same way the OpenFlux card owns its document URL.
+        /// Writes the editor into <see cref="UserSettings.Tor"/> and into a matching Tor profile.
+        /// </summary>
+        private void PersistTorEditor()
+        {
+            if (isApplyingTorUi)
+                return;
+
+            try
+            {
+                EnsureSettingsControlsCreated();
+                UserSettings current = settingsHandler.UserSettings;
+                TorSettings edited = BuildTorSettingsFromUi(current);
+                string path = current.GetCurrentConfigPath();
+                bool onTorCard = TorProfilePaths.IsMarker(path) || current.FindTorProfileByPath(path) != null;
+                if (onTorCard)
+                    edited.Enabled = true;
+
+                current.Tor = edited;
+                TorProfile? profile = current.FindTorProfileByPath(path);
+                if (profile != null)
+                {
+                    profile.Mode = edited.GetMode();
+                    profile.BridgeType = edited.GetBridgeType();
+                    profile.BridgeLines = edited.GetBridgeLines();
+                    profile.SocksPort = edited.GetSocksPort();
+                }
+
+                settingsHandler.UpdateUserSettings(current);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.PersistTorEditor", ex);
+            }
+        }
+
+        private void ApplyTorEditorPanel()
+        {
+            Border? panel = this.FindControl<Border>("TorEditorPanel");
+            if (panel == null)
+            {
+                DiagnosticLog.Write("Tor", "Profile editor is not in the tree yet");
+                return;
+            }
+
+            string path = settingsHandler.UserSettings.GetCurrentConfigPath();
+            bool show = TorProfilePaths.IsMarker(path)
+                || settingsHandler.UserSettings.FindTorProfileByPath(path) != null;
+            panel.IsVisible = show;
+            if (show)
+                LoadTorSettingsIntoControls(settingsHandler.UserSettings);
         }
 
         private TorSettings BuildTorSettingsFromUi(UserSettings current)
@@ -826,6 +895,7 @@ namespace InvisibleGorillaXRay.Android.Views
             List<string> defaults = DefaultBridges.ForType(type);
             BridgesInput.Text = string.Join(Environment.NewLine, defaults);
             TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.LoadedDefaults", defaults.Count);
+            PersistTorEditor();
         }
 
         private async void OnAskTorClick(object? sender, RoutedEventArgs e)
@@ -844,6 +914,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     BridgesInput.Text = string.Join(Environment.NewLine, result.Bridges);
                     TorEnabledToggle.IsChecked = true;
                     TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.AskTorOk", result.Bridges.Count, type);
+                    PersistTorEditor();
                 }
                 else
                 {
@@ -861,20 +932,21 @@ namespace InvisibleGorillaXRay.Android.Views
         }
 
         private void OnSnowflakeClick(object? sender, RoutedEventArgs e)
-            => ApplyBuiltinMethod(BridgeType.SNOWFLAKE, DefaultBridges.Snowflake);
+            => ApplyBuiltinLines(BridgeType.SNOWFLAKE, DefaultBridges.ForType(BridgeType.SNOWFLAKE));
 
         private void OnSnowflakeAmpClick(object? sender, RoutedEventArgs e)
-            => ApplyBuiltinMethod(BridgeType.SNOWFLAKE, DefaultBridges.SnowflakeAmp);
+            => ApplyBuiltinLines(BridgeType.SNOWFLAKE, new List<string> { DefaultBridges.SnowflakeAmp });
 
         private void OnMeekAzureClick(object? sender, RoutedEventArgs e)
-            => ApplyBuiltinMethod(BridgeType.MEEK_AZURE, DefaultBridges.MeekAzure);
+            => ApplyBuiltinLines(BridgeType.MEEK_AZURE, new List<string> { DefaultBridges.MeekAzure });
 
-        private void ApplyBuiltinMethod(BridgeType type, string bridgeLine)
+        private void ApplyBuiltinLines(BridgeType type, IList<string> lines)
         {
             BridgeTypeSelector.SelectedIndex = BridgeTypeOptions.Keys.ToList().IndexOf(type);
-            BridgesInput.Text = bridgeLine;
+            BridgesInput.Text = string.Join(Environment.NewLine, lines);
             TorEnabledToggle.IsChecked = true;
             TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.MethodSelected", type);
+            PersistTorEditor();
         }
 
         /// <summary>
@@ -888,6 +960,7 @@ namespace InvisibleGorillaXRay.Android.Views
             BridgesInput.Text = string.Join(Environment.NewLine, defaults);
             TorEnabledToggle.IsChecked = true;
             TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.MoatFallback", defaults.Count);
+            PersistTorEditor();
         }
 
         private void OnBridgesEmailClick(object? sender, RoutedEventArgs e)
@@ -993,6 +1066,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     CaptchaHost.IsVisible = false;
                     activeMoatChallenge = null;
                     TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.MoatBridges", result.Bridges.Count);
+                    PersistTorEditor();
                 }
                 else
                 {
@@ -1891,17 +1965,20 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             bool isGoidaMarker = GoidaProfilePaths.IsMarker(config.Path);
             bool isOpenFluxMarker = OpenFluxProfilePaths.IsMarker(config.Path);
+            bool isTorMarker = TorProfilePaths.IsMarker(config.Path);
             string currentPath = settingsHandler.UserSettings.GetCurrentConfigPath();
             bool isGoidaActive = isGoidaMarker
                 && GoidaProfilePaths.IsMarker(currentPath);
             bool isOpenFluxActive = isOpenFluxMarker
                 && OpenFluxProfilePaths.IsMarker(currentPath);
+            bool isTorActive = isTorMarker && TorProfilePaths.IsMarker(currentPath);
 
             bool isSelected = string.Equals(currentPath, config.Path, StringComparison.OrdinalIgnoreCase)
                 || isGoidaActive
-                || isOpenFluxActive;
+                || isOpenFluxActive
+                || isTorActive;
 
-            TorProfile? torProfile = isGoidaMarker || isOpenFluxMarker
+            TorProfile? torProfile = isGoidaMarker || isOpenFluxMarker || isTorMarker
                 ? null
                 : settingsHandler.UserSettings.FindTorProfileByPath(config.Path);
 
@@ -1988,14 +2065,16 @@ namespace InvisibleGorillaXRay.Android.Views
                 Margin = new Thickness(0, 4, 0, 0),
                 Spacing = 4
             };
-            if (torProfile == null && !isGoidaMarker && !isOpenFluxMarker)
+            if (torProfile == null && !isGoidaMarker && !isOpenFluxMarker && !isTorMarker)
                 actionRow.Children.Add(CreateIconActionButton("Icon.Share", 11, 13, () => _ = ShareConfigAsync(config)));
-            if (!isGoidaMarker && !isOpenFluxMarker)
+            if (!isGoidaMarker && !isOpenFluxMarker && !isTorMarker)
                 actionRow.Children.Add(CreateIconActionButton("Icon.Delete", 12, 12, () => DeleteSelectedConfig(config)));
             actionRow.Children.Add(CreateIconActionButton("Icon.Connection", 15, 11, () =>
             {
                 if (torProfile != null)
                     _ = CheckTorProfileAsync(torProfile);
+                else if (isTorMarker)
+                    _ = CheckTorProfileAsync(BuildBuiltinTorProfile());
                 else if (isGoidaMarker)
                     _ = CheckGoidaProfileAsync();
                 else if (isOpenFluxMarker)
@@ -3213,37 +3292,102 @@ namespace InvisibleGorillaXRay.Android.Views
         }
 
         /// <summary>
-        /// Selecting a Tor bridge profile activates Tor with that profile's bridges; selecting any
-        /// normal server switches Tor back off. This makes a Tor profile behave like a VLESS key in
-        /// the list: pick it to route through it, pick another server to leave it.
+        /// The Tor list card is the built-in bridge set. Rewrite it on every start so a line saved
+        /// by an older build (a space inside cert=) cannot keep failing after the app is updated.
         /// </summary>
-        private void ApplyTorStateForSelectedConfig(string path)
+        private void RefreshBuiltinTorBridgesIfSelected()
         {
-            UserSettings current = settingsHandler.UserSettings;
-            TorProfile? profile = current.FindTorProfileByPath(path);
-            TorSettings tor = current.GetTorSettings();
+            string path = settingsHandler.UserSettings.GetCurrentConfigPath();
+            if (!TorProfilePaths.IsMarker(path))
+                return;
 
-            if (profile != null)
+            // RUN happens off the UI thread. Only the saved profile object is touched here.
+            UserSettings current = settingsHandler.UserSettings;
+            TorSettings tor = current.GetTorSettings();
+            tor.Enabled = true;
+            tor.Mode = TorMode.ONLY_TOR;
+            if (NeedsBuiltinTorBridges(tor))
             {
-                tor.Enabled = true;
-                tor.Mode = profile.Mode;
-                tor.BridgeType = profile.BridgeType;
-                tor.BridgeLines = profile.GetBridgeLines();
-                if (profile.GetSocksPort() > 0)
-                    tor.SocksPort = profile.GetSocksPort();
-            }
-            else
-            {
-                if (!tor.Enabled)
-                    return;
-                tor.Enabled = false;
+                tor.BridgeType = BridgeType.SNOWFLAKE;
+                tor.BridgeLines = DefaultBridges.ForType(BridgeType.SNOWFLAKE);
             }
 
             current.Tor = tor;
             settingsHandler.UpdateUserSettings(current);
+        }
 
-            if (isSettingsLoadedIntoControls)
-                LoadTorSettingsIntoControls(settingsHandler.UserSettings);
+        /// <summary>
+        /// Selecting the Tor card turns on the method stored on that profile. Selecting any other
+        /// server turns Tor off. Empty or broken built-in lines are replaced with the current
+        /// snowflake pair; a method the user picked on the card is kept.
+        /// </summary>
+        private void ApplyTorStateForSelectedConfig(string path)
+        {
+            UserSettings current = settingsHandler.UserSettings;
+            TorSettings tor = current.GetTorSettings();
+
+            if (TorProfilePaths.IsMarker(path))
+            {
+                tor.Enabled = true;
+                tor.Mode = TorMode.ONLY_TOR;
+                if (NeedsBuiltinTorBridges(tor))
+                {
+                    tor.BridgeType = BridgeType.SNOWFLAKE;
+                    tor.BridgeLines = DefaultBridges.ForType(BridgeType.SNOWFLAKE);
+                }
+            }
+            else
+            {
+                TorProfile? profile = current.FindTorProfileByPath(path);
+                if (profile != null)
+                {
+                    tor.Enabled = true;
+                    tor.Mode = profile.Mode;
+                    tor.BridgeType = profile.BridgeType;
+                    tor.BridgeLines = profile.GetBridgeLines();
+                    if (profile.GetSocksPort() > 0)
+                        tor.SocksPort = profile.GetSocksPort();
+                }
+                else if (tor.Enabled)
+                {
+                    tor.Enabled = false;
+                }
+            }
+
+            current.Tor = tor;
+            settingsHandler.UpdateUserSettings(current);
+            ApplyTorEditorPanel();
+        }
+
+        private static bool NeedsBuiltinTorBridges(TorSettings tor)
+        {
+            List<string> lines = tor.GetBridgeLines();
+            if (tor.GetBridgeType() == BridgeType.NONE || lines.Count == 0)
+                return true;
+
+            if (lines.Any(BridgeLineLooksBroken))
+                return true;
+
+            // Orbot's datapacket snowflake pair stalled before the directory. Replace it
+            // with the line that actually bootstraps. AMP and custom lines stay.
+            return tor.GetBridgeType() == BridgeType.SNOWFLAKE
+                && lines.Any(line => line.Contains("datapacket.com", StringComparison.Ordinal));
+        }
+
+        private static bool BridgeLineLooksBroken(string line)
+        {
+            int cert = line.IndexOf("cert=", StringComparison.Ordinal);
+            if (cert < 0)
+                return false;
+
+            int space = line.IndexOf(' ', cert + 5);
+            if (space < 0)
+                return false;
+
+            string rest = line.Substring(space + 1);
+            int nextSpace = rest.IndexOf(' ');
+            string token = nextSpace < 0 ? rest : rest.Substring(0, nextSpace);
+            return token.IndexOf('=') < 0;
         }
 
         /// <summary>
@@ -3333,6 +3477,25 @@ namespace InvisibleGorillaXRay.Android.Views
 
             current.GetTorProfiles().Remove(profile);
             settingsHandler.UpdateUserSettings(current);
+        }
+
+        private TorProfile BuildBuiltinTorProfile()
+        {
+            TorSettings tor = settingsHandler.UserSettings.GetTorSettings();
+            BridgeType type = tor.GetBridgeType() == BridgeType.NONE ? BridgeType.OBFS4 : tor.GetBridgeType();
+            List<string> lines = tor.GetBridgeLines();
+            if (lines.Count == 0)
+                lines = DefaultBridges.ForType(type);
+
+            return new TorProfile
+            {
+                Name = "Tor bridges",
+                ConfigPath = TorProfilePaths.MarkerPath,
+                Mode = TorMode.ONLY_TOR,
+                BridgeType = type,
+                BridgeLines = lines,
+                SocksPort = tor.GetSocksPort()
+            };
         }
 
         private async Task CheckTorProfileAsync(TorProfile profile)
@@ -3507,6 +3670,18 @@ namespace InvisibleGorillaXRay.Android.Views
 
                 if (epoch != Volatile.Read(ref connectionEpoch))
                     return;
+
+                RefreshBuiltinTorBridgesIfSelected();
+
+                if (OpenFluxProfilePaths.IsMarker(settingsHandler.UserSettings.GetCurrentConfigPath()))
+                {
+                    string docUrl = OpenFluxUrl.Trim(settingsHandler.UserSettings.GetOpenFluxProfile().DocUrl);
+                    PostConnectionUi(epoch, () => SetStatus("Lang.OpenFlux.Status.Opening"));
+                    bool documentReady = OpenFluxDocumentCapture.TryCapture(docUrl);
+                    DiagnosticLog.Write("OpenFlux", documentReady
+                        ? "Browser document ready"
+                        : "Browser document not ready");
+                }
 
                 Status configStatus = core.LoadConfig();
                 if (configStatus.Code == Code.ERROR)
@@ -4625,7 +4800,9 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void DeleteSelectedConfig(Config config)
         {
-            if (GoidaProfilePaths.IsMarker(config.Path) || OpenFluxProfilePaths.IsMarker(config.Path))
+            if (GoidaProfilePaths.IsMarker(config.Path)
+                || OpenFluxProfilePaths.IsMarker(config.Path)
+                || TorProfilePaths.IsMarker(config.Path))
                 return;
 
             if (pendingConfigShare != null &&

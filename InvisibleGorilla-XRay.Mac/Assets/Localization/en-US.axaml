@@ -84,6 +84,7 @@
     <!-- Tor / Bridges -->
     <x:String x:Key="Lang.Tor.Enable">Route traffic through Tor</x:String>
     <x:String x:Key="Lang.Tor.HowTo">Choose Ask Tor or a bridge method, press CONFIRM, then press RUN. If Gorilla is already running, it reconnects automatically.</x:String>
+    <x:String x:Key="Lang.Tor.HowTo.Card">Method for this Tor profile. It is saved on the card. Press RUN to connect.</x:String>
     <x:String x:Key="Lang.Tor.Mode">Mode</x:String>
     <x:String x:Key="Lang.Tor.BridgeType">Bridge type</x:String>
     <x:String x:Key="Lang.Tor.SocksPort">Tor SOCKS port</x:String>
@@ -343,6 +344,8 @@
     <x:String x:Key="Lang.Goida.ServerListName">Goida profile</x:String>
     <x:String x:Key="Lang.Goida.ServerListNameWithNode">Goida · {0}</x:String>
     <x:String x:Key="Lang.OpenFlux.ServerListName">OpenFlux</x:String>
+    <x:String x:Key="Lang.Tor.ServerListName">Tor bridges</x:String>
+    <x:String x:Key="Lang.Tor.ServerListHint">snowflake</x:String>
     <x:String x:Key="Lang.OpenFlux.ServerListHint">Yandex document</x:String>
     <x:String x:Key="Lang.OpenFlux.UrlLabel">Yandex document URL</x:String>
     <x:String x:Key="Lang.OpenFlux.Apply">Apply URL</x:String>
@@ -373,6 +376,7 @@
     <x:String x:Key="Lang.OpenFlux.Error.KeyShort">Encryption key must be at least 16 characters.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Document">Document error: not public, login page, or wrong editor.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Captcha">Yandex asked for a check, so OpenFlux did not start. Use a VLESS profile, or try OpenFlux again later.</x:String>
+    <x:String x:Key="Lang.OpenFlux.Status.Opening">Opening the Yandex document in the browser.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Transport">This URL needs Volga (vyandex), not legacy yandex.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Listen">OpenFlux SOCKS did not start. See Logs/openflux.log.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Generic">OpenFlux failed to start. See Logs/openflux.log.</x:String>

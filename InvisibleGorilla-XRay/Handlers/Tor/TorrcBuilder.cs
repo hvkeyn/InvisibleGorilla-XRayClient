@@ -34,7 +34,15 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             sb.AppendLine("SocksTimeout 60");
 
             if (!string.IsNullOrWhiteSpace(logFile))
-                sb.AppendLine($"Log notice file {Quote(logFile)}");
+            {
+                // Tor parses "Log ... file" itself and keeps quote characters in the
+                // filename, so a quoted path fails with "No such file or directory".
+                string logPath = logFile.Replace("\\", "/");
+                if (logPath.IndexOf(' ') >= 0 || logPath.IndexOf('"') >= 0)
+                    sb.AppendLine("Log notice stdout");
+                else
+                    sb.AppendLine($"Log notice file {logPath}");
+            }
 
             if (File.Exists(Path.TOR_GEOIP))
                 sb.AppendLine($"GeoIPFile {Quote(Path.TOR_GEOIP)}");
@@ -78,16 +86,16 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             switch (bridgeType)
             {
                 case BridgeType.OBFS4:
-                    sb.AppendLine($"ClientTransportPlugin obfs4 exec {Quote(pt)}");
+                    sb.AppendLine($"ClientTransportPlugin obfs4 exec {ExecPath(pt)}");
                     break;
                 case BridgeType.MEEK_AZURE:
-                    sb.AppendLine($"ClientTransportPlugin meek_lite exec {Quote(pt)}");
+                    sb.AppendLine($"ClientTransportPlugin meek_lite exec {ExecPath(pt)}");
                     break;
                 case BridgeType.WEBTUNNEL:
-                    sb.AppendLine($"ClientTransportPlugin webtunnel exec {Quote(pt)}");
+                    sb.AppendLine($"ClientTransportPlugin webtunnel exec {ExecPath(pt)}");
                     break;
                 case BridgeType.SNOWFLAKE:
-                    sb.AppendLine($"ClientTransportPlugin snowflake exec {Quote(snowflake)}");
+                    sb.AppendLine($"ClientTransportPlugin snowflake exec {ExecPath(snowflake)}");
                     break;
             }
 
@@ -118,6 +126,14 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 return line.StartsWith("Bridge ") ? line.Substring("Bridge ".Length) : line;
 
             return $"{transport} {line}";
+        }
+
+        private static string ExecPath(string path)
+        {
+            string normalized = path?.Replace("\\", "/") ?? string.Empty;
+            if (normalized.IndexOf(' ') >= 0)
+                return Quote(normalized);
+            return normalized;
         }
 
         private static string Quote(string path) => $"\"{path?.Replace("\\", "/")}\"";

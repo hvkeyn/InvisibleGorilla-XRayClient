@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using InvisibleGorillaXRay.Handlers;
 using InvisibleGorillaXRay.Handlers.DeepLinks;
 using InvisibleGorillaXRay.Handlers.Settings.Startup;
@@ -6,6 +8,7 @@ using InvisibleGorillaXRay.Models;
 using InvisibleGorillaXRay.Services;
 using InvisibleGorillaXRay.Services.Goida;
 using InvisibleGorillaXRay.Services.OpenFlux;
+using InvisibleGorillaXRay.Services.Tor;
 
 namespace InvisibleGorillaXRay.Android.Managers
 {
@@ -71,7 +74,33 @@ namespace InvisibleGorillaXRay.Android.Managers
                     getCurrentConfigPath: settingsHandler.UserSettings.GetCurrentConfigPath,
                     getGoidaListConfig: BuildGoidaListConfig,
                     getGoidaRuntimeConfig: BuildGoidaRuntimeConfig,
-                    getOpenFluxListConfig: BuildOpenFluxListConfig);
+                    getOpenFluxListConfig: BuildOpenFluxListConfig,
+                    getTorListConfig: BuildTorListConfig);
+
+                Config? BuildTorListConfig()
+                {
+                    TorSettings tor = settingsHandler.UserSettings.GetTorSettings();
+                    string hint = "snowflake";
+                    if (tor.GetBridgeType() != BridgeType.NONE)
+                    {
+                        hint = tor.GetBridgeLines().Any(line => line.Contains("ampcache=", StringComparison.Ordinal))
+                            ? "snowflake amp"
+                            : tor.GetBridgeType() switch
+                            {
+                                BridgeType.OBFS4 => "obfs4",
+                                BridgeType.MEEK_AZURE => "meek",
+                                BridgeType.WEBTUNNEL => "webtunnel",
+                                BridgeType.SNOWFLAKE => "snowflake",
+                                _ => tor.GetBridgeType().ToString().ToLowerInvariant()
+                            };
+                    }
+                    return new Config(
+                        path: TorProfilePaths.MarkerPath,
+                        name: LocalizeGoida("Lang.Tor.ServerListName", "Tor bridges"),
+                        type: ConfigType.FILE,
+                        group: GroupType.GENERAL,
+                        updateTime: hint);
+                }
 
                 Config? BuildOpenFluxListConfig()
                 {

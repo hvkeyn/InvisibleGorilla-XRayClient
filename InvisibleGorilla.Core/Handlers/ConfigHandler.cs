@@ -8,6 +8,7 @@ namespace InvisibleGorillaXRay.Handlers
     using Models;
     using Services.Goida;
     using Services.OpenFlux;
+    using Services.Tor;
     using Values;
     using Utilities;
 
@@ -20,6 +21,7 @@ namespace InvisibleGorillaXRay.Handlers
         private Func<Config?> getGoidaListConfig;
         private Func<Config?> getGoidaRuntimeConfig;
         private Func<Config?> getOpenFluxListConfig;
+        private Func<Config?> getTorListConfig;
 
         public ConfigHandler()
         {
@@ -31,12 +33,14 @@ namespace InvisibleGorillaXRay.Handlers
             Func<string> getCurrentConfigPath,
             Func<Config?> getGoidaListConfig = null,
             Func<Config?> getGoidaRuntimeConfig = null,
-            Func<Config?> getOpenFluxListConfig = null)
+            Func<Config?> getOpenFluxListConfig = null,
+            Func<Config?> getTorListConfig = null)
         {
             this.getCurrentConfigPath = getCurrentConfigPath;
             this.getGoidaListConfig = getGoidaListConfig;
             this.getGoidaRuntimeConfig = getGoidaRuntimeConfig;
             this.getOpenFluxListConfig = getOpenFluxListConfig;
+            this.getTorListConfig = getTorListConfig;
             subscriptionConfig.Setup(getCurrentConfigPath);
         }
 
@@ -67,6 +71,9 @@ namespace InvisibleGorillaXRay.Handlers
             if (OpenFluxProfilePaths.IsMarker(path))
                 return getOpenFluxListConfig?.Invoke() ?? CreateConfigModel(path);
 
+            if (TorProfilePaths.IsMarker(path))
+                return getTorListConfig?.Invoke() ?? CreateConfigModel(path);
+
             return CreateConfigModel(path);
         }
 
@@ -84,6 +91,10 @@ namespace InvisibleGorillaXRay.Handlers
             Config? openFluxConfig = getOpenFluxListConfig?.Invoke();
             if (openFluxConfig != null)
                 configs.Insert(0, openFluxConfig);
+
+            Config? torConfig = getTorListConfig?.Invoke();
+            if (torConfig != null)
+                configs.Insert(0, torConfig);
 
             return configs;
         }
@@ -107,6 +118,9 @@ namespace InvisibleGorillaXRay.Handlers
 
             if (OpenFluxProfilePaths.IsMarker(path))
                 return getOpenFluxListConfig?.Invoke();
+
+            if (TorProfilePaths.IsMarker(path))
+                return getTorListConfig?.Invoke();
 
             if (string.IsNullOrEmpty(path) || !FileUtility.IsFileExists(path))
                 return null;

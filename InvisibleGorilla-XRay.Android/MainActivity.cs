@@ -63,6 +63,15 @@ namespace InvisibleGorillaXRay.Android
         internal static DateTime SuppressForegroundChangedUntilUtc { get; set; }
         internal static event Action<bool>? ForegroundChanged;
 
+        internal static MainActivity? Current
+        {
+            get
+            {
+                lock (ActivitySync)
+                    return currentActivity;
+            }
+        }
+
         protected override void OnCreate(Bundle? savedInstanceState)
         {
             RegisterGlobalExceptionHandlersOnce();

@@ -52,6 +52,11 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.50
+
+- **Tor settings live on the Tor profile.** The bridge method, lines, and Ask Tor actions open with the Tor card, the same way OpenFlux keeps its document on its card. General settings no longer carry a separate Tor switch.
+- **The Tor card defaults to the snowflake line that finishes bootstrap on a censored mobile network.** Orbot's March 2026 datapacket fronts stalled at 10% there, so they are not the default. Snowflake AMP, obfs4, and meek (Orbot's meek front) stay on that same card. Picking another server turns Tor off.
+
 ## What's new in v3.6.49
 
 - **Stopping the Android tunnel removes it.** A later RUN no longer leaves the previous tun interface behind, which is what made the phone lose connectivity until a reboot.
