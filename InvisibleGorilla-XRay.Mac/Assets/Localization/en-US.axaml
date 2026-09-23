@@ -372,6 +372,7 @@
     <x:String x:Key="Lang.OpenFlux.Error.BadUrl">Invalid Yandex document URL.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.KeyShort">Encryption key must be at least 16 characters.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Document">Document error: not public, login page, or wrong editor.</x:String>
+    <x:String x:Key="Lang.OpenFlux.Error.Captcha">Yandex asked for a check, so OpenFlux did not start. Use a VLESS profile, or try OpenFlux again later.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Transport">This URL needs Volga (vyandex), not legacy yandex.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Listen">OpenFlux SOCKS did not start. See Logs/openflux.log.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Generic">OpenFlux failed to start. See Logs/openflux.log.</x:String>

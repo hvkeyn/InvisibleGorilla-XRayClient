@@ -40,22 +40,22 @@ var androidTunLastError string
 var androidTunRunning atomic.Bool
 
 type androidTunBridge struct {
-	tunFile *os.File
-	lwip    tcore.LWIPStack
-	done    chan struct{}
-	stop    chan struct{}
-	hasPi   bool
+	tunFd int
+	lwip  tcore.LWIPStack
+	done  chan struct{}
+	stop  chan struct{}
+	hasPi bool
 }
 
 //export StartAndroidTun2Socks
 func StartAndroidTun2Socks(fd C.int, proxyPort C.int, isUdpEnabled C.bool, username *C.char, password *C.char, limitMux C.bool) (errPtr *C.char) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
+			// The mutex is already held once this function has locked it.
+			// stopAndroidTunLocked expects that and unlocks internally.
 			message := fmt.Sprintf("android tun2socks panic: %v", recovered)
-			androidTunMutex.Lock()
 			stopAndroidTunLocked()
 			androidTunLastError = message
-			androidTunMutex.Unlock()
 			errPtr = C.CString(message)
 		}
 	}()
@@ -81,16 +81,15 @@ func StartAndroidTun2Socks(fd C.int, proxyPort C.int, isUdpEnabled C.bool, usern
 	auth := newLocalSocksAuth(C.GoString(username), C.GoString(password))
 	androidMuxLimited.Store(bool(limitMux))
 
-	tunFile := os.NewFile(uintptr(fd), fmt.Sprintf("android-tun-%d", int(fd)))
-	if tunFile == nil {
-		message := "failed to open Android TUN file descriptor"
-		androidTunLastError = message
-		return C.CString(message)
-	}
+	// os.File registers the fd with the Go poller, which keeps a dup.
+	// On this phone that dup survives Close and leaves a DOWN tun with
+	// 10.0.236.10 still installed. Raw syscalls close the only fd.
+	tunFd := int(fd)
+	_ = syscall.SetNonblock(tunFd, false)
 
 	lwip := tcore.NewLWIPStack()
 	bridge := &androidTunBridge{
-		tunFile: tunFile,
+		tunFd: tunFd,
 		lwip:    lwip,
 		done:    make(chan struct{}),
 		stop:    make(chan struct{}),
@@ -149,12 +148,15 @@ func runAndroidTunLoop(bridge *androidTunBridge) {
 
 	buffer := make([]byte, androidTunReadBufferSize)
 	for {
-		tunFile := bridge.tunFile
-		if tunFile == nil {
+		tunFd := bridge.tunFd
+		if tunFd < 0 {
 			return
 		}
 
-		packetLength, err := tunFile.Read(buffer)
+		packetLength, err := syscall.Read(tunFd, buffer)
+		if err == syscall.EINTR {
+			continue
+		}
 		if packetLength > 0 {
 			if isBridgeStopping(bridge) {
 				return
@@ -202,8 +204,8 @@ func writeAndroidTunPacket(bridge *androidTunBridge, data []byte) (int, error) {
 	if !androidTunRunning.Load() {
 		return 0, io.ErrClosedPipe
 	}
-	tunFile := bridge.tunFile
-	if tunFile == nil {
+	tunFd := bridge.tunFd
+	if tunFd < 0 {
 		return 0, io.ErrClosedPipe
 	}
 
@@ -211,9 +213,9 @@ func writeAndroidTunPacket(bridge *androidTunBridge, data []byte) (int, error) {
 		framed := make([]byte, len(data)+4)
 		framed[2] = 0x08
 		copy(framed[4:], data)
-		return tunFile.Write(framed)
+		return syscall.Write(tunFd, framed)
 	}
-	return tunFile.Write(data)
+	return syscall.Write(tunFd, data)
 }
 
 func stripTunPi(bridge *androidTunBridge, packet []byte) []byte {
@@ -244,17 +246,18 @@ func stopAndroidTunLocked() {
 		close(bridge.stop)
 	}
 
-	tunFile := bridge.tunFile
+	tunFd := bridge.tunFd
+	bridge.tunFd = -1
 	lwip := bridge.lwip
 
-	// Release the global bridge lock before closing the TUN file and LWIP stack.
+	// Release the global bridge lock before closing the TUN fd and LWIP stack.
 	// Close() may synchronously trigger callbacks that also need androidTunMutex.
 	androidTunMutex.Unlock()
 	defer androidTunMutex.Lock()
 
 	// Close the TUN FD first so the packet reader unblocks before lwip teardown.
-	if tunFile != nil {
-		_ = tunFile.Close()
+	if tunFd >= 0 {
+		_ = syscall.Close(tunFd)
 	}
 
 	// Give the read loop a chance to exit cleanly before tearing down lwip.

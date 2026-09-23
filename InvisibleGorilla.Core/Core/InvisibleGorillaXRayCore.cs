@@ -668,6 +668,9 @@ namespace InvisibleGorillaXRay.Core
                     Status start = openFluxManager.Start(profile, getLogPath.Invoke());
                     for (int attempt = 0; start.Code != Code.SUCCESS && attempt < 2; attempt++)
                     {
+                        if (string.Equals(start.Content?.ToString(), "captcha", StringComparison.OrdinalIgnoreCase))
+                            break;
+
                         DiagnosticLog.Write("Run", $"OpenFlux start retry {attempt + 1}: {start.Content}");
                         Thread.Sleep(1000);
                         start = openFluxManager.Start(profile, getLogPath.Invoke());
@@ -761,6 +764,7 @@ namespace InvisibleGorillaXRay.Core
                 "empty" or "scheme" or "host" => "Lang.OpenFlux.Error.BadUrl",
                 "key-short" => "Lang.OpenFlux.Error.KeyShort",
                 "document" => "Lang.OpenFlux.Error.Document",
+                "captcha" => "Lang.OpenFlux.Error.Captcha",
                 "transport" => "Lang.OpenFlux.Error.Transport",
                 "listen" => "Lang.OpenFlux.Error.Listen",
                 _ => "Lang.OpenFlux.Error.Generic"

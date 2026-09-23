@@ -372,6 +372,7 @@
     <x:String x:Key="Lang.OpenFlux.Error.BadUrl">Некорректная ссылка на документ Яндекса.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.KeyShort">Ключ шифрования должен быть не короче 16 символов.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Document">Ошибка документа: не публичный, нужен логин или не тот редактор.</x:String>
+    <x:String x:Key="Lang.OpenFlux.Error.Captcha">Яндекс запросил проверку, OpenFlux не запустился. Выберите VLESS-профиль или повторите позже.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Transport">Эта ссылка — Volga (vyandex), не legacy yandex.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Listen">SOCKS OpenFlux не поднялся. Смотри Logs/openflux.log.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Generic">OpenFlux не запустился. Смотри Logs/openflux.log.</x:String>

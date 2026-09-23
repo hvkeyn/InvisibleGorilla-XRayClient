@@ -522,6 +522,7 @@ namespace InvisibleGorillaXRay.Core
                 "empty" or "scheme" or "host" => "Lang.OpenFlux.Error.BadUrl",
                 "key-short" => "Lang.OpenFlux.Error.KeyShort",
                 "document" => "Lang.OpenFlux.Error.Document",
+                "captcha" => "Lang.OpenFlux.Error.Captcha",
                 "transport" => "Lang.OpenFlux.Error.Transport",
                 "listen" => "Lang.OpenFlux.Error.Listen",
                 _ => "Lang.OpenFlux.Error.Generic"

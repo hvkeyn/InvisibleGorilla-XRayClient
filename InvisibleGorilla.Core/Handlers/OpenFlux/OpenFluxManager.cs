@@ -329,6 +329,12 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
                 return;
             }
 
+            if (line.IndexOf("yandex captcha", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                SetStatus(OpenFluxClientStatus.Error, "captcha");
+                return;
+            }
+
             if (line.IndexOf("looks like a login page", StringComparison.OrdinalIgnoreCase) >= 0
                 || line.IndexOf("config not found", StringComparison.OrdinalIgnoreCase) >= 0)
             {

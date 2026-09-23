@@ -52,6 +52,11 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.49
+
+- **Stopping the Android tunnel removes it.** A later RUN no longer leaves the previous tun interface behind, which is what made the phone lose connectivity until a reboot.
+- **OpenFlux shows the real reason when Yandex asks for a check.** The home screen says the document login was challenged, and that address is not written into the log.
+
 ## What's new in v3.6.48
 
 - **A second Android RUN no longer needs a phone reboot.** The active config's server address is excluded from the TUN (`/32` or `/128`) before the tunnel comes up, so traffic to the entry stays on Wi-Fi or mobile data.

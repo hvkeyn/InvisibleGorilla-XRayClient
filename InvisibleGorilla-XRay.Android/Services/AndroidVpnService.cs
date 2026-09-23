@@ -48,6 +48,7 @@ namespace InvisibleGorillaXRay.Android.Services
         private static int vpnGeneration;
 
         private static int protectAllowed;
+        private static ParcelFileDescriptor? activeTun;
 
         private Timer? healthTimer;
         private int healthGeneration;
@@ -301,8 +302,27 @@ namespace InvisibleGorillaXRay.Android.Services
                     + "Verify the VPN consent dialog was accepted and that no other always-on VPN is owning the tunnel.");
             DiagnosticLog.Write("AndroidVpnService", "Builder.Establish() returned a TUN file descriptor");
 
-            int tunFd = tunInterface.DetachFd();
-            tunInterface.Dispose();
+            // Keep the original descriptor in Java. Android removes the tun
+            // interface only when that descriptor is closed. The Go side gets
+            // a dup and must not be the last owner.
+            int tunFd;
+            try
+            {
+                ParcelFileDescriptor reader = tunInterface.Dup();
+                tunFd = reader.DetachFd();
+                reader.Dispose();
+                lock (SyncRoot)
+                {
+                    CloseOwnedTunLocked();
+                    activeTun = tunInterface;
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("AndroidVpnService.DupTun", ex);
+                tunFd = tunInterface.DetachFd();
+                tunInterface.Dispose();
+            }
 
             lock (SyncRoot)
             {
@@ -475,6 +495,8 @@ namespace InvisibleGorillaXRay.Android.Services
             {
                 DiagnosticLog.WriteException("AndroidVpnService.ResetTunnel", ex);
             }
+
+            CloseOwnedTun();
         }
 
         private void StopVpnCore(string reason)
@@ -498,6 +520,7 @@ namespace InvisibleGorillaXRay.Android.Services
             }
             long elapsedMs = System.Environment.TickCount64 - startedMs;
             DiagnosticLog.Write("AndroidVpnService", $"StopAndroidTunnel took {elapsedMs}ms");
+            CloseOwnedTun();
 
             try { OpenFluxHttpBridge.Shared.Stop(); } catch { }
 
@@ -542,6 +565,30 @@ namespace InvisibleGorillaXRay.Android.Services
             }
 
             AndroidConnectionNotificationManager.Republish();
+        }
+
+        private static void CloseOwnedTun()
+        {
+            lock (SyncRoot)
+                CloseOwnedTunLocked();
+        }
+
+        private static void CloseOwnedTunLocked()
+        {
+            ParcelFileDescriptor? owned = activeTun;
+            activeTun = null;
+            if (owned == null)
+                return;
+
+            try
+            {
+                owned.Close();
+                DiagnosticLog.Write("AndroidVpnService", "Closed the VPN interface descriptor");
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("AndroidVpnService.CloseTun", ex);
+            }
         }
 
         private static void ExcludeServerFromTunnel(Builder builder, string server)

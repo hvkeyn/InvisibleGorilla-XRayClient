@@ -2019,6 +2019,8 @@ namespace InvisibleGorillaXRay.Android.Views
                 try
                 {
                     TrySelectConfigByPath(config.Path, showStatus: true);
+                    if (!AndroidVpnServiceController.IsRunning)
+                        SetConnectionState(ConnectionState.Stopped);
                 }
                 catch (Exception ex)
                 {
@@ -3586,7 +3588,10 @@ namespace InvisibleGorillaXRay.Android.Views
                     SetConnectionState(ConnectionState.Stopped);
 
                     if (!string.IsNullOrWhiteSpace(failureMessage))
+                    {
+                        ConnectionStateSubtitleText.Text = NormalizeStatusMessage(failureMessage);
                         SetStatus(failureMessage);
+                    }
                     else if (started)
                         SetStatus("Lang.Status.Stopped");
                 });
