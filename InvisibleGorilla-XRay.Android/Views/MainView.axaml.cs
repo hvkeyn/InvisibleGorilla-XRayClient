@@ -92,6 +92,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private string activeAppRulesTemplateId = AppRuleTemplate.DefaultTemplateId;
         private bool isApplyingAppRulesEditor;
         private bool isCheckWorkerBusy;
+        private bool torBridgeCheckBusy;
         private bool isRunWorkerBusy;
         private bool isStopWorkerBusy;
         private int connectionEpoch;
@@ -574,6 +575,9 @@ namespace InvisibleGorillaXRay.Android.Views
             GetRequiredControl<TextBlock>("UseDefaultBridgesButtonTextBlock").Text = Localize("Lang.Tor.UseDefault");
             GetRequiredControl<TextBlock>("FetchMoatButtonTextBlock").Text = Localize("Lang.Tor.FetchMoat");
             GetRequiredControl<TextBlock>("CheckBridgeButtonTextBlock").Text = Localize("Lang.Tor.Check");
+            ToolTip.SetTip(UseDefaultBridgesActionButton, Localize("Lang.Tor.UseDefault"));
+            ToolTip.SetTip(FetchMoatActionButton, Localize("Lang.Tor.FetchMoat"));
+            ToolTip.SetTip(CheckBridgeActionButton, Localize("Lang.Tor.Check"));
             GetRequiredControl<TextBlock>("QuickConnectTitleTextBlock").Text = Localize("Lang.Tor.QuickConnect");
             GetRequiredControl<TextBlock>("AskTorButtonTextBlock").Text = Localize("Lang.Tor.AskTor");
             GetRequiredControl<TextBlock>("SnowflakeButtonTextBlock").Text = Localize("Lang.Tor.Method.Snowflake");
@@ -860,7 +864,8 @@ namespace InvisibleGorillaXRay.Android.Views
                 BridgeType = GetSelectedKey(BridgeTypeOptions, BridgeTypeSelector.SelectedIndex, existing.GetBridgeType()),
                 SocksPort = int.TryParse(TorSocksPortInput.Text, out int sp) && sp > 0 ? sp : existing.GetSocksPort(),
                 ControlPort = existing.GetControlPort(),
-                BridgeLines = SplitBridgeLines(BridgesInput.Text)
+                BridgeLines = SplitBridgeLines(BridgesInput.Text),
+                LastLatencyMs = existing.LastLatencyMs
             };
         }
 
@@ -988,24 +993,16 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private async void OnCheckBridgeClick(object? sender, RoutedEventArgs e)
         {
-            if (!torManager.IsAvailable)
-            {
-                TorStatusText.Text = Localize("Lang.Tor.Status.Unavailable");
-                return;
-            }
-
-            BridgeType type = GetSelectedKey(BridgeTypeOptions, BridgeTypeSelector.SelectedIndex, BridgeType.OBFS4);
-            string firstLine = SplitBridgeLines(BridgesInput.Text).FirstOrDefault() ?? string.Empty;
-
+            PersistTorEditor();
             CheckBridgeActionButton.IsEnabled = false;
-            TorStatusText.Text = Localize("Lang.Tor.Status.Checking");
-
-            BridgeCheckResult result = await Task.Run(() => torManager.CheckBridge(type, firstLine));
-
-            TorStatusText.Text = result.Success
-                ? LocalizeFormat("Lang.Tor.Status.CheckOk", result.LatencyMs)
-                : LocalizeFormat("Lang.Tor.Status.CheckFail", result.Message);
-            CheckBridgeActionButton.IsEnabled = true;
+            try
+            {
+                await CheckTorProfileAsync(ResolveTorProfileForCheck());
+            }
+            finally
+            {
+                CheckBridgeActionButton.IsEnabled = true;
+            }
         }
 
         private async void OnFetchMoatClick(object? sender, RoutedEventArgs e)
@@ -3498,36 +3495,67 @@ namespace InvisibleGorillaXRay.Android.Views
             };
         }
 
+        private TorProfile ResolveTorProfileForCheck()
+        {
+            string path = settingsHandler.UserSettings.GetCurrentConfigPath();
+            TorProfile? stored = settingsHandler.UserSettings.FindTorProfileByPath(path);
+            return stored ?? BuildBuiltinTorProfile();
+        }
+
         private async Task CheckTorProfileAsync(TorProfile profile)
         {
+            if (torBridgeCheckBusy)
+                return;
+
             if (!torManager.IsAvailable)
             {
-                SetStatus(Localize("Lang.Tor.Status.Unavailable"));
+                SetTorCheckStatus(Localize("Lang.Tor.Status.Unavailable"));
                 return;
             }
 
-            SetStatus(Localize("Lang.Tor.Status.Checking"));
+            torBridgeCheckBusy = true;
+            SetTorCheckStatus(Localize("Lang.Tor.Status.Checking"));
             string firstLine = profile.GetBridgeLines().FirstOrDefault() ?? string.Empty;
 
-            BridgeCheckResult result = await Task.Run(() => torManager.CheckBridge(profile.BridgeType, firstLine));
+            try
+            {
+                BridgeCheckResult result = await Task.Run(() => torManager.CheckBridge(profile.BridgeType, firstLine));
+                ApplyTorCheckResult(profile, result);
+            }
+            finally
+            {
+                torBridgeCheckBusy = false;
+            }
+        }
 
+        private void ApplyTorCheckResult(TorProfile profile, BridgeCheckResult result)
+        {
+            UserSettings current = settingsHandler.UserSettings;
             if (result.Success)
             {
-                UserSettings current = settingsHandler.UserSettings;
+                SetConfigAvailability(profile.ConfigPath, result.LatencyMs);
                 TorProfile? stored = current.FindTorProfileByPath(profile.ConfigPath);
                 if (stored != null)
-                {
                     stored.LastLatencyMs = result.LatencyMs;
-                    settingsHandler.UpdateUserSettings(current);
-                }
-                SetStatus(LocalizeFormat("Lang.Tor.Status.CheckOk", result.LatencyMs));
+                if (TorProfilePaths.IsMarker(profile.ConfigPath))
+                    current.GetTorSettings().LastLatencyMs = result.LatencyMs;
+                settingsHandler.UpdateUserSettings(current);
+                SetTorCheckStatus(LocalizeFormat("Lang.Tor.Status.CheckOk", result.LatencyMs));
             }
             else
             {
-                SetStatus(LocalizeFormat("Lang.Tor.Status.CheckFail", result.Message));
+                SetConfigAvailability(profile.ConfigPath, InvisibleGorillaXRay.Values.Availability.ERROR);
+                SetTorCheckStatus(LocalizeFormat("Lang.Tor.Status.CheckFail", result.Message));
             }
 
             RefreshConfigs();
+        }
+
+        private void SetTorCheckStatus(string text)
+        {
+            SetStatus(text);
+            if (TorStatusText != null)
+                TorStatusText.Text = text;
         }
 
         private bool TrySelectConfigByName(string name)
@@ -3678,7 +3706,12 @@ namespace InvisibleGorillaXRay.Android.Views
                     string docUrl = OpenFluxUrl.Trim(settingsHandler.UserSettings.GetOpenFluxProfile().DocUrl);
                     PostConnectionUi(epoch, () => SetStatus("Lang.OpenFlux.Status.Opening"));
                     bool documentReady = OpenFluxDocumentCapture.TryCapture(docUrl);
-                    DiagnosticLog.Write("OpenFlux", documentReady
+                    if (documentReady)
+                        OpenFluxDocumentCapture.KeepExitCopy();
+                    bool clientPage = OpenFluxDocumentCapture.TryCapture(docUrl);
+                    if (!clientPage)
+                        OpenFluxDocumentCapture.RestoreClientFromExitCopy();
+                    DiagnosticLog.Write("OpenFlux", documentReady && (clientPage || documentReady)
                         ? "Browser document ready"
                         : "Browser document not ready");
                 }
@@ -3720,6 +3753,9 @@ namespace InvisibleGorillaXRay.Android.Views
                 {
                     lockHeld = false;
                 }
+
+                if (OpenFluxProfilePaths.IsMarker(settingsHandler.UserSettings.GetCurrentConfigPath()))
+                    PostConnectionUi(epoch, () => SetStatus("Lang.OpenFlux.Status.WaitingPeer"));
 
                 core.Run(activeConfig, () =>
                 {
@@ -3832,11 +3868,11 @@ namespace InvisibleGorillaXRay.Android.Views
         private void ApplyOpenFluxConnectedWithoutLocation()
         {
             ApplyConnectionModeLine();
-            ConnectionInfoDotControl.Background = AvailabilitySuccessBrush;
+            ConnectionInfoDotControl.Background = AvailabilityPendingBrush;
             ConnectionInfoIpText.Text = "—";
             ConnectionInfoLocationText.Text = string.Empty;
             ConnectionInfoOrgText.Text = string.Empty;
-            ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.OpenFluxNoLocation");
+            ConnectionInfoVerdictText.Text = Localize("Lang.OpenFlux.Status.WaitingPeer");
         }
 
         private async Task<ConnectionInfo?> TryLookupOpenFluxExitIpAsync(CancellationToken token)

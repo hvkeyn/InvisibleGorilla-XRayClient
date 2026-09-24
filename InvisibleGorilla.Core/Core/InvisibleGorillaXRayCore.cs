@@ -619,7 +619,7 @@ namespace InvisibleGorillaXRay.Core
         /// </summary>
         public IWebProxy CreateActiveProbeProxy()
         {
-            if (openFluxManager.IsRunning && openFluxManager.BoundSocksPort > 0)
+            if (IsOpenFluxProfile() && openFluxManager.IsRunning && openFluxManager.BoundSocksPort > 0)
             {
                 return new WebProxy($"socks5://{Global.LOCAL_HOST}:{openFluxManager.BoundSocksPort}");
             }
@@ -676,6 +676,18 @@ namespace InvisibleGorillaXRay.Core
                     profile = getOpenFluxProfile?.Invoke()?.Clone() ?? profile;
                     profile.DocUrl = OpenFluxUrl.Trim(profile.DocUrl);
                     profile.EncryptionKey = OpenFluxUrl.DeriveKey(profile.DocUrl);
+                    bool registered = OpenFluxExitRegistry.Register(
+                        profile.DocUrl,
+                        profile.EncryptionKey,
+                        null,
+                        CancellationToken.None);
+                    DiagnosticLog.Write("Run", registered
+                        ? "OpenFlux exit register ok"
+                        : "OpenFlux exit register not ok");
+                    // The exit authorizes from the same captured page. Starting the
+                    // phone sidecar in that same second makes Volga reject one side.
+                    if (registered)
+                        Thread.Sleep(8000);
                     Status start = openFluxManager.Start(profile, getLogPath.Invoke());
                     for (int attempt = 0; start.Code != Code.SUCCESS && attempt < 2; attempt++)
                     {
@@ -692,9 +704,14 @@ namespace InvisibleGorillaXRay.Core
                             LocalizationService.GetTerm(MapOpenFluxError(start.Content?.ToString())));
                     }
 
-                    OpenFluxExitRegistry.RegisterInBackground(
-                        profile.DocUrl,
-                        profile.EncryptionKey);
+                    if (!openFluxManager.WaitForPeer(25000))
+                    {
+                        bool canceled = openFluxManager.IsSessionCanceled;
+                        openFluxManager.Stop();
+                        if (canceled)
+                            break;
+                        throw new InvalidOperationException("Lang.OpenFlux.Error.Peer");
+                    }
 
                     int socksPort = openFluxManager.BoundSocksPort;
                     activeLocalProxyCredentials = LocalProxyCredentials.None;
@@ -778,6 +795,7 @@ namespace InvisibleGorillaXRay.Core
                 "captcha" => "Lang.OpenFlux.Error.Captcha",
                 "transport" => "Lang.OpenFlux.Error.Transport",
                 "listen" => "Lang.OpenFlux.Error.Listen",
+                "peer" => "Lang.OpenFlux.Error.Peer",
                 _ => "Lang.OpenFlux.Error.Generic"
             };
         }

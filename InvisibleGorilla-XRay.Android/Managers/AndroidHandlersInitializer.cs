@@ -94,12 +94,15 @@ namespace InvisibleGorillaXRay.Android.Managers
                                 _ => tor.GetBridgeType().ToString().ToLowerInvariant()
                             };
                     }
-                    return new Config(
+                    Config config = new Config(
                         path: TorProfilePaths.MarkerPath,
                         name: LocalizeGoida("Lang.Tor.ServerListName", "Tor bridges"),
                         type: ConfigType.FILE,
                         group: GroupType.GENERAL,
                         updateTime: hint);
+                    if (tor.LastLatencyMs >= 0)
+                        config.SetAvailability(tor.LastLatencyMs);
+                    return config;
                 }
 
                 Config? BuildOpenFluxListConfig()

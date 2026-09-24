@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using Newtonsoft.Json;
 
@@ -48,6 +49,11 @@ namespace InvisibleGorillaXRay.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
         public List<string> BridgeLines;
 
+        // Last successful bridge check for the built-in Tor card, or -1 when never checked.
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        [DefaultValue(-1)]
+        public int LastLatencyMs;
+
         public TorSettings()
         {
             Enabled = false;
@@ -56,6 +62,7 @@ namespace InvisibleGorillaXRay.Models
             ControlPort = 9251;
             BridgeType = BridgeType.NONE;
             BridgeLines = new List<string>();
+            LastLatencyMs = -1;
         }
 
         public bool GetEnabled() => Enabled;
@@ -88,7 +95,8 @@ namespace InvisibleGorillaXRay.Models
                 SocksPort = GetSocksPort(),
                 ControlPort = GetControlPort(),
                 BridgeType = BridgeType,
-                BridgeLines = GetBridgeLines()
+                BridgeLines = GetBridgeLines(),
+                LastLatencyMs = LastLatencyMs
             };
         }
     }

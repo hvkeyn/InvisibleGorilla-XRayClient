@@ -183,6 +183,22 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
             }
         }
 
+        public bool IsSessionCanceled => sessionStop;
+
+        public bool WaitForPeer(int timeoutMs)
+        {
+            int port = BoundSocksPort;
+            if (sessionStop || port <= 0 || !IsRunning)
+                return false;
+
+            bool ok = ProbePeer(port, timeoutMs, singleAttempt: false);
+            if (ok && Status != OpenFluxClientStatus.Error)
+                SetStatus(OpenFluxClientStatus.Connected, "");
+            else if (!ok && Status != OpenFluxClientStatus.Error)
+                SetStatus(OpenFluxClientStatus.WaitingPeer, "peer");
+            return ok;
+        }
+
         public void BeginSession()
         {
             sessionStop = false;
@@ -520,15 +536,16 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
             return IoPath.GetFullPath(dest);
         }
 
-        private bool ProbePeer(int socksPort, int timeoutMs)
+        private bool ProbePeer(int socksPort, int timeoutMs, bool singleAttempt = false)
         {
-            DateTime until = DateTime.UtcNow.AddMilliseconds(Math.Max(8000, timeoutMs));
+            int attemptMs = singleAttempt ? Math.Max(8000, timeoutMs) : 8000;
+            DateTime until = DateTime.UtcNow.AddMilliseconds(Math.Max(attemptMs, timeoutMs));
             string lastError = "";
-            while (DateTime.UtcNow < until)
+            while (DateTime.UtcNow < until && !sessionStop)
             {
                 try
                 {
-                    string body = Socks5Http.GetHttpsBody("127.0.0.1", socksPort, "api.ipify.org", "/", 6000);
+                    string body = Socks5Http.GetHttpsBody("127.0.0.1", socksPort, "api.ipify.org", "/", attemptMs);
                     string ip = (body ?? "").Trim();
                     if (ip.Length >= 7 && ip.IndexOf('.') > 0)
                     {
@@ -544,6 +561,9 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
                     lastError = ex.Message;
                     DiagnosticLog.Write(Tag, $"peer probe retry: {ex.Message}");
                 }
+
+                if (singleAttempt)
+                    break;
 
                 Thread.Sleep(400);
             }

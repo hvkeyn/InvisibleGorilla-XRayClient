@@ -357,6 +357,7 @@
     <x:String x:Key="Lang.OpenFlux.KeyHint">The key is derived from the document URL. Another client only needs the same link.</x:String>
     <x:String x:Key="Lang.OpenFlux.Hint">One Yandex document URL is enough: key and exit are derived from it. Apply checks the link, pings it, and registers the exit.</x:String>
     <x:String x:Key="Lang.OpenFlux.Status.UrlOk">Document reachable · {0} ms</x:String>
+    <x:String x:Key="Lang.OpenFlux.Status.ServerOk">Server reachable · {0} ms</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Login">This link opens a Yandex login page. The document must be public.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Timeout">The document did not answer. Check the URL and the network.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Http">The document is not reachable at this URL.</x:String>
@@ -379,6 +380,7 @@
     <x:String x:Key="Lang.OpenFlux.Status.Opening">Opening the Yandex document in the browser.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Transport">This URL needs Volga (vyandex), not legacy yandex.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Listen">OpenFlux SOCKS did not start. See Logs/openflux.log.</x:String>
+    <x:String x:Key="Lang.OpenFlux.Error.Peer">OpenFlux started, but the peer did not answer. The tunnel stayed off, so the phone still has internet. Retry, or pick a VLESS profile.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Generic">OpenFlux failed to start. See Logs/openflux.log.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.MissingBinary">OpenFlux binary is not bundled in this build.</x:String>
     <x:String x:Key="Lang.Goida.ListSelectionTitle">Lists to download (1–26):</x:String>

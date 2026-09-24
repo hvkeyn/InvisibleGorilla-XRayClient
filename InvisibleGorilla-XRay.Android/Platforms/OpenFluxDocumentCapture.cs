@@ -47,6 +47,34 @@ namespace InvisibleGorillaXRay.Android.Platforms
             return ok && File.Exists(htmlPath);
         }
 
+        public static void KeepExitCopy()
+        {
+            string dir = InvisibleGorillaXRay.Values.Directory.OPENFLUX;
+            CopyIfExists(Path.Combine(dir, "doc.html"), Path.Combine(dir, "doc-exit.html"));
+            CopyIfExists(Path.Combine(dir, "doc.cookies"), Path.Combine(dir, "doc-exit.cookies"));
+        }
+
+        public static void RestoreClientFromExitCopy()
+        {
+            string dir = InvisibleGorillaXRay.Values.Directory.OPENFLUX;
+            CopyIfExists(Path.Combine(dir, "doc-exit.html"), Path.Combine(dir, "doc.html"));
+            CopyIfExists(Path.Combine(dir, "doc-exit.cookies"), Path.Combine(dir, "doc.cookies"));
+        }
+
+        private static void CopyIfExists(string source, string dest)
+        {
+            try
+            {
+                if (!File.Exists(source))
+                    return;
+                File.Copy(source, dest, overwrite: true);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("OpenFlux.Document.Copy", ex);
+            }
+        }
+
         private static void BeginCapture(Activity activity, string docUrl, string htmlPath, string cookiePath, Action<bool> done)
         {
             CookieManager cookies = CookieManager.Instance;
@@ -56,6 +84,7 @@ namespace InvisibleGorillaXRay.Android.Platforms
             var web = new WebView(activity);
             web.Settings.JavaScriptEnabled = true;
             web.Settings.DomStorageEnabled = true;
+            web.Settings.CacheMode = CacheModes.NoCache;
             cookies.SetAcceptThirdPartyCookies(web, true);
 
             var dialog = new Dialog(activity);

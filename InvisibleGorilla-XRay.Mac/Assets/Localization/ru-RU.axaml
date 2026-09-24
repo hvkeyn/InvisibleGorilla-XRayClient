@@ -357,6 +357,7 @@
     <x:String x:Key="Lang.OpenFlux.KeyHint">Ключ сам получается из ссылки на документ. Другому клиенту достаточно той же ссылки.</x:String>
     <x:String x:Key="Lang.OpenFlux.Hint">Одной ссылки на документ Яндекса достаточно: ключ и exit считаются из неё. Применить проверяет ссылку, пинг и регистрирует на сервере.</x:String>
     <x:String x:Key="Lang.OpenFlux.Status.UrlOk">Документ доступен · {0} мс</x:String>
+    <x:String x:Key="Lang.OpenFlux.Status.ServerOk">Сервер доступен · {0} мс</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Login">Ссылка открывает страницу входа Яндекса, нужен публичный документ.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Timeout">Документ не ответил. Проверь ссылку и сеть.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Http">Документ недоступен по этой ссылке.</x:String>
@@ -378,6 +379,7 @@
     <x:String x:Key="Lang.OpenFlux.Error.Captcha">Яндекс запросил проверку, OpenFlux не запустился. Выберите VLESS-профиль или повторите позже.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Transport">Эта ссылка — Volga (vyandex), не legacy yandex.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Listen">SOCKS OpenFlux не поднялся. Смотри Logs/openflux.log.</x:String>
+    <x:String x:Key="Lang.OpenFlux.Error.Peer">OpenFlux запущен, но peer не ответил. Туннель не включён, интернет телефона на месте. Повторите или выберите VLESS.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.Generic">OpenFlux не запустился. Смотри Logs/openflux.log.</x:String>
     <x:String x:Key="Lang.OpenFlux.Error.MissingBinary">Бинарник OpenFlux не включён в эту сборку.</x:String>
     <x:String x:Key="Lang.Goida.ListSelectionTitle">Списки для загрузки (1–26):</x:String>

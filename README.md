@@ -52,6 +52,12 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.51
+
+- **OpenFlux turns the tunnel on only after the exit answers.** The phone uploads a browser snapshot so the exit can join, then checks the data path before VPN routing starts. If the peer does not answer, the tunnel stays down and the phone keeps its normal connection.
+- **The OpenFlux card ping measures the exit.** The Wi-Fi check on that card is the exit health response, not the document page.
+- **The Tor card keeps its last check.** A successful bridge ping stays on the card after the list refreshes.
+
 ## What's new in v3.6.50
 
 - **Tor settings live on the Tor profile.** The bridge method, lines, and Ask Tor actions open with the Tor card, the same way OpenFlux keeps its document on its card. General settings no longer carry a separate Tor switch.

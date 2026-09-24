@@ -282,7 +282,7 @@ namespace InvisibleGorillaXRay.Android.Views
             {
                 int lastPing = settingsHandler.UserSettings.GetOpenFluxProfile().LastLatencyMs;
                 OpenFluxStatusText.Text = lastPing >= 0
-                    ? string.Format(Localize("Lang.OpenFlux.Status.UrlOk"), lastPing)
+                    ? string.Format(Localize("Lang.OpenFlux.Status.ServerOk"), lastPing)
                     : Localize("Lang.OpenFlux.Status.PeerProbePending");
                 return;
             }
@@ -310,20 +310,25 @@ namespace InvisibleGorillaXRay.Android.Views
                 return;
             }
 
-            OpenFluxUrlCheckResult check = await OpenFluxUrlCheck.InspectAsync(url, CancellationToken.None);
+            int ping = await Task.Run(OpenFluxExitRegistry.PingExit);
             string markerPath = OpenFluxProfilePaths.MarkerPath;
-            if (!string.IsNullOrWhiteSpace(check.Error))
+            if (ping >= 0)
             {
-                SetConfigAvailability(markerPath, InvisibleGorillaXRay.Values.Availability.ERROR);
-                SetStatus(MapOpenFluxCheckError(check.Error));
+                SetConfigAvailability(markerPath, ping);
+                OpenFluxProfile profile = settingsHandler.UserSettings.GetOpenFluxProfile();
+                profile.LastLatencyMs = ping;
+                settingsHandler.UpdateOpenFlux(profile);
+                SetStatus(string.Format(Localize("Lang.OpenFlux.Status.ServerOk"), ping));
+            }
+            else if (ping == -1)
+            {
+                SetConfigAvailability(markerPath, InvisibleGorillaXRay.Values.Availability.TIMEOUT);
+                SetStatus(Localize("Lang.OpenFlux.Error.Timeout"));
             }
             else
             {
-                SetConfigAvailability(markerPath, check.LatencyMs);
-                OpenFluxProfile profile = settingsHandler.UserSettings.GetOpenFluxProfile();
-                profile.LastLatencyMs = check.LatencyMs;
-                settingsHandler.UpdateOpenFlux(profile);
-                SetStatus(string.Format(Localize("Lang.OpenFlux.Status.UrlOk"), check.LatencyMs));
+                SetConfigAvailability(markerPath, InvisibleGorillaXRay.Values.Availability.ERROR);
+                SetStatus(Localize("Lang.OpenFlux.Error.Http"));
             }
 
             RefreshConfigs();
