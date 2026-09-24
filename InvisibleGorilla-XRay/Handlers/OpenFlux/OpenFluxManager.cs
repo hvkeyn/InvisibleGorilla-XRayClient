@@ -93,6 +93,48 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
             return start;
         }
 
+        private static string EnsureWritableDirectory(string path)
+        {
+            string preferred = string.IsNullOrWhiteSpace(path) ? AppDir.LOGS : path;
+            if (TryCreateDirectory(preferred))
+                return preferred;
+
+            string exeDir = IoPath.GetDirectoryName(Environment.ProcessPath);
+            if (!string.IsNullOrWhiteSpace(exeDir))
+            {
+                string besideExe = IoPath.Combine(exeDir, "Logs");
+                if (TryCreateDirectory(besideExe))
+                {
+                    DiagnosticLog.Write(Tag, "directory fallback beside the executable");
+                    return besideExe;
+                }
+            }
+
+            string local = IoPath.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "InvisibleGorilla-XRay",
+                "Logs");
+            System.IO.Directory.CreateDirectory(local);
+            DiagnosticLog.Write(Tag, "directory fallback to local app data");
+            return local;
+        }
+
+        private static bool TryCreateDirectory(string path)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                    return false;
+                System.IO.Directory.CreateDirectory(path);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.Write(Tag, "create directory failed: " + ex.GetType().Name);
+                return false;
+            }
+        }
+
         public Status Start(OpenFluxProfile profile, string logDirectory, int listenWaitMs = 15000)
         {
             if (profile == null)
@@ -119,14 +161,13 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
             StopProcess(waitExitMs: 3000);
             WaitUntilPortFree(port, 2000);
 
-            string logPath = IoPath.Combine(
-                string.IsNullOrWhiteSpace(logDirectory) ? AppDir.LOGS : logDirectory,
-                "openflux.log");
+            string logDir = EnsureWritableDirectory(
+                string.IsNullOrWhiteSpace(logDirectory) ? AppDir.LOGS : logDirectory);
+            string logPath = IoPath.Combine(logDir, "openflux.log");
 
             try
             {
-                System.IO.Directory.CreateDirectory(IoPath.GetDirectoryName(logPath) ?? AppDir.LOGS);
-                System.IO.Directory.CreateDirectory(AppDir.OPENFLUX);
+                EnsureWritableDirectory(AppDir.OPENFLUX);
 
                 SetStatus(OpenFluxClientStatus.Connecting, "");
                 if (!StartProcess(url, transport, codec, port, keyFile, logPath))

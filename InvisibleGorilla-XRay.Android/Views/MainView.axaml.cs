@@ -2527,12 +2527,23 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void AdvanceHeroWifiPulse()
         {
-            heroWifiPulseTick = (heroWifiPulseTick + 1) % 40;
-            double t = heroWifiPulseTick / 40.0;
-            ApplyHeroRing(HeroPulseRingInnerShape, HeroWifiWave(t, 0.10));
-            ApplyHeroRing(HeroPulseRingMiddleShape, HeroWifiWave(t, 0.32));
-            ApplyHeroRing(HeroPulseRingOuterShape, HeroWifiWave(t, 0.54));
-            ConnectionHeroGlowBorder.Opacity = 0.16 + 0.18 * (0.5 + 0.5 * Math.Sin(t * Math.PI * 2));
+            if (heroWifiPulseTimer == null || !heroWifiPulseTimer.IsEnabled)
+                return;
+
+            try
+            {
+                heroWifiPulseTick = (heroWifiPulseTick + 1) % 40;
+                double t = heroWifiPulseTick / 40.0;
+                ApplyHeroRing(HeroPulseRingInnerShape, HeroWifiWave(t, 0.10));
+                ApplyHeroRing(HeroPulseRingMiddleShape, HeroWifiWave(t, 0.32));
+                ApplyHeroRing(HeroPulseRingOuterShape, HeroWifiWave(t, 0.54));
+                ConnectionHeroGlowBorder.Opacity = 0.16 + 0.18 * (0.5 + 0.5 * Math.Sin(t * Math.PI * 2));
+            }
+            catch (Exception ex)
+            {
+                try { heroWifiPulseTimer?.Stop(); } catch { }
+                DiagnosticLog.WriteException("MainView.HeroPulse", ex);
+            }
         }
 
         private static double HeroWifiWave(double t, double center)
@@ -2583,6 +2594,18 @@ namespace InvisibleGorillaXRay.Android.Views
         }
 
         private void SetConnectionState(ConnectionState state)
+        {
+            try
+            {
+                ApplyConnectionState(state);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.SetConnectionState", ex);
+            }
+        }
+
+        private void ApplyConnectionState(ConnectionState state)
         {
             bool stateChanged = displayedConnectionState != state;
             displayedConnectionState = state;
@@ -3833,9 +3856,16 @@ namespace InvisibleGorillaXRay.Android.Views
             isRunWorkerBusy = false;
             global::InvisibleGorillaXRay.Android.MainActivity.SuppressForegroundChangedUntilUtc =
                 DateTime.UtcNow.AddSeconds(8);
-            SetRunningState(false);
-            SetConnectionState(ConnectionState.Stopped);
-            SetStatus("Lang.Status.Stopped");
+            try
+            {
+                SetRunningState(false);
+                SetConnectionState(ConnectionState.Stopped);
+                SetStatus("Lang.Status.Stopped");
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.RequestStop.Ui", ex);
+            }
 
             _ = Task.Run(() =>
             {

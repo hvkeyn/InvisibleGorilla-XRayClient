@@ -52,6 +52,11 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.52
+
+- **Desktop OpenFlux no longer dies when the log folder is missing.** If the saved Logs path cannot be created, the sidecar writes next to the executable, then in local app data.
+- **Android STOP no longer takes the process down with a UI fault.** Disconnecting OpenFlux or VLESS keeps the app open if the connection card or the hero animation throws.
+
 ## What's new in v3.6.51
 
 - **OpenFlux turns the tunnel on only after the exit answers.** The phone uploads a browser snapshot so the exit can join, then checks the data path before VPN routing starts. If the peer does not answer, the tunnel stays down and the phone keeps its normal connection.
