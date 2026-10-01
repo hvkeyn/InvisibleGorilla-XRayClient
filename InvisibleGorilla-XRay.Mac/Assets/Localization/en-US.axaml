@@ -12,6 +12,16 @@
     <x:String x:Key="Lang.Button.Confirm">CONFIRM</x:String>
 
     <x:String x:Key="Lang.Status.Stopped">Stopped</x:String>
+    <x:String x:Key="Lang.Home.Stopping">Closing the channel…</x:String>
+    <x:String x:Key="Lang.Home.ActivityLog">Activity</x:String>
+    <x:String x:Key="Lang.Home.Glitch">Channel glitch: {0}</x:String>
+    <x:String x:Key="Lang.Home.Glitch.NoTunnel">tunnel interface disappeared</x:String>
+    <x:String x:Key="Lang.Home.Glitch.Exposed">traffic left the channel</x:String>
+    <x:String x:Key="Lang.Home.Glitch.Probe">exit check failed</x:String>
+    <x:String x:Key="Lang.Goida.CheckWhileTunnel">Stop the channel first. A Goida check while the tunnel is up crashes the app.</x:String>
+    <x:String x:Key="Lang.Goida.CardCheckNone">Goida: no active node</x:String>
+    <x:String x:Key="Lang.Goida.CardCheckOk">Goida · {0} · {1} ms</x:String>
+    <x:String x:Key="Lang.Goida.CardCheckFail">Goida · {0} · no reply</x:String>
     <x:String x:Key="Lang.Status.Running">Running</x:String>
     <x:String x:Key="Lang.Status.WaitForRun">Wait for running</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Title">Your connection</x:String>
@@ -200,9 +210,9 @@
     <x:String x:Key="Lang.Config.Log">Log</x:String>
     <x:String x:Key="Lang.Config.Select">Select</x:String>
 
-    <x:String x:Key="Lang.Android.Home.Subtitle.Stopped">Android VPN/TUN is ready. Start to route device traffic through the selected config.</x:String>
-    <x:String x:Key="Lang.Android.Home.Subtitle.Starting">Starting the Android VpnService tunnel and local Xray bridge.</x:String>
-    <x:String x:Key="Lang.Android.Home.Subtitle.Running">Device-wide VPN routing is active. Browser and app traffic should now use the selected config.</x:String>
+    <x:String x:Key="Lang.Android.Home.Subtitle.Stopped">Channel is off</x:String>
+    <x:String x:Key="Lang.Android.Home.Subtitle.Starting">Connecting</x:String>
+    <x:String x:Key="Lang.Android.Home.Subtitle.Running">Channel is on</x:String>
     <x:String x:Key="Lang.Android.Home.ProxyAvailability">Android now uses a VpnService tunnel with a local mobile bridge instead of the old proxy-only listener path.</x:String>
     <x:String x:Key="Lang.Android.Home.UpdateAvailable">Update available: v{0}. Open Settings → Updates to install it.</x:String>
 

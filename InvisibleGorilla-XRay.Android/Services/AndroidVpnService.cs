@@ -157,8 +157,11 @@ namespace InvisibleGorillaXRay.Android.Services
 
             try
             {
-                try { StopVpn("Replaced by new start", endSession: false); }
-                catch (Exception ex) { DiagnosticLog.WriteException("AndroidVpnService.StopBeforeStart", ex); }
+                Task replaceStop = Task.Run(() =>
+                {
+                    try { StopVpn("Replaced by new start", endSession: false); }
+                    catch (Exception ex) { DiagnosticLog.WriteException("AndroidVpnService.StopBeforeStart", ex); }
+                });
 
                 int startGeneration = Interlocked.Increment(ref vpnGeneration);
                 StartForegroundFast();
@@ -167,6 +170,8 @@ namespace InvisibleGorillaXRay.Android.Services
                 {
                     try
                     {
+                        try { replaceStop.Wait(2500); } catch { }
+
                         if (Volatile.Read(ref vpnGeneration) != startGeneration)
                             return;
 
@@ -499,7 +504,7 @@ namespace InvisibleGorillaXRay.Android.Services
             CloseOwnedTun();
         }
 
-        private void StopVpnCore(string reason)
+        private void StopVpnCore(string reason, int expectedGeneration)
         {
             Interlocked.Increment(ref healthGeneration);
             healthTimer?.Dispose();
@@ -508,6 +513,17 @@ namespace InvisibleGorillaXRay.Android.Services
             // Must happen before the tunnel teardown: a protect() call racing with the
             // system_server VPN teardown is what used to freeze the whole process.
             UnbindSocketProtect();
+
+            // Close the interface first. Native StopAndroidTun2Socks can block inside
+            // the relay, and the UI used to say Stopped while this fd stayed open
+            // until the phone was rebooted.
+            DiagnosticLog.Write("AndroidVpnService", "CloseOwnedTun before native stop");
+            CloseOwnedTun();
+            if (expectedGeneration >= 0 && expectedGeneration != Volatile.Read(ref vpnGeneration))
+            {
+                DiagnosticLog.Write("AndroidVpnService", "Skip native stop; a newer session owns the interface");
+                return;
+            }
 
             long startedMs = System.Environment.TickCount64;
             try
@@ -520,7 +536,6 @@ namespace InvisibleGorillaXRay.Android.Services
             }
             long elapsedMs = System.Environment.TickCount64 - startedMs;
             DiagnosticLog.Write("AndroidVpnService", $"StopAndroidTunnel took {elapsedMs}ms");
-            CloseOwnedTun();
 
             try { OpenFluxHttpBridge.Shared.Stop(); } catch { }
 
@@ -544,7 +559,7 @@ namespace InvisibleGorillaXRay.Android.Services
                 if (expectedGeneration >= 0 && expectedGeneration != currentGeneration)
                     return;
 
-                StopVpnCore(reason);
+                StopVpnCore(reason, expectedGeneration);
             }
 
             if (!endSession)

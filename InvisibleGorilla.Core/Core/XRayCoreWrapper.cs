@@ -3,6 +3,8 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace InvisibleGorillaXRay.Core
 {
@@ -141,9 +143,30 @@ namespace InvisibleGorillaXRay.Core
                 IntPtr passwordPtr);
         }
 
+        private static int serverStopInFlight;
+
         public static void StopServer()
         {
-            StopServerNative();
+            if (Interlocked.CompareExchange(ref serverStopInFlight, 1, 0) != 0)
+            {
+                DiagnosticLog.Write("XRayWrapper", "StopServer already in flight; skipping reentry");
+                return;
+            }
+
+            var stop = Task.Run(() =>
+            {
+                try
+                {
+                    StopServerNative();
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref serverStopInFlight, 0);
+                }
+            });
+
+            if (!stop.Wait(2000))
+                DiagnosticLog.Write("XRayWrapper", "StopServer timed out after 2000ms");
 
             [DllImport(LIB_NAME, EntryPoint = "StopServer")]
             static extern void StopServerNative();
@@ -198,6 +221,9 @@ namespace InvisibleGorillaXRay.Core
             LocalProxyCredentials? localProxyCredentials = null,
             bool limitMux = false)
         {
+            if (!WaitForAndroidTunnelStop(2500))
+                return "Android tunnel is still stopping";
+
             LocalProxyCredentials credentials = localProxyCredentials ?? LocalProxyCredentials.None;
             IntPtr usernamePtr = StringToUtf8Ptr(credentials.Username);
             IntPtr passwordPtr = StringToUtf8Ptr(credentials.Password);
@@ -222,9 +248,54 @@ namespace InvisibleGorillaXRay.Core
                 [MarshalAs(UnmanagedType.I1)] bool limitMux);
         }
 
+        private static int androidTunnelStopInFlight;
+        private static int androidTunnelStopTicket;
+
+        public static bool WaitForAndroidTunnelStop(int timeoutMs)
+        {
+            long started = Environment.TickCount64;
+            while (Volatile.Read(ref androidTunnelStopInFlight) != 0)
+            {
+                if (Environment.TickCount64 - started >= timeoutMs)
+                {
+                    // A native stop that never returns used to fail every later
+                    // OpenFlux start. Detach that attempt and let the new session own the TUN.
+                    DiagnosticLog.Write("AndroidTunnel", "Previous stop still running; detaching so the next tunnel can start");
+                    Interlocked.Increment(ref androidTunnelStopTicket);
+                    Interlocked.Exchange(ref androidTunnelStopInFlight, 0);
+                    return true;
+                }
+
+                Thread.Sleep(50);
+            }
+
+            return true;
+        }
+
         public static void StopAndroidTunnel()
         {
-            StopAndroidTunnelNative();
+            if (Interlocked.CompareExchange(ref androidTunnelStopInFlight, 1, 0) != 0)
+            {
+                DiagnosticLog.Write("AndroidTunnel", "Stop already in flight; skipping reentry");
+                return;
+            }
+
+            int ticket = Interlocked.Increment(ref androidTunnelStopTicket);
+            var stop = Task.Run(() =>
+            {
+                try
+                {
+                    StopAndroidTunnelNative();
+                }
+                finally
+                {
+                    if (Volatile.Read(ref androidTunnelStopTicket) == ticket)
+                        Interlocked.Exchange(ref androidTunnelStopInFlight, 0);
+                }
+            });
+
+            if (!stop.Wait(2000))
+                DiagnosticLog.Write("AndroidTunnel", "Stop timed out after 2000ms");
 
             [DllImport(LIB_NAME, EntryPoint = "StopAndroidTun2Socks")]
             static extern void StopAndroidTunnelNative();

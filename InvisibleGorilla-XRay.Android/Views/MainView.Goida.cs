@@ -11,6 +11,7 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
+using InvisibleGorillaXRay.Android.Services;
 using InvisibleGorillaXRay.Core;
 using InvisibleGorillaXRay.Models;
 using InvisibleGorillaXRay.Services.Goida;
@@ -69,6 +70,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private bool isApplyingGoidaListSelection;
         private bool isGoidaSectionInitialized;
         private bool goidaProbeUiInProgress;
+        private bool goidaCardCheckInProgress;
         private bool goidaListSelectionDirty;
         private bool isRefreshingGoidaNodesList;
         private int suppressGoidaNodesListRefresh;
@@ -1055,6 +1057,12 @@ namespace InvisibleGorillaXRay.Android.Views
 
             try
             {
+                if (goidaProbeUiInProgress || goidaCardCheckInProgress)
+                {
+                    UpdateCurrentConfigSummary();
+                    return;
+                }
+
                 if (GoidaSectionScroll.IsVisible || isGoidaSectionInitialized)
                 {
                     if (!goidaApplyUiPending && !goidaRefreshUiInProgress)
@@ -1138,8 +1146,6 @@ namespace InvisibleGorillaXRay.Android.Views
                     progress.Node != null
                         ? FormatGoidaStatus(progress.Node)
                         : FormatProbeStatus(progress.Status)));
-
-                RefreshGoidaNodesListBoxThrottled(force: progress.Current == progress.Total);
             });
         }
 
@@ -1349,6 +1355,13 @@ namespace InvisibleGorillaXRay.Android.Views
             if (goidaProbeUiInProgress)
             {
                 goidaProbeCts?.Cancel();
+                return;
+            }
+
+            if (AndroidVpnServiceController.IsRunning || isRunWorkerBusy)
+            {
+                SetGoidaStatusTextBlock(Localize("Lang.Goida.CheckWhileTunnel"));
+                SetStatus(Localize("Lang.Goida.CheckWhileTunnel"));
                 return;
             }
 

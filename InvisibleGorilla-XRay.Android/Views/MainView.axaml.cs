@@ -119,6 +119,19 @@ namespace InvisibleGorillaXRay.Android.Views
         private string? pendingUpdateLocalApkPath;
         private DispatcherTimer? connectionInfoTimer;
         private DispatcherTimer? heroWifiPulseTimer;
+        private DispatcherTimer? homeTrafficTimer;
+        private bool homeTrafficHooked;
+        private const int HomeSpeedSlotCount = 24;
+        private readonly long[] homeSpeedSamples = new long[HomeSpeedSlotCount];
+        private readonly bool[] homeSpeedFaults = new bool[HomeSpeedSlotCount];
+        private int homeSpeedWrite;
+        private int homeSpeedFilled;
+        private Border[]? homeSpeedDots;
+        private bool homeTunSeen;
+        private bool homeTunMissingLatched;
+        private bool homeFaultPending;
+        private string homeFaultLoggedReason = string.Empty;
+        private DateTime homeFaultLoggedUtc = DateTime.MinValue;
         private int heroWifiPulseTick;
         private bool heroWifiPulseHooked;
         private CancellationTokenSource? connectionInfoLookupCancellation;
@@ -222,7 +235,7 @@ namespace InvisibleGorillaXRay.Android.Views
             TrySetupStep("UpdateCurrentConfigSummary", UpdateCurrentConfigSummary);
             TrySetupStep("SetConnectionStateStopped", () => SetConnectionState(ConnectionState.Stopped));
             TrySetupStep("InitializeConnectionInfo", InitializeConnectionInfo);
-            TrySetupStep("ClearStatus", () => SetStatus(string.Empty));
+            TrySetupStep("ClearStatus", () => SetStatus("Lang.Status.Stopped"));
 
             isInitialized = true;
             DiagnosticLog.Write("MainView", "Setup completed");
@@ -2068,16 +2081,24 @@ namespace InvisibleGorillaXRay.Android.Views
                 actionRow.Children.Add(CreateIconActionButton("Icon.Delete", 12, 12, () => DeleteSelectedConfig(config)));
             actionRow.Children.Add(CreateIconActionButton("Icon.Connection", 15, 11, () =>
             {
-                if (torProfile != null)
-                    _ = CheckTorProfileAsync(torProfile);
-                else if (isTorMarker)
-                    _ = CheckTorProfileAsync(BuildBuiltinTorProfile());
-                else if (isGoidaMarker)
-                    _ = CheckGoidaProfileAsync();
-                else if (isOpenFluxMarker)
-                    _ = CheckOpenFluxProfileAsync();
-                else
-                    _ = CheckConfigAsync(config);
+                try
+                {
+                    if (torProfile != null)
+                        _ = CheckTorProfileAsync(torProfile);
+                    else if (isTorMarker)
+                        _ = CheckTorProfileAsync(BuildBuiltinTorProfile());
+                    else if (isGoidaMarker)
+                        _ = CheckGoidaProfileAsync();
+                    else if (isOpenFluxMarker)
+                        _ = CheckOpenFluxProfileAsync();
+                    else
+                        _ = CheckConfigAsync(config);
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("MainView.CheckCard", ex);
+                    SetStatus(Localize("Lang.Goida.ProbeFailed"));
+                }
             }));
             Grid.SetRow(actionRow, 1);
             rightColumn.Children.Add(actionRow);
@@ -2220,10 +2241,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 {
                     UpdateRuntimeSummary();
                     UpdateNotificationIndicator.IsVisible = updateAvailable;
-                    string statusMessage = updateAvailable || !string.IsNullOrWhiteSpace(broadcastMessage)
-                        ? BuildAvailabilityMessage()
-                        : string.Empty;
-                    SetAvailabilityInfo(statusMessage);
+                    SetAvailabilityInfo(string.Empty);
                     SyncUpdatesPanelFromRemoteInfo(info);
                 });
             }
@@ -2477,12 +2495,46 @@ namespace InvisibleGorillaXRay.Android.Views
             HomeInfoPanelContainer.IsVisible = !string.IsNullOrWhiteSpace(normalizedMessage);
         }
 
+        private readonly Queue<string> homeActivityLines = new();
+
         private void SetStatus(string message)
         {
             string normalizedMessage = NormalizeStatusMessage(message);
             SetStatusPanel(HomeStatusPanelContainer, HomeStatusText, normalizedMessage);
             SetStatusPanel(ServersStatusPanelContainer, ServersStatusText, normalizedMessage);
             SetStatusPanel(SettingsStatusPanelContainer, SettingsStatusText, normalizedMessage);
+            if (!string.IsNullOrWhiteSpace(normalizedMessage))
+                AppendHomeActivity(normalizedMessage);
+        }
+
+        private void AppendHomeActivity(string message)
+        {
+            try
+            {
+                string line = message.Replace('\r', ' ').Replace('\n', ' ').Trim();
+                if (line.Length > 96)
+                    line = line.Substring(0, 96);
+                if (line.Length == 0)
+                    return;
+
+                string stamped = DateTime.Now.ToString("HH:mm:ss") + "  " + line;
+                if (homeActivityLines.Count > 0 && homeActivityLines.Last().EndsWith(line, StringComparison.Ordinal))
+                    return;
+
+                homeActivityLines.Enqueue(stamped);
+                while (homeActivityLines.Count > 5)
+                    homeActivityLines.Dequeue();
+
+                HomeInfoText.Text = string.Join(Environment.NewLine, homeActivityLines);
+                HomeInfoPanelContainer.IsVisible = true;
+                TextBlock? title = this.FindControl<TextBlock>("HomeActivityTitleTextBlock");
+                if (title != null)
+                    title.Text = Localize("Lang.Home.ActivityLog");
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.HomeActivity", ex);
+            }
         }
 
         private static void SetStatusPanel(Border container, TextBlock textBlock, string message)
@@ -2514,7 +2566,7 @@ namespace InvisibleGorillaXRay.Android.Views
             inner.IsVisible = true;
             middle.IsVisible = true;
             outer.IsVisible = true;
-            heroWifiPulseTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+            heroWifiPulseTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(160) };
             if (!heroWifiPulseHooked)
             {
                 heroWifiPulseTimer.Tick += (_, _) => AdvanceHeroWifiPulse();
@@ -2605,6 +2657,265 @@ namespace InvisibleGorillaXRay.Android.Views
             }
         }
 
+        private void SetHomeProgress(double percent, string step)
+        {
+            try
+            {
+                ProgressBar? bar = this.FindControl<ProgressBar>("HomeConnectProgress");
+                TextBlock? stepText = this.FindControl<TextBlock>("HomeConnectStepText");
+                if (bar == null || stepText == null)
+                    return;
+
+                bar.IsVisible = percent > 0;
+                bar.Value = Math.Clamp(percent, 0, 100);
+                if (percent < 100)
+                    bar.Foreground = new SolidColorBrush(Color.Parse("#6DCC8E"));
+
+                string shown = step ?? string.Empty;
+                string subtitle = ConnectionStateSubtitleText.Text ?? string.Empty;
+                string title = ConnectionStateTitleText.Text ?? string.Empty;
+                if (string.Equals(shown, subtitle, StringComparison.Ordinal)
+                    || string.Equals(shown, title, StringComparison.Ordinal))
+                    shown = string.Empty;
+                stepText.Text = shown;
+                stepText.IsVisible = shown.Length > 0;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.HomeProgress", ex);
+            }
+        }
+
+        private void StartHomeTraffic()
+        {
+            try
+            {
+                homeTrafficTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                if (!homeTrafficHooked)
+                {
+                    homeTrafficHooked = true;
+                    homeTrafficTimer.Tick += (_, _) => RefreshHomeTraffic();
+                }
+
+                TextBlock? traffic = this.FindControl<TextBlock>("HomeTrafficText");
+                if (traffic == null)
+                    return;
+
+                traffic.IsVisible = true;
+                ResetHomeSpeedTrace();
+                RefreshHomeTraffic();
+                if (!homeTrafficTimer.IsEnabled)
+                    homeTrafficTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.HomeTraffic", ex);
+            }
+        }
+
+        private void StopHomeTraffic()
+        {
+            try
+            {
+                homeTrafficTimer?.Stop();
+                TextBlock? traffic = this.FindControl<TextBlock>("HomeTrafficText");
+                if (traffic == null)
+                    return;
+
+                traffic.IsVisible = false;
+                traffic.Text = string.Empty;
+                traffic.Foreground = new SolidColorBrush(Color.Parse("#6DCC8E"));
+                HideHomeSpeedTrace();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.HomeTraffic", ex);
+            }
+        }
+
+        private void RefreshHomeTraffic()
+        {
+            try
+            {
+                if (displayedConnectionState != ConnectionState.Running)
+                {
+                    StopHomeTraffic();
+                    return;
+                }
+
+                TextBlock? traffic = this.FindControl<TextBlock>("HomeTrafficText");
+                if (traffic == null)
+                    return;
+
+                AndroidConnectionNotificationManager.LiveTrafficSnapshot sample =
+                    AndroidConnectionNotificationManager.ReadLiveTraffic();
+                long bytesPerSec = Math.Max(0, sample.RxPerSec) + Math.Max(0, sample.TxPerSec);
+                Color speedColor = SpeedColor(bytesPerSec);
+                SolidColorBrush speedBrush = new(speedColor);
+                traffic.Text = sample.Text;
+                traffic.Foreground = speedBrush;
+
+                ProgressBar? bar = this.FindControl<ProgressBar>("HomeConnectProgress");
+                if (bar != null)
+                {
+                    bar.IsVisible = true;
+                    bar.Value = 100;
+                    bar.Foreground = speedBrush;
+                }
+
+                if (sample.TunPresent)
+                {
+                    homeTunSeen = true;
+                    homeTunMissingLatched = false;
+                }
+                else if (homeTunSeen && !homeTunMissingLatched)
+                {
+                    homeTunMissingLatched = true;
+                    NoteHomeFault("Lang.Home.Glitch.NoTunnel");
+                }
+
+                bool fault = homeFaultPending;
+                homeFaultPending = false;
+                PushHomeSpeedSample(bytesPerSec, fault);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.HomeTraffic", ex);
+            }
+        }
+
+        private void NoteHomeFault(string reasonKey)
+        {
+            string reason = Localize(reasonKey);
+            homeFaultPending = true;
+            bool repeat = string.Equals(homeFaultLoggedReason, reason, StringComparison.Ordinal)
+                && (DateTime.UtcNow - homeFaultLoggedUtc).TotalSeconds < 20;
+            if (repeat)
+                return;
+
+            homeFaultLoggedReason = reason;
+            homeFaultLoggedUtc = DateTime.UtcNow;
+            string line = LocalizeFormat("Lang.Home.Glitch", reason);
+            DiagnosticLog.Write("Home", line);
+            AppendHomeActivity(line);
+        }
+
+        private void ResetHomeSpeedTrace()
+        {
+            homeSpeedWrite = 0;
+            homeSpeedFilled = 0;
+            homeTunSeen = false;
+            homeTunMissingLatched = false;
+            homeFaultPending = false;
+            homeFaultLoggedReason = string.Empty;
+            homeFaultLoggedUtc = DateTime.MinValue;
+            EnsureHomeSpeedDots();
+            PaintHomeSpeedDots();
+            StackPanel? host = this.FindControl<StackPanel>("HomeSpeedTrace");
+            if (host != null)
+                host.IsVisible = true;
+        }
+
+        private void HideHomeSpeedTrace()
+        {
+            StackPanel? host = this.FindControl<StackPanel>("HomeSpeedTrace");
+            if (host != null)
+                host.IsVisible = false;
+        }
+
+        private void EnsureHomeSpeedDots()
+        {
+            if (homeSpeedDots != null)
+                return;
+
+            StackPanel? host = this.FindControl<StackPanel>("HomeSpeedTrace");
+            if (host == null)
+                return;
+
+            homeSpeedDots = new Border[HomeSpeedSlotCount];
+            host.Children.Clear();
+            for (int i = 0; i < HomeSpeedSlotCount; i++)
+            {
+                Border dot = new()
+                {
+                    Width = 7,
+                    Height = 7,
+                    CornerRadius = new CornerRadius(2),
+                    Background = new SolidColorBrush(Color.Parse("#3A3A3A")),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                homeSpeedDots[i] = dot;
+                host.Children.Add(dot);
+            }
+        }
+
+        private void PushHomeSpeedSample(long bytesPerSec, bool fault)
+        {
+            homeSpeedSamples[homeSpeedWrite] = bytesPerSec;
+            homeSpeedFaults[homeSpeedWrite] = fault;
+            homeSpeedWrite = (homeSpeedWrite + 1) % HomeSpeedSlotCount;
+            if (homeSpeedFilled < HomeSpeedSlotCount)
+                homeSpeedFilled++;
+            PaintHomeSpeedDots();
+        }
+
+        private void PaintHomeSpeedDots()
+        {
+            if (homeSpeedDots == null)
+                return;
+
+            for (int visual = 0; visual < HomeSpeedSlotCount; visual++)
+            {
+                int ageFromNewest = HomeSpeedSlotCount - 1 - visual;
+                Border dot = homeSpeedDots[visual];
+                if (ageFromNewest >= homeSpeedFilled)
+                {
+                    StyleHomeSpeedDot(dot, Color.Parse("#3A3A3A"), fault: false);
+                    continue;
+                }
+
+                int index = (homeSpeedWrite - 1 - ageFromNewest + HomeSpeedSlotCount * 2) % HomeSpeedSlotCount;
+                if (homeSpeedFaults[index])
+                    StyleHomeSpeedDot(dot, Color.Parse("#FF2D2D"), fault: true);
+                else
+                    StyleHomeSpeedDot(dot, SpeedColor(homeSpeedSamples[index]), fault: false);
+            }
+        }
+
+        private static void StyleHomeSpeedDot(Border dot, Color color, bool fault)
+        {
+            dot.Width = fault ? 10 : 7;
+            dot.Height = fault ? 10 : 7;
+            dot.CornerRadius = new CornerRadius(fault ? 5 : 2);
+            dot.Background = new SolidColorBrush(color);
+            dot.BorderThickness = fault ? new Thickness(1) : new Thickness(0);
+            dot.BorderBrush = fault ? Brushes.White : null;
+        }
+
+        private static Color SpeedColor(long bytesPerSec)
+        {
+            // 8 KiB/s is red, about 90 KiB/s is orange, 1 MiB/s and above is green.
+            double log2 = Math.Log(Math.Max(bytesPerSec, 1), 2);
+            double t = (log2 - 13.0) / 7.0;
+            if (t < 0)
+                t = 0;
+            if (t > 1)
+                t = 1;
+
+            Color slow = Color.Parse("#E24B4B");
+            Color mid = Color.Parse("#F09A3A");
+            Color fast = Color.Parse("#6DCC8E");
+            return t < 0.5
+                ? LerpColor(slow, mid, t / 0.5)
+                : LerpColor(mid, fast, (t - 0.5) / 0.5);
+        }
+
+        private static Color LerpColor(Color from, Color to, double t)
+        {
+            byte Mix(byte a, byte b) => (byte)Math.Round(a + (b - a) * t);
+            return Color.FromRgb(Mix(from.R, to.R), Mix(from.G, to.G), Mix(from.B, to.B));
+        }
+
         private void ApplyConnectionState(ConnectionState state)
         {
             bool stateChanged = displayedConnectionState != state;
@@ -2617,12 +2928,14 @@ namespace InvisibleGorillaXRay.Android.Views
             {
                 case ConnectionState.Starting:
                     SetHeroWifiPulse(false);
+                    StopHomeTraffic();
                     ConnectionHeroGlowBorder.IsVisible = false;
                     StoppedHeroIconShape.IsVisible = true;
                     RunningHeroIconShape.IsVisible = false;
                     ConnectionStateIndicatorDot.Background = StartingBrush;
                     ConnectionStateTitleText.Text = Localize("Lang.Status.WaitForRun");
                     ConnectionStateSubtitleText.Text = Localize("Lang.Android.Home.Subtitle.Starting");
+                    SetHomeProgress(28, ConnectionStateSubtitleText.Text);
                     ShowLiveConnectionCard(tracking: true);
                     return;
 
@@ -2634,11 +2947,15 @@ namespace InvisibleGorillaXRay.Android.Views
                     ConnectionStateIndicatorDot.Background = RunningBrush;
                     ConnectionStateTitleText.Text = Localize("Lang.Status.Running");
                     ConnectionStateSubtitleText.Text = Localize("Lang.Android.Home.Subtitle.Running");
+                    SetHomeProgress(100, ConnectionStateSubtitleText.Text);
+                    StartHomeTraffic();
                     ShowLiveConnectionCard(tracking: true);
                     break;
 
                 default:
                     SetHeroWifiPulse(false);
+                    StopHomeTraffic();
+                    SetHomeProgress(0, string.Empty);
                     ConnectionHeroGlowBorder.IsVisible = false;
                     StoppedHeroIconShape.IsVisible = true;
                     RunningHeroIconShape.IsVisible = false;
@@ -3000,6 +3317,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     ConnectionInfoLocationText.Text = string.Empty;
                     ConnectionInfoOrgText.Text = string.Empty;
                     ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.TunnelProbeUnavailable");
+                    NoteHomeFault("Lang.Home.Glitch.Probe");
                 });
                 return;
             }
@@ -3101,6 +3419,8 @@ namespace InvisibleGorillaXRay.Android.Views
                 ConnectionInfoLocationText.Text = string.Empty;
                 ConnectionInfoOrgText.Text = string.Empty;
                 ConnectionInfoVerdictText.Text = LocalizeFormat("Lang.ConnectionInfo.Error", info.Error);
+                if (isConnectionInfoConnected)
+                    NoteHomeFault("Lang.Home.Glitch.Probe");
                 return;
             }
 
@@ -3149,6 +3469,7 @@ namespace InvisibleGorillaXRay.Android.Views
             else
             {
                 ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Exposed");
+                NoteHomeFault("Lang.Home.Glitch.Exposed");
                 RegisterTunnelFailure();
             }
 
@@ -3727,7 +4048,11 @@ namespace InvisibleGorillaXRay.Android.Views
                 if (OpenFluxProfilePaths.IsMarker(settingsHandler.UserSettings.GetCurrentConfigPath()))
                 {
                     string docUrl = OpenFluxUrl.Trim(settingsHandler.UserSettings.GetOpenFluxProfile().DocUrl);
-                    PostConnectionUi(epoch, () => SetStatus("Lang.OpenFlux.Status.Opening"));
+                    PostConnectionUi(epoch, () =>
+                    {
+                        SetStatus("Lang.OpenFlux.Status.Opening");
+                        SetHomeProgress(46, Localize("Lang.OpenFlux.Status.Opening"));
+                    });
                     bool documentReady = OpenFluxDocumentCapture.TryCapture(docUrl);
                     if (documentReady)
                         OpenFluxDocumentCapture.KeepExitCopy();
@@ -3778,7 +4103,11 @@ namespace InvisibleGorillaXRay.Android.Views
                 }
 
                 if (OpenFluxProfilePaths.IsMarker(settingsHandler.UserSettings.GetCurrentConfigPath()))
-                    PostConnectionUi(epoch, () => SetStatus("Lang.OpenFlux.Status.WaitingPeer"));
+                    PostConnectionUi(epoch, () =>
+                    {
+                        SetStatus("Lang.OpenFlux.Status.WaitingPeer");
+                        SetHomeProgress(74, Localize("Lang.OpenFlux.Status.WaitingPeer"));
+                    });
 
                 core.Run(activeConfig, () =>
                 {
@@ -3858,9 +4187,10 @@ namespace InvisibleGorillaXRay.Android.Views
                 DateTime.UtcNow.AddSeconds(8);
             try
             {
-                SetRunningState(false);
-                SetConnectionState(ConnectionState.Stopped);
-                SetStatus("Lang.Status.Stopped");
+                ConnectionStateTitleText.Text = Localize("Lang.Home.Stopping");
+                ConnectionStateSubtitleText.Text = Localize("Lang.Home.Stopping");
+                SetHomeProgress(72, Localize("Lang.Home.Stopping"));
+                SetStatus("Lang.Home.Stopping");
             }
             catch (Exception ex)
             {
@@ -3882,9 +4212,23 @@ namespace InvisibleGorillaXRay.Android.Views
                 catch (Exception ex) { DiagnosticLog.WriteException("MainView.RequestStop", ex); }
                 finally
                 {
+                    int finishedEpoch = stopEpoch;
                     Dispatcher.UIThread.Post(() =>
                     {
                         isStopWorkerBusy = false;
+                        if (finishedEpoch != Volatile.Read(ref connectionEpoch))
+                            return;
+
+                        try
+                        {
+                            SetRunningState(false);
+                            SetConnectionState(ConnectionState.Stopped);
+                            SetStatus("Lang.Status.Stopped");
+                        }
+                        catch (Exception ex)
+                        {
+                            DiagnosticLog.WriteException("MainView.RequestStop.UiDone", ex);
+                        }
                     }, DispatcherPriority.Background);
                 }
             });
@@ -4719,14 +5063,56 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private async Task CheckGoidaProfileAsync()
         {
-            Config? runtimeConfig = configHandler.GetCurrentConfig();
-            if (runtimeConfig == null || GoidaProfilePaths.IsMarker(runtimeConfig.Path))
+            if (AndroidVpnServiceController.IsRunning || isRunWorkerBusy)
             {
-                SetStatus(Localize("Lang.Goida.EmptyHint"));
+                SetStatus(Localize("Lang.Goida.CheckWhileTunnel"));
                 return;
             }
 
-            await CheckConfigAsync(runtimeConfig, GoidaProfilePaths.MarkerPath);
+            if (isCheckWorkerBusy)
+                return;
+
+            isCheckWorkerBusy = true;
+            goidaCardCheckInProgress = true;
+            SetStatus(LocalizeFormat("Lang.Android.Status.CheckingConfig", "Goida"));
+            try
+            {
+                // Card check must not call the native VLESS probe. That probe plus a list
+                // rebind is what kills the process from the server-list button.
+                GoidaNode? node = await goidaHandler.Manager.ProbeActiveNodeTcpAsync();
+                if (node == null)
+                {
+                    SetStatus(Localize("Lang.Goida.CardCheckNone"));
+                    return;
+                }
+
+                if (node.LatencyMs >= 0)
+                {
+                    SetConfigAvailability(GoidaProfilePaths.MarkerPath, node.LatencyMs);
+                    SetStatus(LocalizeFormat("Lang.Goida.CardCheckOk", node.DisplayName, node.LatencyMs));
+                }
+                else
+                {
+                    SetConfigAvailability(
+                        GoidaProfilePaths.MarkerPath,
+                        node.LatencyMs == -1
+                            ? InvisibleGorillaXRay.Values.Availability.TIMEOUT
+                            : InvisibleGorillaXRay.Values.Availability.ERROR);
+                    SetStatus(LocalizeFormat("Lang.Goida.CardCheckFail", node.DisplayName));
+                }
+
+                RefreshConfigs();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.CheckGoidaCard", ex);
+                SetStatus(Localize("Lang.Goida.ProbeFailed"));
+            }
+            finally
+            {
+                goidaCardCheckInProgress = false;
+                isCheckWorkerBusy = false;
+            }
         }
 
         private async Task CheckConfigAsync(Config config, string? availabilityKey = null)

@@ -52,6 +52,12 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.53
+
+- **Repeated Android connect and disconnect keeps working.** OpenFlux no longer dies on the third or fourth cycle with a tunnel-start error and a stopped channel. Closing the tunnel no longer waits on a stuck stack, and a stuck close cannot block the next start.
+- **The home screen shows the channel state once.** The speed bar moves from green through orange to red as throughput drops. A glitch is written to the activity log and marked with a red spot.
+- **The Goida check on a server card no longer kills the app.** It checks the active node over TCP and skips that check while the tunnel is up.
+
 ## What's new in v3.6.52
 
 - **Desktop OpenFlux no longer dies when the log folder is missing.** If the saved Logs path cannot be created, the sidecar writes next to the executable, then in local app data.

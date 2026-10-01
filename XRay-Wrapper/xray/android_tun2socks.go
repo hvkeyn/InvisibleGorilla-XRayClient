@@ -85,7 +85,7 @@ func StartAndroidTun2Socks(fd C.int, proxyPort C.int, isUdpEnabled C.bool, usern
 	// On this phone that dup survives Close and leaves a DOWN tun with
 	// 10.0.236.10 still installed. Raw syscalls close the only fd.
 	tunFd := int(fd)
-	_ = syscall.SetNonblock(tunFd, false)
+	_ = syscall.SetNonblock(tunFd, true)
 
 	lwip := tcore.NewLWIPStack()
 	bridge := &androidTunBridge{
@@ -155,6 +155,13 @@ func runAndroidTunLoop(bridge *androidTunBridge) {
 
 		packetLength, err := syscall.Read(tunFd, buffer)
 		if err == syscall.EINTR {
+			continue
+		}
+		if err == syscall.EAGAIN || err == syscall.EWOULDBLOCK {
+			if isBridgeStopping(bridge) {
+				return
+			}
+			time.Sleep(20 * time.Millisecond)
 			continue
 		}
 		if packetLength > 0 {
@@ -256,19 +263,23 @@ func stopAndroidTunLocked() {
 	defer androidTunMutex.Lock()
 
 	// Close the TUN FD first so the packet reader unblocks before lwip teardown.
+	// Do not wait for lwip.Close on this goroutine. After a few OpenFlux
+	// sessions that close blocks, the C# stop flag stays set, and the next
+	// start aborts with "Android tunnel is still stopping".
 	if tunFd >= 0 {
 		_ = syscall.Close(tunFd)
 	}
 
-	// Give the read loop a chance to exit cleanly before tearing down lwip.
-	select {
-	case <-bridge.done:
-	case <-time.After(2 * time.Second):
-	}
-
-	if lwip != nil {
-		_ = lwip.Close()
-	}
+	go func() {
+		defer func() { _ = recover() }()
+		select {
+		case <-bridge.done:
+		case <-time.After(500 * time.Millisecond):
+		}
+		if lwip != nil {
+			_ = lwip.Close()
+		}
+	}()
 }
 
 func isExpectedTunClose(err error) bool {

@@ -431,7 +431,7 @@ namespace InvisibleGorillaXRay.Core
             }
             try { torManager.Stop(); }
             catch (Exception ex) { DiagnosticLog.WriteException("Stop.Tor", ex); }
-            try { _ = Task.Run(XRayCoreWrapper.StopServer); }
+            try { XRayCoreWrapper.StopServer(); }
             catch (Exception ex) { DiagnosticLog.WriteException("Stop.Server", ex); }
             DiagnosticLog.Write("Stop", $"Stop sequence issued in {Environment.TickCount64 - stopStartedMs}ms");
             try { AnalyticsService.SendEvent(new StoppedEvent()); }

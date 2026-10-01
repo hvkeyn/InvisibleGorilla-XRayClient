@@ -63,6 +63,18 @@ namespace InvisibleGorillaXRay.Android.Services
         private static long baseTxBytes;
         private static long lastRxBytes;
         private static long lastTxBytes;
+        private static long publishedRxBytes;
+        private static long publishedTxBytes;
+        private static long publishedRxPerSec;
+        private static long publishedTxPerSec;
+        private static long homeRxBytes;
+        private static long homeTxBytes;
+        private static long homeRxPerSec;
+        private static long homeTxPerSec;
+        private static DateTime homeSampleUtc;
+        private static bool homeTunBaselineSet;
+        private static long homeBaseRx;
+        private static long homeBaseTx;
         private static bool usingTunCounters;
         private static bool channelCreated;
 
@@ -86,6 +98,8 @@ namespace InvisibleGorillaXRay.Android.Services
                 lastTxBytes = txBytes;
                 usingTunCounters = false;
                 lastSampleUtc = startedAtUtc;
+                homeTunBaselineSet = false;
+                homeSampleUtc = DateTime.MinValue;
 
                 EnsureChannelLocked();
                 EnsureTimerLocked();
@@ -325,6 +339,10 @@ namespace InvisibleGorillaXRay.Android.Services
             lastSampleUtc = now;
             lastRxBytes = currentRxBytes;
             lastTxBytes = currentTxBytes;
+            publishedRxBytes = totalRxBytes;
+            publishedTxBytes = totalTxBytes;
+            publishedRxPerSec = rxSpeedBytes;
+            publishedTxPerSec = txSpeedBytes;
 
             string stateText = GetStateText(session.Text);
             string contentText = currentState == AndroidConnectionNotificationState.Running
@@ -409,7 +427,7 @@ namespace InvisibleGorillaXRay.Android.Services
                         continue;
 
                     string name = line.Substring(0, colon).Trim();
-                    if (!name.StartsWith("tun", StringComparison.Ordinal))
+                    if (name == "tunl0" || !name.StartsWith("tun", StringComparison.Ordinal))
                         continue;
 
                     string[] parts = line.Substring(colon + 1).Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -450,6 +468,58 @@ namespace InvisibleGorillaXRay.Android.Services
                 AndroidConnectionNotificationState.Stopping => text.StateStopping,
                 AndroidConnectionNotificationState.Stopped => text.StateStopped,
                 _ => text.StateRunning
+            };
+        }
+
+        public readonly struct LiveTrafficSnapshot
+        {
+            public long RxPerSec { get; init; }
+            public long TxPerSec { get; init; }
+            public bool TunPresent { get; init; }
+            public string Text { get; init; }
+        }
+
+        public static string FormatLiveTraffic() => ReadLiveTraffic().Text;
+
+        public static LiveTrafficSnapshot ReadLiveTraffic()
+        {
+            if (TryReadTunBytes(out long rx, out long tx))
+            {
+                if (!homeTunBaselineSet)
+                {
+                    homeBaseRx = rx;
+                    homeBaseTx = tx;
+                    homeTunBaselineSet = true;
+                }
+
+                DateTime now = DateTime.UtcNow;
+                double elapsed = (now - homeSampleUtc).TotalSeconds;
+                if (homeSampleUtc != DateTime.MinValue && elapsed >= 0.5d)
+                {
+                    homeRxPerSec = (long)Math.Max(0, (rx - homeRxBytes) / elapsed);
+                    homeTxPerSec = (long)Math.Max(0, (tx - homeTxBytes) / elapsed);
+                }
+
+                homeRxBytes = rx;
+                homeTxBytes = tx;
+                homeSampleUtc = now;
+                long totalRx = Math.Max(0, rx - homeBaseRx);
+                long totalTx = Math.Max(0, tx - homeBaseTx);
+                return new LiveTrafficSnapshot
+                {
+                    RxPerSec = homeRxPerSec,
+                    TxPerSec = homeTxPerSec,
+                    TunPresent = true,
+                    Text = $"RX {FormatBytes(totalRx)}  ↓ {FormatBytes(homeRxPerSec)}/s    TX {FormatBytes(totalTx)}  ↑ {FormatBytes(homeTxPerSec)}/s"
+                };
+            }
+
+            return new LiveTrafficSnapshot
+            {
+                RxPerSec = publishedRxPerSec,
+                TxPerSec = publishedTxPerSec,
+                TunPresent = false,
+                Text = $"RX {FormatBytes(publishedRxBytes)}  ↓ {FormatBytes(publishedRxPerSec)}/s    TX {FormatBytes(publishedTxBytes)}  ↑ {FormatBytes(publishedTxPerSec)}/s"
             };
         }
 

@@ -12,6 +12,16 @@
     <x:String x:Key="Lang.Button.Confirm">ПРИМЕНИТЬ</x:String>
 
     <x:String x:Key="Lang.Status.Stopped">Остановлен</x:String>
+    <x:String x:Key="Lang.Home.Stopping">Отключение канала…</x:String>
+    <x:String x:Key="Lang.Home.ActivityLog">Журнал</x:String>
+    <x:String x:Key="Lang.Home.Glitch">Сбой канала: {0}</x:String>
+    <x:String x:Key="Lang.Home.Glitch.NoTunnel">интерфейс туннеля пропал</x:String>
+    <x:String x:Key="Lang.Home.Glitch.Exposed">трафик ушёл мимо канала</x:String>
+    <x:String x:Key="Lang.Home.Glitch.Probe">проверка выхода не удалась</x:String>
+    <x:String x:Key="Lang.Goida.CheckWhileTunnel">Сначала остановите канал. Проверка Goida при включённом туннеле роняет приложение.</x:String>
+    <x:String x:Key="Lang.Goida.CardCheckNone">Goida: нет активного узла</x:String>
+    <x:String x:Key="Lang.Goida.CardCheckOk">Goida · {0} · {1} мс</x:String>
+    <x:String x:Key="Lang.Goida.CardCheckFail">Goida · {0} · нет ответа</x:String>
     <x:String x:Key="Lang.Status.Running">Работает</x:String>
     <x:String x:Key="Lang.Status.WaitForRun">Ожидание запуска</x:String>
     <x:String x:Key="Lang.ConnectionInfo.Title">Ваше соединение</x:String>
@@ -200,9 +210,9 @@
     <x:String x:Key="Lang.Config.Log">Журнал</x:String>
     <x:String x:Key="Lang.Config.Select">Выбрать</x:String>
 
-    <x:String x:Key="Lang.Android.Home.Subtitle.Stopped">Android VPN/TUN готов. Нажмите запуск, чтобы направить трафик устройства через выбранную конфигурацию.</x:String>
-    <x:String x:Key="Lang.Android.Home.Subtitle.Starting">Запускается Android VpnService tunnel и локальный Xray bridge.</x:String>
-    <x:String x:Key="Lang.Android.Home.Subtitle.Running">Device-wide VPN routing активен. Трафик браузера и приложений теперь должен идти через выбранную конфигурацию.</x:String>
+    <x:String x:Key="Lang.Android.Home.Subtitle.Stopped">Канал выключен</x:String>
+    <x:String x:Key="Lang.Android.Home.Subtitle.Starting">Идёт подключение</x:String>
+    <x:String x:Key="Lang.Android.Home.Subtitle.Running">Канал включён</x:String>
     <x:String x:Key="Lang.Android.Home.ProxyAvailability">Android теперь использует VpnService tunnel и локальный mobile bridge вместо старого proxy-only listener пути.</x:String>
     <x:String x:Key="Lang.Android.Home.UpdateAvailable">Доступно обновление: v{0}. Откройте Настройки → Обновления.</x:String>
 
