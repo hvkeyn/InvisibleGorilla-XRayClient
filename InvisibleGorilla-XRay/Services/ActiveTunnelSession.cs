@@ -15,26 +15,32 @@ namespace InvisibleGorillaXRay.Services
         private static Mode mode = Mode.PROXY;
 
         private static int openFluxSocksPort;
+        private static int openFluxHttpPort;
 
         public static void Set(Mode activeMode, LocalProxyCredentials sessionCredentials)
         {
             mode = activeMode;
             credentials = sessionCredentials ?? LocalProxyCredentials.None;
             openFluxSocksPort = 0;
+            openFluxHttpPort = 0;
         }
 
-        public static void SetOpenFlux(int socksPort)
+        public static void SetOpenFlux(int socksPort, int httpPort = 0)
         {
             mode = Mode.PROXY;
             credentials = LocalProxyCredentials.None;
             openFluxSocksPort = socksPort;
+            openFluxHttpPort = httpPort;
         }
+
+        public static bool IsOpenFlux => openFluxSocksPort > 0 || openFluxHttpPort > 0;
 
         public static void Clear()
         {
             mode = Mode.PROXY;
             credentials = LocalProxyCredentials.None;
             openFluxSocksPort = 0;
+            openFluxHttpPort = 0;
         }
 
         public static IWebProxy? BuildProbeProxy(bool connected, Mode settingsMode, int proxyPort)
@@ -44,6 +50,9 @@ namespace InvisibleGorillaXRay.Services
 
             if (openFluxSocksPort > 0)
                 return new WebProxy($"socks5://{Global.LOCAL_HOST}:{openFluxSocksPort}");
+
+            if (openFluxHttpPort > 0)
+                return new WebProxy($"http://{Global.LOCAL_HOST}:{openFluxHttpPort}");
 
             if (settingsMode == Mode.TUN && credentials.HasValue)
             {

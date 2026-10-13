@@ -1,9 +1,13 @@
 using System;
 using System.IO;
+using System.Threading;
 using System.Text;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Controls;
+using InvisibleGorillaXRay.Services.Goida;
+using InvisibleGorillaXRay.Services.OpenFlux;
+using InvisibleGorillaXRay.Services.Tor;
 using System.Collections.Generic;
 using Microsoft.Win32;
 using QRCoder;
@@ -23,18 +27,25 @@ namespace InvisibleGorillaXRay
         private Func<UserSettings> getUserSettings;
         private Func<AppRulesWindow> openAppRulesWindow;
         private Action openGoidaProfileWindow;
+        private Action openTorSettings;
+        private Func<int> probeTorLatency;
+        private Func<int> probeGoida;
         private Func<bool> isCurrentPathEqualRootConfigPath;
         private Func<string, int> testConnection;
         private Func<string> getLogPath;
         private Func<List<string>, BridgeType, bool> onAddBridges;
         private string pendingShareContent;
         private string pendingShareConfigName;
+        private string editingConfigPath;
+        private UIElement openFluxEditorElement;
+        private Action refreshOpenFluxEditor;
 
         private AnalyticsService AnalyticsService => ServiceLocator.Get<AnalyticsService>();
 
         public ServerWindow()
         {
             InitializeComponent();
+            TextSelectionAssist.Attach(this);
             InitializeImportingGroups();
             InitializeGeneralConfigComponents();
             InitializeSubscriptionConfigComponents();
@@ -60,9 +71,15 @@ namespace InvisibleGorillaXRay
             Action<Subscription> onDeleteSubscription,
             Action<GroupType, string> onDeleteConfig,
             Action<string> onUpdateConfig,
-            Func<List<string>, BridgeType, bool> onAddBridges = null)
+            Func<List<string>, BridgeType, bool> onAddBridges = null,
+            Action openTorSettings = null,
+            Func<int> probeTorLatency = null,
+            Func<int> probeGoida = null)
         {
             this.onAddBridges = onAddBridges;
+            this.openTorSettings = openTorSettings;
+            this.probeTorLatency = probeTorLatency;
+            this.probeGoida = probeGoida;
             this.getCurrentConfigPath = getCurrentConfigPath;
             this.getUserSettings = getUserSettings;
             this.openAppRulesWindow = openAppRulesWindow;
@@ -292,13 +309,23 @@ namespace InvisibleGorillaXRay
                     },
                     getServerWindow: () => this,
                     testConnection: (configPath) => {
+                        if (OpenFluxProfilePaths.IsMarker(configPath))
+                            return ProbeOpenFluxLatency();
+
+                        if (TorProfilePaths.IsMarker(configPath))
+                            return probeTorLatency?.Invoke() ?? Availability.ERROR;
+
+                        if (GoidaProfilePaths.IsMarker(configPath))
+                            return probeGoida?.Invoke() ?? Availability.ERROR;
+
                         Status configStatus = loadConfig.Invoke(configPath);
                         if (configStatus.Code == Code.ERROR)
                             return Availability.ERROR;
                             
                         return testConnection.Invoke(configStatus.Content.ToString());
                     },
-                    getLogPath: getLogPath
+                    getLogPath: getLogPath,
+                    onEditProfile: () => EditConfig(config)
                 );
 
                 return configComponent;
@@ -533,6 +560,158 @@ namespace InvisibleGorillaXRay
                 MessageBoxButton.OK, 
                 MessageBoxImage.Error
             );
+        }
+
+        private int ProbeOpenFluxLatency()
+        {
+            try
+            {
+                OpenFluxProfile profile = getUserSettings?.Invoke()?.GetOpenFluxProfile();
+                string url = OpenFluxUrl.Trim(profile?.DocUrl);
+                if (!OpenFluxUrl.TryValidate(url, out _))
+                    return Availability.ERROR;
+
+                OpenFluxUrlCheckResult check = OpenFluxUrlCheck.InspectAsync(url, CancellationToken.None)
+                    .GetAwaiter()
+                    .GetResult();
+                if (!check.FormatOk || !check.LooksLikeDocument)
+                    return Availability.ERROR;
+                return check.LatencyMs >= 0 ? check.LatencyMs : Availability.TIMEOUT;
+            }
+            catch
+            {
+                return Availability.ERROR;
+            }
+        }
+
+        public void BindOpenFluxEditor(UIElement editor, Action refresh)
+        {
+            openFluxEditorElement = editor;
+            refreshOpenFluxEditor = refresh;
+        }
+
+        public void ReleaseOpenFluxEditor(Panel homeHost)
+        {
+            if (openFluxEditorElement == null || homeHost == null)
+                return;
+
+            DetachElement(openFluxEditorElement);
+            if (openFluxEditorSlot != null)
+                openFluxEditorSlot.Child = null;
+            if (openFluxEditorElement is FrameworkElement visual && visual.Parent == null)
+                homeHost.Children.Add(visual);
+            if (openFluxHost != null)
+                openFluxHost.Visibility = Visibility.Collapsed;
+        }
+
+        private void OnHideOpenFluxEditorClick(object sender, RoutedEventArgs e)
+        {
+            if (openFluxHost != null)
+                openFluxHost.Visibility = Visibility.Collapsed;
+        }
+
+        private void ShowOpenFluxEditor()
+        {
+            if (openFluxEditorElement == null || openFluxEditorSlot == null)
+                return;
+
+            DetachElement(openFluxEditorElement);
+            openFluxEditorSlot.Child = openFluxEditorElement;
+            if (panelFileEditor != null)
+                panelFileEditor.Visibility = Visibility.Collapsed;
+            ShowServersPanel();
+            OnConfigTabClick(null, null);
+            openFluxHost.Visibility = Visibility.Visible;
+            refreshOpenFluxEditor?.Invoke();
+        }
+
+        private void EditConfig(Models.Config config)
+        {
+            if (config == null)
+                return;
+
+            if (OpenFluxProfilePaths.IsMarker(config.Path))
+            {
+                ShowOpenFluxEditor();
+                return;
+            }
+
+            if (GoidaProfilePaths.IsMarker(config.Path))
+            {
+                openGoidaProfileWindow?.Invoke();
+                return;
+            }
+
+            if (TorProfilePaths.IsMarker(config.Path))
+            {
+                openTorSettings?.Invoke();
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(config.Path) || !File.Exists(config.Path))
+            {
+                HandleErrorMessage(Localize(Localization.FILE_DOESNT_EXISTS));
+                return;
+            }
+
+            try
+            {
+                editingConfigPath = config.Path;
+                textEditConfigTitle.Text = config.Name;
+                textEditConfigBody.Text = File.ReadAllText(config.Path);
+                if (openFluxHost != null)
+                    openFluxHost.Visibility = Visibility.Collapsed;
+                ShowServersPanel();
+                panelFileEditor.Visibility = Visibility.Visible;
+            }
+            catch (Exception ex)
+            {
+                HandleErrorMessage(ex.Message);
+            }
+        }
+
+        private void OnSaveFileEditorClick(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(editingConfigPath))
+                return;
+
+            try
+            {
+                File.WriteAllText(editingConfigPath, textEditConfigBody.Text ?? "");
+                panelFileEditor.Visibility = Visibility.Collapsed;
+                editingConfigPath = null;
+                LoadConfigsList(GroupType.GENERAL);
+                LoadConfigsList(GroupType.SUBSCRIPTION);
+            }
+            catch (Exception ex)
+            {
+                HandleErrorMessage(ex.Message);
+            }
+        }
+
+        private void OnCancelFileEditorClick(object sender, RoutedEventArgs e)
+        {
+            panelFileEditor.Visibility = Visibility.Collapsed;
+            editingConfigPath = null;
+        }
+
+        private static void DetachElement(UIElement element)
+        {
+            if (element is not FrameworkElement visual)
+                return;
+
+            switch (visual.Parent)
+            {
+                case Panel panel:
+                    panel.Children.Remove(visual);
+                    break;
+                case Decorator decorator when decorator.Child == visual:
+                    decorator.Child = null;
+                    break;
+                case ContentControl content when ReferenceEquals(content.Content, visual):
+                    content.Content = null;
+                    break;
+            }
         }
     }
 }

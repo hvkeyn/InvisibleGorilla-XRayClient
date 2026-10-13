@@ -84,7 +84,32 @@ namespace InvisibleGorillaXRay.Managers.Initializers
                     getCurrentConfigPath: settingsHandler.UserSettings.GetCurrentConfigPath,
                     getGoidaListConfig: BuildGoidaListConfig,
                     getGoidaRuntimeConfig: BuildGoidaRuntimeConfig,
-                    getOpenFluxListConfig: BuildOpenFluxListConfig);
+                    getOpenFluxListConfig: BuildOpenFluxListConfig,
+                    getTorListConfig: BuildTorListConfig);
+
+                Config? BuildTorListConfig()
+                {
+                    TorSettings tor = settingsHandler.UserSettings.GetTorSettings();
+                    string hint = tor.GetBridgeType() switch
+                    {
+                        BridgeType.OBFS4 => "obfs4",
+                        BridgeType.MEEK_AZURE => "meek",
+                        BridgeType.WEBTUNNEL => "webtunnel",
+                        BridgeType.SNOWFLAKE => "snowflake",
+                        _ => "snowflake"
+                    };
+                    int bridgeCount = tor.GetBridgeLines().Count;
+                    string subtitle = bridgeCount > 0 ? hint + " · " + bridgeCount : hint;
+                    Config config = new Config(
+                        path: Services.Tor.TorProfilePaths.MarkerPath,
+                        name: LocalizeGoida("Lang.Tor.ServerListName", "Tor bridges"),
+                        type: ConfigType.FILE,
+                        group: GroupType.GENERAL,
+                        updateTime: subtitle);
+                    if (tor.LastLatencyMs >= 0)
+                        config.SetAvailability(tor.LastLatencyMs);
+                    return config;
+                }
 
                 Config? BuildOpenFluxListConfig()
                 {

@@ -113,6 +113,9 @@ namespace InvisibleGorillaXRay.Core
             if (OpenFluxProfilePaths.IsMarker(path))
                 return new Status(Code.SUCCESS, SubCode.SUCCESS, OpenFluxManager.DummyConfig);
 
+            if (Services.Tor.TorProfilePaths.IsMarker(path))
+                return new Status(Code.SUCCESS, SubCode.SUCCESS, "{\"outbounds\":[]}");
+
             if (!XRayCoreWrapper.IsFileExists(path))
             {
                 onFailLoadingConfig.Invoke(path);
@@ -172,7 +175,8 @@ namespace InvisibleGorillaXRay.Core
             // Tor sits in front of xray-core as a local SOCKS daemon. Start it (if enabled)
             // and rewrite the runtime config so xray's egress (or chain entry) goes through Tor.
             TorSettings torSettings = getTorSettings?.Invoke();
-            bool torEnabled = torSettings != null && torSettings.GetEnabled();
+            bool torProfile = Services.Tor.TorProfilePaths.IsMarker(getConfig.Invoke()?.Path);
+            bool torEnabled = torProfile || (torSettings != null && torSettings.GetEnabled());
             if (torEnabled)
             {
                 DiagnosticLog.Write("Run", $"Tor enabled (mode={torSettings.GetMode()}). Starting tor daemon...");
@@ -413,8 +417,7 @@ namespace InvisibleGorillaXRay.Core
                     Status start = openFluxManager.Start(profile, getLogPath.Invoke());
                     if (start.Code != Code.SUCCESS)
                     {
-                        throw new InvalidOperationException(
-                            LocalizationService.GetTerm(MapOpenFluxError(start.Content?.ToString())));
+                        throw new InvalidOperationException(MapOpenFluxError(start.Content?.ToString()));
                     }
 
                     OpenFluxExitRegistry.RegisterInBackground(
@@ -422,7 +425,8 @@ namespace InvisibleGorillaXRay.Core
                         profile.EncryptionKey);
 
                     int socksPort = openFluxManager.BoundSocksPort;
-                    ActiveTunnelSession.SetOpenFlux(socksPort);
+                    openFluxHttpBridge.Start(socksPort);
+                    ActiveTunnelSession.SetOpenFlux(socksPort, openFluxHttpBridge.ListenPort);
 
                     if (useTun)
                     {
@@ -441,7 +445,7 @@ namespace InvisibleGorillaXRay.Core
                                 openFluxManager.Stop();
                                 throw new InvalidOperationException(
                                     tunnelStatus.Content?.ToString()
-                                    ?? LocalizationService.GetTerm(Localization.CANT_TUNNEL_SYSTEM));
+                                    ?? Localization.CANT_TUNNEL_SYSTEM);
                             }
 
                             tunnelEnabled = true;
@@ -450,14 +454,13 @@ namespace InvisibleGorillaXRay.Core
                     }
                     else
                     {
-                        openFluxHttpBridge.Start(socksPort);
                         Status proxyStatus = EnableProxy();
                         if (proxyStatus.Code == Code.ERROR)
                         {
                             openFluxManager.Stop();
                             throw new InvalidOperationException(
                                 proxyStatus.Content?.ToString()
-                                ?? LocalizationService.GetTerm(Localization.CANT_PROXY_SYSTEM));
+                                ?? Localization.CANT_PROXY_SYSTEM);
                         }
                         proxyEnabled = true;
                     }
@@ -653,12 +656,16 @@ namespace InvisibleGorillaXRay.Core
             WindowsTunnel.ExtraBypassAppPath = System.IO.Path.GetFullPath(Values.Path.OPENFLUX_EXE);
             WindowsTunnel.ExtraBypassExclusive = false;
             ITunnel tunnel = getTunnel.Invoke();
+            string interfaceDns = getDns.Invoke();
+            if (string.IsNullOrWhiteSpace(interfaceDns))
+                interfaceDns = "8.8.8.8";
+
             return tunnel.Enable(
                 ip: Global.LOCAL_HOST,
                 port: socksPort,
                 address: getTunIp.Invoke(),
                 server: server,
-                dns: getDns.Invoke(),
+                dns: "doh:" + interfaceDns.Trim(),
                 localProxyCredentials: LocalProxyCredentials.None
             );
         }

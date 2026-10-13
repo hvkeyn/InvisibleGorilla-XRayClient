@@ -308,6 +308,12 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
             startInfo.Environment["ALL_PROXY"] = "";
             startInfo.Environment["http_proxy"] = "";
             startInfo.Environment["https_proxy"] = "";
+            string snapshotHtml = IoPath.GetFullPath(IoPath.Combine(AppDir.OPENFLUX, "doc.html"));
+            string snapshotCookies = IoPath.GetFullPath(IoPath.Combine(AppDir.OPENFLUX, "doc.cookies"));
+            if (File.Exists(snapshotHtml))
+                startInfo.Environment["OPENFLUX_HTML_FILE"] = snapshotHtml;
+            if (File.Exists(snapshotCookies))
+                startInfo.Environment["OPENFLUX_COOKIE_FILE"] = snapshotCookies;
             startInfo.Environment["OPENFLUX_BATCH_BYTES"] = "32768";
             startInfo.Environment["OPENFLUX_BATCH_COUNT"] = "96";
             startInfo.Environment["OPENFLUX_BATCH_LINGER_MS"] = "4";

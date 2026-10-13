@@ -24,16 +24,26 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
         private CancellationTokenSource cts;
         private int socksPort;
         private readonly SemaphoreSlim socksGate = new SemaphoreSlim(24, 24);
-        private readonly ConcurrentDictionary<string, ConcurrentQueue<TcpClient>> warmPool = new();
-        private static readonly string[] WarmHosts =
+        private readonly SemaphoreSlim dialGate = new SemaphoreSlim(6, 6);
+        private readonly ConcurrentDictionary<string, ConcurrentQueue<WarmEntry>> warmPool = new();
+        private readonly ConcurrentDictionary<ActiveRelay, byte> activeRelays = new();
+        private long bytesDown;
+        private long bytesUp;
+        private static readonly string[] WarmHosts = Array.Empty<string>();
+
+        private sealed class WarmEntry
         {
-            "www.youtube.com",
-            "youtube.com",
-            "i.ytimg.com",
-            "youtubei.googleapis.com",
-            "www.gstatic.com",
-            "play.google.com"
-        };
+            public TcpClient Client;
+            public long CreatedTicks;
+        }
+
+        private sealed class ActiveRelay
+        {
+            public TcpClient Socks;
+            public long StartedTicks;
+            public long LastTicks;
+            public CancellationTokenSource Kill;
+        }
 
         public int ListenPort { get; private set; }
 
@@ -59,6 +69,12 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
         {
             try { cts?.Cancel(); } catch { }
             try { listener?.Stop(); } catch { }
+            foreach (ActiveRelay relay in activeRelays.Keys)
+            {
+                try { relay.Kill?.Cancel(); } catch { }
+                try { relay.Socks?.Close(); } catch { }
+            }
+            activeRelays.Clear();
             DrainWarmPool();
             listener = null;
             cts = null;
@@ -140,13 +156,19 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
 
         private async Task RelayThroughSocksAsync(NetworkStream browserStream, string host, int port, string leftover, CancellationToken token)
         {
-            if (!await socksGate.WaitAsync(TimeSpan.FromSeconds(8), token).ConfigureAwait(false))
+            EvictStaleRelays();
+            if (!await socksGate.WaitAsync(TimeSpan.FromSeconds(2), token).ConfigureAwait(false))
             {
-                await WriteAscii(browserStream, "HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n").ConfigureAwait(false);
-                return;
+                EvictStaleRelays();
+                if (!await socksGate.WaitAsync(TimeSpan.FromSeconds(1), token).ConfigureAwait(false))
+                {
+                    await WriteAscii(browserStream, "HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n").ConfigureAwait(false);
+                    return;
+                }
             }
 
             TcpClient socks = TakeWarm(host, port);
+            ActiveRelay relay = null;
             try
             {
                 socks ??= await ConnectSocksAsync(host, port, token).ConfigureAwait(false);
@@ -166,12 +188,37 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
                     await WriteAscii(browserStream, "HTTP/1.1 200 Connection Established\r\n\r\n").ConfigureAwait(false);
                 }
 
-                await Pump(browserStream, socks.GetStream(), token).ConfigureAwait(false);
+                relay = new ActiveRelay
+                {
+                    Socks = socks,
+                    StartedTicks = Environment.TickCount64,
+                    LastTicks = Environment.TickCount64,
+                    Kill = CancellationTokenSource.CreateLinkedTokenSource(token)
+                };
+                activeRelays[relay] = 0;
+                await Pump(browserStream, socks.GetStream(), relay).ConfigureAwait(false);
             }
             finally
             {
+                if (relay != null)
+                    activeRelays.TryRemove(relay, out _);
+                try { relay?.Kill?.Cancel(); } catch { }
+                try { relay?.Kill?.Dispose(); } catch { }
                 try { socks?.Dispose(); } catch { }
                 try { socksGate.Release(); } catch { }
+            }
+        }
+
+        private void EvictStaleRelays()
+        {
+            long now = Environment.TickCount64;
+            foreach (ActiveRelay relay in activeRelays.Keys)
+            {
+                long idleMs = now - relay.LastTicks;
+                if (idleMs < 2000)
+                    continue;
+                try { relay.Kill?.Cancel(); } catch { }
+                try { relay.Socks?.Close(); } catch { }
             }
         }
 
@@ -189,7 +236,7 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
                             await Task.Delay(delayMs, token).ConfigureAwait(false);
                         TcpClient ready = await ConnectSocksAsync(target, 443, token).ConfigureAwait(false);
                         if (ready != null)
-                            StoreWarm(target, 443, ready);
+                            StoreWarm(target, 443, ready, Environment.TickCount64);
                     }
                     catch
                     {
@@ -205,39 +252,44 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
 
         private TcpClient TakeWarm(string host, int port)
         {
-            if (!warmPool.TryGetValue(WarmKey(host, port), out ConcurrentQueue<TcpClient> queue))
+            if (!warmPool.TryGetValue(WarmKey(host, port), out ConcurrentQueue<WarmEntry> queue))
                 return null;
 
-            while (queue.TryDequeue(out TcpClient client))
+            long now = Environment.TickCount64;
+            while (queue.TryDequeue(out WarmEntry entry))
             {
                 try
                 {
-                    if (client.Connected)
-                        return client;
+                    if (entry?.Client != null && entry.Client.Connected && now - entry.CreatedTicks < 12000)
+                        return entry.Client;
                 }
                 catch
                 {
                 }
 
-                try { client.Dispose(); } catch { }
+                try { entry?.Client?.Dispose(); } catch { }
             }
 
             return null;
         }
 
-        private void StoreWarm(string host, int port, TcpClient client)
+        private void StoreWarm(string host, int port, TcpClient client, long createdTicks)
         {
-            ConcurrentQueue<TcpClient> queue = warmPool.GetOrAdd(WarmKey(host, port), _ => new ConcurrentQueue<TcpClient>());
-            queue.Enqueue(client);
+            ConcurrentQueue<WarmEntry> queue = warmPool.GetOrAdd(WarmKey(host, port), _ => new ConcurrentQueue<WarmEntry>());
+            while (queue.Count >= 1 && queue.TryDequeue(out WarmEntry extra))
+            {
+                try { extra?.Client?.Dispose(); } catch { }
+            }
+            queue.Enqueue(new WarmEntry { Client = client, CreatedTicks = createdTicks });
         }
 
         private void DrainWarmPool()
         {
-            foreach (ConcurrentQueue<TcpClient> queue in warmPool.Values)
+            foreach (ConcurrentQueue<WarmEntry> queue in warmPool.Values)
             {
-                while (queue.TryDequeue(out TcpClient client))
+                while (queue.TryDequeue(out WarmEntry entry))
                 {
-                    try { client.Dispose(); } catch { }
+                    try { entry?.Client?.Dispose(); } catch { }
                 }
             }
 
@@ -268,6 +320,9 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
 
         private async Task<TcpClient> ConnectSocksAsync(string host, int port, CancellationToken token)
         {
+            if (!await dialGate.WaitAsync(TimeSpan.FromSeconds(4), token).ConfigureAwait(false))
+                return null;
+
             TcpClient socks = new TcpClient { NoDelay = true, ReceiveBufferSize = 65536, SendBufferSize = 65536 };
             try
             {
@@ -316,19 +371,58 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
                 try { socks.Dispose(); } catch { }
                 return null;
             }
+            finally
+            {
+                try { dialGate.Release(); } catch { }
+            }
         }
 
-        private static async Task Pump(Stream a, Stream b, CancellationToken token)
+        private async Task Pump(Stream a, Stream b, ActiveRelay relay)
         {
-            using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(token);
-            Task a2b = a.CopyToAsync(b, 65536, linked.Token);
-            Task b2a = b.CopyToAsync(a, 65536, linked.Token);
+            using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(relay.Kill.Token);
+            Task a2b = CopyIdleAsync(a, b, relay, linked.Token, upload: true);
+            Task b2a = CopyIdleAsync(b, a, relay, linked.Token, upload: false);
             try
             {
                 await Task.WhenAny(a2b, b2a).ConfigureAwait(false);
             }
             catch { }
             try { linked.Cancel(); } catch { }
+        }
+
+        public void ReadTraffic(out long down, out long up)
+        {
+            down = Interlocked.Read(ref bytesDown);
+            up = Interlocked.Read(ref bytesUp);
+        }
+
+        private async Task CopyIdleAsync(Stream src, Stream dst, ActiveRelay relay, CancellationToken token, bool upload)
+        {
+            byte[] buffer = new byte[65536];
+            while (!token.IsCancellationRequested)
+            {
+                using CancellationTokenSource idle = CancellationTokenSource.CreateLinkedTokenSource(token);
+                idle.CancelAfter(TimeSpan.FromSeconds(20));
+                int n;
+                try
+                {
+                    n = await src.ReadAsync(buffer.AsMemory(0, buffer.Length), idle.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+
+                if (n <= 0)
+                    return;
+
+                if (upload)
+                    Interlocked.Add(ref bytesUp, n);
+                else
+                    Interlocked.Add(ref bytesDown, n);
+                relay.LastTicks = Environment.TickCount64;
+                await dst.WriteAsync(buffer.AsMemory(0, n), token).ConfigureAwait(false);
+            }
         }
 
         private static bool TrySplitHostPort(string target, int defaultPort, out string host, out int port)

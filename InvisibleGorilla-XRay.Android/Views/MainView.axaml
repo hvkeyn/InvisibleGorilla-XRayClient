@@ -865,10 +865,15 @@
                                                     Theme="{StaticResource TabButtonTheme}"
                                                     Background="{StaticResource AccentMint}"
                                                     Click="OnOpenFluxApplyClick" />
-                                            <TextBlock x:Name="OpenFluxStatusTextBlock"
-                                                       Foreground="White"
-                                                       FontSize="12"
-                                                       TextWrapping="Wrap" />
+                                            <TextBox x:Name="OpenFluxStatusTextBlock"
+                                                     IsReadOnly="True"
+                                                     BorderThickness="0"
+                                                     Background="Transparent"
+                                                     Padding="0"
+                                                     MinHeight="0"
+                                                     Foreground="White"
+                                                     FontSize="12"
+                                                     TextWrapping="Wrap" />
                                             <TextBlock x:Name="OpenFluxHintTextBlock"
                                                        Foreground="{StaticResource TextMuted}"
                                                        FontSize="11"
@@ -1029,11 +1034,16 @@
                             </Button>
                         </StackPanel>
 
-                        <TextBlock x:Name="TorStatusTextBlock"
-                                   Text=""
-                                   TextWrapping="Wrap"
-                                   Foreground="{StaticResource TextMuted}"
-                                   FontSize="12" />
+                        <TextBox x:Name="TorStatusTextBlock"
+                                 IsReadOnly="True"
+                                 BorderThickness="0"
+                                 Background="Transparent"
+                                 Padding="0"
+                                 MinHeight="0"
+                                 Text=""
+                                 TextWrapping="Wrap"
+                                 Foreground="{StaticResource TextMuted}"
+                                 FontSize="12" />
                     </StackPanel>
                 </Border>
 

@@ -7,8 +7,8 @@
         xmlns:Controls="clr-namespace:InvisibleGorillaXRay.Components"
         mc:Ignorable="d"
         Title="Invisible Gorilla XRay - Server config"
-        Height="650" 
-        Width="350" 
+        Height="680" 
+        Width="400" 
         WindowStartupLocation="CenterOwner"  
         ResizeMode="CanResize"
         ShowInTaskbar="False">
@@ -59,11 +59,15 @@
             </Grid>
 
             <Grid Grid.Row="1" Visibility="Visible" x:Name="panelConfig">
-                <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                     <StackPanel Orientation="Vertical" Margin="0 0 0 8" x:Name="listConfigs"></StackPanel>
                 </ScrollViewer>
 
-                <TextBlock x:Name="textNoConfig"
+                <TextBlock Grid.Row="1" x:Name="textNoConfig"
                     FontFamily="{StaticResource SegoeUI}"
                     TextAlignment="Center"
                     HorizontalAlignment="Center" VerticalAlignment="Top" 
@@ -236,6 +240,58 @@
                         Width="15" Height="15" Margin="0"
                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Button>
+            </Grid>
+
+            <Grid x:Name="openFluxHost" Grid.RowSpan="3" Visibility="Collapsed"
+                  Background="{StaticResource Color.DarkGray}" Panel.ZIndex="3">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <Border x:Name="openFluxEditorSlot" Margin="16,16,16,8"/>
+                </ScrollViewer>
+                <Button Grid.Row="1" HorizontalAlignment="Right" Height="40" MinWidth="120"
+                        Margin="16,8,16,16" Padding="16,0"
+                        Content="{DynamicResource Lang.Button.Close}"
+                        Style="{StaticResource Button.Rectangle.Gray}"
+                        FontFamily="{StaticResource SegoeUI}" FontSize="13" FontWeight="SemiBold"
+                        Foreground="White"
+                        Click="OnHideOpenFluxEditorClick"/>
+            </Grid>
+
+            <Grid x:Name="panelFileEditor" Grid.RowSpan="3" Visibility="Collapsed"
+                  Background="{StaticResource Color.DarkGray}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock x:Name="textEditConfigTitle" Grid.Row="0"
+                           Margin="16 12 16 8"
+                           FontFamily="{StaticResource SegoeUI}" FontSize="16" FontWeight="SemiBold"
+                           Foreground="White" TextTrimming="CharacterEllipsis"/>
+                <TextBox x:Name="textEditConfigBody" Grid.Row="1"
+                         Margin="12 0 12 0"
+                         AcceptsReturn="True" TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                         FontFamily="Consolas" FontSize="12"
+                         Background="#1A1A1A" Foreground="White" BorderBrush="#505050"
+                         Padding="8"/>
+                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="12 12 12 12">
+                    <Button MinWidth="108" Height="36" Padding="12 0"
+                            Content="{DynamicResource Lang.Button.Confirm}"
+                            Style="{StaticResource Button.Rectangle.Green}"
+                            FontFamily="{StaticResource SegoeUI}" FontSize="12" FontWeight="Bold"
+                            Foreground="{StaticResource Color.Gray}"
+                            Click="OnSaveFileEditorClick"/>
+                    <Button MinWidth="108" Height="36" Margin="8 0 0 0" Padding="12 0"
+                            Content="{DynamicResource Lang.Button.Cancel}"
+                            Style="{StaticResource Button.Rectangle.Red}"
+                            FontFamily="{StaticResource SegoeUI}" FontSize="12" FontWeight="Bold"
+                            Foreground="{StaticResource Color.Gray}"
+                            Click="OnCancelFileEditorClick"/>
+                </StackPanel>
             </Grid>
         </Grid>
 

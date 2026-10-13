@@ -182,7 +182,9 @@ namespace InvisibleGorillaXRay.Services.Goida
             {
                 string probeNodeId = node.Id;
                 int probeListId = node.ListId;
-                string probeEndpoint = node.Endpoint;
+                string probeEndpoint = GoidaEndpointProbe.Resolve(node.Endpoint, node.ConfigPath);
+                if (!string.Equals(probeEndpoint, node.Endpoint, StringComparison.OrdinalIgnoreCase))
+                    store.RememberEndpoint(node.Id, probeEndpoint);
                 string probeDisplayName = node.DisplayName;
                 tcpTasks.Add(Task.Run(async () =>
                 {
@@ -364,7 +366,9 @@ namespace InvisibleGorillaXRay.Services.Goida
             {
                 string probeNodeId = node.Id;
                 int probeListId = node.ListId;
-                string probeEndpoint = node.Endpoint;
+                string probeEndpoint = GoidaEndpointProbe.Resolve(node.Endpoint, node.ConfigPath);
+                if (!string.Equals(probeEndpoint, node.Endpoint, StringComparison.OrdinalIgnoreCase))
+                    store.RememberEndpoint(node.Id, probeEndpoint);
                 string probeDisplayName = node.DisplayName;
                 tasks.Add(Task.Run(async () =>
                 {

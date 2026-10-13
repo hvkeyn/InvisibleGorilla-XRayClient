@@ -69,6 +69,9 @@ namespace InvisibleGorillaXRay.Mac.Views
         public MainWindow()
         {
             InitializeComponent();
+#if DEBUG
+            Title = "Invisible Gorilla XRay · debug";
+#endif
 
             Opened += OnWindowOpened;
         }

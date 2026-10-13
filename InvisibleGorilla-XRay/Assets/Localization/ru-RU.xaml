@@ -11,6 +11,10 @@
     <system:String x:Key="Lang.Status.Stopped">Не подключено</system:String>
     <system:String x:Key="Lang.Status.Running">Подключено</system:String>
     <system:String x:Key="Lang.Status.WaitForRun">Подключение</system:String>
+    <system:String x:Key="Lang.Home.ActivityLog">Соединение</system:String>
+    <system:String x:Key="Lang.Home.Step.Starting">Запуск канала</system:String>
+    <system:String x:Key="Lang.Home.Step.Tunnel">Поднимаем туннель</system:String>
+    <system:String x:Key="Lang.Home.Step.Running">Канал включён</system:String>
 
     <system:String x:Key="Lang.ConnectionInfo.Title">Ваше подключение</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Checking">Проверка…</system:String>
@@ -128,6 +132,8 @@
     <system:String x:Key="Lang.Tor.Status.SubmittingCaptcha">Отправка решения…</system:String>
     <system:String x:Key="Lang.Tor.Status.MoatBridges">Получено мостов: {0}.</system:String>
     <system:String x:Key="Lang.Tor.Status.MoatFail">Не удалось получить мосты: {0}</system:String>
+    <system:String x:Key="Lang.Tor.Status.MoatFallback">Сеть не ответила. Загружены встроенные мосты: {0}.</system:String>
+    <system:String x:Key="Lang.Tor.Status.WebTunnelEmpty">Встроенных строк WebTunnel нет. Вставьте мосты вручную.</system:String>
     <system:String x:Key="Lang.Window.Settings.Basic.Language">Язык</system:String>
     <system:String x:Key="Lang.Window.Settings.Basic.Mode">Режим</system:String>
     <system:String x:Key="Lang.Window.Settings.Basic.Protocol">Протокол</system:String>
@@ -237,6 +243,8 @@
     <system:String x:Key="Lang.Goida.ServerListName">Профиль Goida</system:String>
     <system:String x:Key="Lang.Goida.ServerListNameWithNode">Goida · {0}</system:String>
     <system:String x:Key="Lang.OpenFlux.ServerListName">OpenFlux</system:String>
+    <system:String x:Key="Lang.Tor.ServerListName">Мосты Tor</system:String>
+    <system:String x:Key="Lang.Tor.EditorSubtitle">Способ моста для этого профиля</system:String>
     <system:String x:Key="Lang.OpenFlux.ServerListHint">Документ Яндекса</system:String>
     <system:String x:Key="Lang.OpenFlux.UrlLabel">Ссылка на документ Яндекса</system:String>
     <system:String x:Key="Lang.OpenFlux.Apply">Применить</system:String>
@@ -252,6 +260,7 @@
     <system:String x:Key="Lang.OpenFlux.Transport.Yandex">Транспорт: Legacy (yandex)</system:String>
     <system:String x:Key="Lang.OpenFlux.Status.Stopped">Отключено</system:String>
     <system:String x:Key="Lang.OpenFlux.Status.Connecting">Подключение…</system:String>
+    <system:String x:Key="Lang.OpenFlux.Status.Opening">Открываем документ Яндекса в браузере.</system:String>
     <system:String x:Key="Lang.OpenFlux.Status.WaitingPeer">Документ OK, ждём peer</system:String>
     <system:String x:Key="Lang.OpenFlux.Status.Live">Туннель живой</system:String>
     <system:String x:Key="Lang.OpenFlux.Status.LiveMs">Туннель живой · {0} мс</system:String>

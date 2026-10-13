@@ -2,8 +2,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="InvisibleGorillaXRay.Mac.Views.ServerWindow"
         Title="Invisible Gorilla XRay - Server config"
-        Height="650" 
-        Width="350"
+        Height="680" 
+        Width="400"
         CanResize="True"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
@@ -344,10 +344,70 @@
                         Text="{DynamicResource Lang.Window.Server.Title}"
                         FontWeight="Light" FontSize="20" Foreground="White"/>
                     <TextBlock Margin="15,0,0,0" VerticalAlignment="Top" 
-                        Text="Server management"
+                        Text="{DynamicResource Lang.Window.Main.ManageServerConfiguration}"
                         FontWeight="Light" FontSize="14" Foreground="White"/>
                 </StackPanel>
             </Grid>
         </Border>
+
+        <Grid Grid.RowSpan="2" x:Name="panelProfileEditor" IsVisible="False"
+              Background="{StaticResource Color.DarkGray}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock x:Name="profileEditorTitle" Grid.Row="0"
+                       Margin="16,16,16,8"
+                       FontSize="16" FontWeight="SemiBold"
+                       Foreground="White"
+                       TextTrimming="CharacterEllipsis"/>
+
+            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="16,0,16,0" Spacing="8">
+                    <StackPanel x:Name="openFluxEditorFields" Spacing="8">
+                        <TextBlock Text="{DynamicResource Lang.OpenFlux.UrlLabel}"
+                                   FontSize="12" Foreground="#BDBDBD"/>
+                        <TextBox x:Name="openFluxUrlBox" Height="72"
+                                 AcceptsReturn="True" TextWrapping="Wrap"
+                                 FontSize="12" Padding="8"/>
+                        <TextBlock Text="{DynamicResource Lang.OpenFlux.KeyLabel}"
+                                   FontSize="12" Foreground="#BDBDBD" TextWrapping="Wrap"/>
+                        <TextBox x:Name="openFluxKeyBox" Height="36" IsReadOnly="True"
+                                 FontFamily="Consolas" FontSize="12" Padding="8,4"/>
+                        <ComboBox x:Name="openFluxTransportBox" Height="32"/>
+                        <TextBlock x:Name="openFluxStatusText" FontSize="12"
+                                   Foreground="#E8E8E8" TextWrapping="Wrap"/>
+                        <TextBlock Text="{DynamicResource Lang.OpenFlux.Hint}"
+                                   FontSize="11" Foreground="#8A8A8A" TextWrapping="Wrap"/>
+                        <Button HorizontalAlignment="Left" MinWidth="120" Height="36"
+                                Content="{DynamicResource Lang.OpenFlux.Apply}"
+                                Theme="{StaticResource Button.Rectangle.Green}"
+                                FontWeight="Bold" FontSize="12"
+                                Click="OnOpenFluxEditorApplyClick"/>
+                    </StackPanel>
+
+                    <TextBox x:Name="fileEditorBox" IsVisible="False"
+                             AcceptsReturn="True" TextWrapping="Wrap"
+                             MinHeight="360" FontFamily="Consolas" FontSize="12" Padding="8"/>
+                </StackPanel>
+            </ScrollViewer>
+
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"
+                        Margin="16,12,16,16" Spacing="8">
+                <Button x:Name="fileEditorSaveButton" IsVisible="False"
+                        MinWidth="108" Height="36"
+                        Content="{DynamicResource Lang.Button.Confirm}"
+                        Theme="{StaticResource Button.Rectangle.Green}"
+                        FontWeight="Bold" FontSize="12"
+                        Click="OnSaveFileEditorClick"/>
+                <Button MinWidth="108" Height="36"
+                        Content="{DynamicResource Lang.Button.Close}"
+                        Theme="{StaticResource Button.Rectangle.Gray}"
+                        FontWeight="Bold" FontSize="12"
+                        Click="OnCloseProfileEditorClick"/>
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>

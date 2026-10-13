@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -20,6 +21,8 @@ namespace InvisibleGorillaXRay.Mac.Views
     using InvisibleGorillaXRay.Services.Analytics.ServerWindow;
     using InvisibleGorillaXRay.Services.Analytics.Configuration;
     using InvisibleGorillaXRay.Handlers.SmartInput;
+    using InvisibleGorillaXRay.Services.Goida;
+    using InvisibleGorillaXRay.Services.OpenFlux;
 
     public partial class ServerWindow : Window
     {
@@ -51,6 +54,12 @@ namespace InvisibleGorillaXRay.Mac.Views
         private Action<GroupType, string> onDeleteConfig;
         private Action<string> onUpdateConfig;
         private Func<List<string>, BridgeType, bool> onAddBridges;
+        private Func<OpenFluxProfile> getOpenFluxProfile;
+        private Action<OpenFluxProfile> onSaveOpenFlux;
+        private Func<string, Status> onApplyOpenFluxUrl;
+        private string editingConfigPath;
+        private bool openFluxEditorBusy;
+        private bool openFluxTransportReady;
 
         private AnalyticsService AnalyticsService => ServiceLocator.Get<AnalyticsService>();
         private LocalizationService LocalizationService => ServiceLocator.Get<LocalizationService>();
@@ -85,9 +94,15 @@ namespace InvisibleGorillaXRay.Mac.Views
             Action<Subscription> onDeleteSubscription,
             Action<GroupType, string> onDeleteConfig,
             Action<string> onUpdateConfig,
-            Func<List<string>, BridgeType, bool> onAddBridges = null)
+            Func<List<string>, BridgeType, bool> onAddBridges = null,
+            Func<OpenFluxProfile> getOpenFluxProfile = null,
+            Action<OpenFluxProfile> onSaveOpenFlux = null,
+            Func<string, Status> onApplyOpenFluxUrl = null)
         {
             this.onAddBridges = onAddBridges;
+            this.getOpenFluxProfile = getOpenFluxProfile;
+            this.onSaveOpenFlux = onSaveOpenFlux;
+            this.onApplyOpenFluxUrl = onApplyOpenFluxUrl;
             this.getCurrentConfigPath = getCurrentConfigPath;
             this.getUserSettings = getUserSettings;
             this.openAppRulesWindow = openAppRulesWindow;
@@ -554,6 +569,30 @@ namespace InvisibleGorillaXRay.Mac.Views
             };
             btnRow.Children.Add(selectBtn);
 
+            var editBtn = MakeBtn(LocalizationService.GetTerm("Lang.Config.Edit"));
+            editBtn.Click += (_, _) => EditListedConfig(config);
+            btnRow.Children.Add(editBtn);
+
+            bool isVirtualProfile = OpenFluxProfilePaths.IsMarker(config.Path)
+                || GoidaProfilePaths.IsMarker(config.Path);
+            if (isVirtualProfile)
+            {
+                outerStack.Children.Add(topRow);
+                outerStack.Children.Add(btnRow);
+                border.Child = outerStack;
+                border.PointerPressed += (s, e) =>
+                {
+                    if (e.GetCurrentPoint(border).Properties.IsLeftButtonPressed &&
+                        e.Source is not Button)
+                    {
+                        onUpdateConfig.Invoke(config.Path);
+                        LoadConfigsList(group);
+                        AnalyticsService.SendEvent(new SelectButtonClickedEvent());
+                    }
+                };
+                return border;
+            }
+
             var checkBtn = MakeBtn(LocalizationService.GetTerm("Lang.Config.Check"));
             checkBtn.Click += (s, e) =>
             {
@@ -799,5 +838,178 @@ namespace InvisibleGorillaXRay.Mac.Views
         }
 
         private string Localize(string key) => LocalizationService.GetTerm(key);
+
+        private void EditListedConfig(Config config)
+        {
+            if (config == null)
+                return;
+
+            if (OpenFluxProfilePaths.IsMarker(config.Path))
+            {
+                ShowOpenFluxEditor();
+                return;
+            }
+
+            if (GoidaProfilePaths.IsMarker(config.Path))
+            {
+                openGoidaProfileWindow?.Invoke();
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(config.Path) || !File.Exists(config.Path))
+                return;
+
+            try
+            {
+                editingConfigPath = config.Path;
+                profileEditorTitle.Text = config.Name;
+                fileEditorBox.Text = File.ReadAllText(config.Path);
+                openFluxEditorFields.IsVisible = false;
+                fileEditorBox.IsVisible = true;
+                fileEditorSaveButton.IsVisible = true;
+                panelProfileEditor.IsVisible = true;
+            }
+            catch
+            {
+            }
+        }
+
+        private void ShowOpenFluxEditor()
+        {
+            EnsureOpenFluxTransportItems();
+            OpenFluxProfile profile = getOpenFluxProfile?.Invoke() ?? new OpenFluxProfile();
+            openFluxUrlBox.Text = OpenFluxUrl.Trim(profile.DocUrl);
+            openFluxKeyBox.Text = OpenFluxUrl.DeriveKey(openFluxUrlBox.Text);
+            openFluxTransportBox.SelectedIndex = profile.Transport switch
+            {
+                OpenFluxTransportMode.Vyandex => 1,
+                OpenFluxTransportMode.Yandex => 2,
+                _ => 0
+            };
+            openFluxStatusText.Text = "";
+            profileEditorTitle.Text = Localize("Lang.OpenFlux.ServerListName");
+            openFluxEditorFields.IsVisible = true;
+            fileEditorBox.IsVisible = false;
+            fileEditorSaveButton.IsVisible = false;
+            panelProfileEditor.IsVisible = true;
+        }
+
+        private void EnsureOpenFluxTransportItems()
+        {
+            if (openFluxTransportReady)
+                return;
+
+            openFluxTransportBox.Items.Clear();
+            openFluxTransportBox.Items.Add(Localize("Lang.OpenFlux.Transport.Auto"));
+            openFluxTransportBox.Items.Add(Localize("Lang.OpenFlux.Transport.Vyandex"));
+            openFluxTransportBox.Items.Add(Localize("Lang.OpenFlux.Transport.Yandex"));
+            openFluxTransportBox.SelectedIndex = 0;
+            openFluxTransportReady = true;
+        }
+
+        private OpenFluxTransportMode ReadOpenFluxTransport()
+        {
+            return openFluxTransportBox.SelectedIndex switch
+            {
+                1 => OpenFluxTransportMode.Vyandex,
+                2 => OpenFluxTransportMode.Yandex,
+                _ => OpenFluxTransportMode.Auto
+            };
+        }
+
+        private async void OnOpenFluxEditorApplyClick(object sender, RoutedEventArgs e)
+        {
+            if (openFluxEditorBusy)
+                return;
+
+            openFluxEditorBusy = true;
+            try
+            {
+                string url = OpenFluxUrl.Trim(openFluxUrlBox.Text);
+                openFluxUrlBox.Text = url;
+                openFluxKeyBox.Text = OpenFluxUrl.DeriveKey(url);
+                openFluxStatusText.Text = Localize("Lang.OpenFlux.Status.Connecting");
+
+                OpenFluxUrlCheckResult check = await OpenFluxUrlCheck.InspectAsync(url, CancellationToken.None);
+                if (!check.FormatOk || !check.LooksLikeDocument)
+                {
+                    openFluxStatusText.Text = Localize(MapOpenFluxEditorError(check.Error));
+                    return;
+                }
+
+                OpenFluxProfile profile = (getOpenFluxProfile?.Invoke() ?? new OpenFluxProfile()).Clone();
+                profile.DocUrl = url;
+                profile.Transport = ReadOpenFluxTransport();
+                profile.EncryptionKey = OpenFluxUrl.DeriveKey(url);
+                profile.ConfigPath = OpenFluxProfilePaths.MarkerPath;
+                onSaveOpenFlux?.Invoke(profile);
+
+                string ping = string.Format(Localize("Lang.OpenFlux.Status.UrlOk"), check.LatencyMs);
+                if (onApplyOpenFluxUrl == null)
+                {
+                    openFluxStatusText.Text = ping;
+                    return;
+                }
+
+                Status result = await Task.Run(() => onApplyOpenFluxUrl(url));
+                if (result.Code != Code.SUCCESS)
+                {
+                    openFluxStatusText.Text = ping + " · " + Localize(MapOpenFluxEditorError(result.Content?.ToString()));
+                    return;
+                }
+
+                string register = result.Content?.ToString() == "register-fail"
+                    ? Localize("Lang.OpenFlux.Status.RegisterFail")
+                    : Localize("Lang.OpenFlux.Status.Registered");
+                openFluxStatusText.Text = ping + " · " + register;
+            }
+            finally
+            {
+                openFluxEditorBusy = false;
+            }
+        }
+
+        private void OnSaveFileEditorClick(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(editingConfigPath))
+                return;
+
+            try
+            {
+                File.WriteAllText(editingConfigPath, fileEditorBox.Text ?? "");
+                editingConfigPath = null;
+                panelProfileEditor.IsVisible = false;
+                LoadConfigsList(GroupType.GENERAL);
+                LoadConfigsList(GroupType.SUBSCRIPTION);
+            }
+            catch
+            {
+            }
+        }
+
+        private void OnCloseProfileEditorClick(object sender, RoutedEventArgs e)
+        {
+            panelProfileEditor.IsVisible = false;
+            editingConfigPath = null;
+        }
+
+        private static string MapOpenFluxEditorError(string detail)
+        {
+            return detail switch
+            {
+                "empty" or "scheme" or "host" => "Lang.OpenFlux.Error.BadUrl",
+                "key-short" => "Lang.OpenFlux.Error.KeyShort",
+                "document" => "Lang.OpenFlux.Error.Document",
+                "captcha" => "Lang.OpenFlux.Error.Captcha",
+                "transport" => "Lang.OpenFlux.Error.Transport",
+                "listen" => "Lang.OpenFlux.Error.Listen",
+                "login" => "Lang.OpenFlux.Error.Login",
+                "timeout" => "Lang.OpenFlux.Error.Timeout",
+                "http" => "Lang.OpenFlux.Error.Http",
+                "register-fail" => "Lang.OpenFlux.Status.RegisterFail",
+                "peer" => "Lang.OpenFlux.Status.PeerMissing",
+                _ => "Lang.OpenFlux.Error.Generic"
+            };
+        }
     }
 }

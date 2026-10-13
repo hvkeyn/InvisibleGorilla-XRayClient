@@ -128,6 +128,8 @@
     <system:String x:Key="Lang.Tor.Status.SubmittingCaptcha">در حال ارسال پاسخ…</system:String>
     <system:String x:Key="Lang.Tor.Status.MoatBridges">{0} پل دریافت شد.</system:String>
     <system:String x:Key="Lang.Tor.Status.MoatFail">دریافت پل‌ها ناموفق بود: {0}</system:String>
+    <system:String x:Key="Lang.Tor.Status.MoatFallback">شبکه پاسخ نداد. {0} پل داخلی بارگذاری شد.</system:String>
+    <system:String x:Key="Lang.Tor.Status.WebTunnelEmpty">پل داخلی WebTunnel نیست. خط پل را وارد کنید.</system:String>
     <system:String x:Key="Lang.Window.Settings.Basic.Language">زبان</system:String>
     <system:String x:Key="Lang.Window.Settings.Basic.Mode">حالت</system:String>
     <system:String x:Key="Lang.Window.Settings.Basic.Protocol">پروتکل</system:String>

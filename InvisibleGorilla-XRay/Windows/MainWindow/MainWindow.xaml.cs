@@ -1,12 +1,20 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
+using System.Net.Http;
+using System.Net.NetworkInformation;
+using Newtonsoft.Json.Linq;
+using System.Threading.Tasks;
 using System.Threading;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using System.ComponentModel;
+using System.Diagnostics;
 
 namespace InvisibleGorillaXRay
 {
@@ -24,10 +32,12 @@ namespace InvisibleGorillaXRay
     {
         private bool isRerunRequest;
         private bool shutdownRequested;
+        private int runGeneration;
 
         private readonly ConnectionInfoService connectionInfoService = new ConnectionInfoService();
         private DispatcherTimer connectionInfoTimer;
         private CancellationTokenSource connectionInfoCts;
+        private bool connectionInfoInFlight;
         private bool isConnected;
         private string baselineIp;
 
@@ -38,6 +48,15 @@ namespace InvisibleGorillaXRay
         private const int ConnectionInfoMaxFailureRetries = 4;
         private DateTime goidaSwitchGraceUntil = DateTime.MinValue;
         private DateTime connectionCheckGraceUntil = DateTime.MinValue;
+        private readonly Queue<string> homeActivityLines = new Queue<string>();
+        private DispatcherTimer homeSpeedTimer;
+        private long homeSpeedRx;
+        private long homeSpeedTx;
+        private bool homeSpeedReady;
+        private int homeSpeedBusy;
+        private readonly object homeSpeedLock = new object();
+        private PerformanceCounter homeRxCounter;
+        private PerformanceCounter homeTxCounter;
 
         private Func<bool> isNeedToShowPolicyWindow;
         private Func<bool> shouldStartHidden;
@@ -86,6 +105,10 @@ namespace InvisibleGorillaXRay
         public MainWindow()
         {
             InitializeComponent();
+            TextSelectionAssist.Attach(this);
+#if DEBUG
+            Title = "Invisible Gorilla XRay · debug";
+#endif
             InitializeRunWorker();
             InitializeUpdateWorker();
             InitializeBroadcastWorker();
@@ -94,6 +117,7 @@ namespace InvisibleGorillaXRay
             broadcastWorker.RunWorkerAsync();
 
             InitializeConnectionInfoTimer();
+            LoadHomeLog();
 
             void InitializeConnectionInfoTimer()
             {
@@ -101,7 +125,11 @@ namespace InvisibleGorillaXRay
                 {
                     Interval = TimeSpan.FromSeconds(20)
                 };
-                connectionInfoTimer.Tick += (sender, e) => RefreshConnectionInfo();
+                connectionInfoTimer.Tick += (sender, e) =>
+                {
+                    if (!connectionInfoInFlight)
+                        RefreshConnectionInfo();
+                };
             }
 
             void InitializeRunWorker()
@@ -109,26 +137,40 @@ namespace InvisibleGorillaXRay
                 runWorker = new BackgroundWorker();
 
                 runWorker.RunWorkerCompleted += (sender, e) => {
-                    if (isRerunRequest)
+                    if (isRerunRequest && !shutdownRequested)
                     {
-                        runWorker.RunWorkerAsync();
                         isRerunRequest = false;
+                        int token = Interlocked.Increment(ref runGeneration);
+                        runWorker.RunWorkerAsync(token);
                     }
                 };
 
                 runWorker.DoWork += (sender, e) => {
+                    int runToken = e.Argument is int token ? token : Volatile.Read(ref runGeneration);
+                    bool RunAlive() => runToken == Volatile.Read(ref runGeneration);
+                    if (!RunAlive())
+                        return;
+
                     EnsureOpenFluxProxyMode();
                     EnsureBaselineBeforeConnect();
 
                     Dispatcher.BeginInvoke(new Action(delegate {
+                        if (!RunAlive())
+                            return;
                         ShowWaitForRunStatus();
+                        SetHomeProgress(25, Loc("Lang.Home.Step.Starting"));
                     }));
 
                     Status configStatus = loadConfig.Invoke();
 
+                    if (!RunAlive())
+                        return;
+
                     if (configStatus.Code == Code.ERROR)
                     {
                         Dispatcher.BeginInvoke(new Action(delegate {
+                            if (!RunAlive())
+                                return;
                             HandleError();
                             ShowStopStatus();
                         }));
@@ -138,9 +180,15 @@ namespace InvisibleGorillaXRay
 
                     Status modeStatus = enableMode.Invoke();
 
+                    if (!RunAlive())
+                        return;
+
                     if (modeStatus.Code == Code.ERROR)
                     {
                         Dispatcher.BeginInvoke(new Action(delegate {
+                            if (!RunAlive())
+                                return;
+                            NoteHome(modeStatus.Content?.ToString());
                             MessageBox.Show(
                                 this,
                                 modeStatus.Content.ToString(), 
@@ -158,6 +206,8 @@ namespace InvisibleGorillaXRay
                         if (modeStatus.SubCode == SubCode.CANCELED)
                         {
                             Dispatcher.BeginInvoke(new Action(delegate {
+                                if (!RunAlive())
+                                    return;
                                 ShowStopStatus();
                             }));
 
@@ -167,14 +217,77 @@ namespace InvisibleGorillaXRay
 
                     try
                     {
+                        if (!RunAlive())
+                            return;
+
+                        if (IsOpenFluxProfileActive())
+                        {
+                            string docUrl = OpenFluxUrl.Trim(getUserSettings?.Invoke()?.GetOpenFluxProfile()?.DocUrl);
+                            Dispatcher.BeginInvoke(new Action(() => SetHomeProgress(40, Loc("Lang.OpenFlux.Status.Opening"))));
+                            bool captured = false;
+                            try
+                            {
+                                Task<bool> capture = Dispatcher.InvokeAsync(
+                                    () => WindowsOpenFluxDocumentCapture.CaptureAsync(this, docUrl)).Task.Unwrap();
+                                DateTime deadline = DateTime.UtcNow.AddSeconds(75);
+                                while (!capture.IsCompleted && DateTime.UtcNow < deadline)
+                                {
+                                    if (!RunAlive())
+                                    {
+                                        Dispatcher.BeginInvoke(new Action(CloseOpenFluxCaptureWindow));
+                                        return;
+                                    }
+                                    capture.Wait(250);
+                                }
+                                captured = capture.Status == TaskStatus.RanToCompletion && capture.Result;
+                            }
+                            catch (Exception captureEx)
+                            {
+                                DiagnosticLog.WriteException("OpenFlux.Capture", captureEx);
+                            }
+
+                            if (!RunAlive())
+                                return;
+
+                            string snapshotPath = System.IO.Path.Combine(Values.Directory.OPENFLUX, "doc.html");
+                            bool haveSnapshot = false;
+                            try
+                            {
+                                haveSnapshot = File.Exists(snapshotPath)
+                                    && File.ReadAllText(snapshotPath).IndexOf("id=\"client-config\"", StringComparison.Ordinal) >= 0;
+                            }
+                            catch
+                            {
+                                haveSnapshot = false;
+                            }
+
+                            if (!captured && !haveSnapshot)
+                                throw new InvalidOperationException("Lang.OpenFlux.Error.Document");
+                        }
+
+                        if (!RunAlive())
+                            return;
+
+                        Dispatcher.BeginInvoke(new Action(() => SetHomeProgress(70, Loc("Lang.Home.Step.Tunnel"))));
                         onRunServer.Invoke(configStatus.Content.ToString());
                     }
                     catch (Exception ex)
                     {
+                        if (!RunAlive())
+                            return;
+
+                        string message = ex.GetBaseException().Message ?? "";
                         Dispatcher.BeginInvoke(new Action(delegate {
+                            if (!RunAlive())
+                                return;
+                            if (message.StartsWith("Lang.", StringComparison.Ordinal))
+                                message = Loc(message);
+                            if (string.IsNullOrWhiteSpace(message))
+                                message = Loc("Lang.OpenFlux.Error.Generic");
+                            NoteHome(message);
                             MessageBox.Show(
                                 this,
-                                ex.Message,
+                                message,
                                 Caption.ERROR,
                                 MessageBoxButton.OK,
                                 MessageBoxImage.Error
@@ -185,7 +298,12 @@ namespace InvisibleGorillaXRay
                         return;
                     }
 
+                    if (!RunAlive())
+                        return;
+
                     Dispatcher.BeginInvoke(new Action(delegate {
+                        if (!RunAlive())
+                            return;
                         ShowStopStatus();
                     }));
 
@@ -429,6 +547,7 @@ namespace InvisibleGorillaXRay
 
             shutdownRequested = true;
             isRerunRequest = false;
+            InvalidateRun();
             connectionInfoCts?.Cancel();
             ShowStopStatus();
 
@@ -496,6 +615,7 @@ namespace InvisibleGorillaXRay
             if (!runWorker.IsBusy)
                 return;
 
+            InvalidateRun();
             isRerunRequest = true;
             System.Threading.Tasks.Task.Run(() =>
             {
@@ -509,6 +629,7 @@ namespace InvisibleGorillaXRay
             if (!runWorker.IsBusy)
                 return;
 
+            InvalidateRun();
             isRerunRequest = true;
             System.Threading.Tasks.Task.Run(() =>
             {
@@ -526,7 +647,13 @@ namespace InvisibleGorillaXRay
             if (!runWorker.IsBusy)
                 return false;
 
+            // This used to sleep on the UI thread. The window froze, and Stop
+            // could not finish because the dispatcher was blocked.
+            if (Dispatcher.CheckAccess())
+                return false;
+
             resumeServerAfterNativeTest = true;
+            InvalidateRun();
             onDisableMode.Invoke();
             onStopServer.Invoke();
 
@@ -548,7 +675,8 @@ namespace InvisibleGorillaXRay
                 return;
 
             resumeServerAfterNativeTest = false;
-            runWorker.RunWorkerAsync();
+            int token = Interlocked.Increment(ref runGeneration);
+            runWorker.RunWorkerAsync(token);
         }
 
         private void OnManageServersClick(object sender, RoutedEventArgs e)
@@ -564,6 +692,7 @@ namespace InvisibleGorillaXRay
             // button feel dead — queue a restart instead so the click always works.
             if (runWorker.IsBusy)
             {
+                InvalidateRun();
                 isRerunRequest = true;
                 ShowWaitForRunStatus();
                 System.Threading.Tasks.Task.Run(() =>
@@ -578,13 +707,15 @@ namespace InvisibleGorillaXRay
                 return;
             }
 
-            runWorker.RunWorkerAsync();
+            int token = Interlocked.Increment(ref runGeneration);
+            runWorker.RunWorkerAsync(token);
             AnalyticsService.SendEvent(new RunButtonClickedEvent());
         }
 
         private void OnStopButtonClick(object sender, RoutedEventArgs e)
         {
             isRerunRequest = false;
+            InvalidateRun();
             connectionInfoCts?.Cancel();
             ShowStopStatus();
             AnalyticsService.SendEvent(new StopButtonClickedEvent());
@@ -608,14 +739,37 @@ namespace InvisibleGorillaXRay
             // Also drops a queued restart (RUN pressed while the previous session
             // was still stopping), otherwise CANCEL appears to do nothing.
             isRerunRequest = false;
+            InvalidateRun();
+            ShowStopStatus();
 
-            if (!runWorker.IsBusy)
+            System.Threading.Tasks.Task.Run(() =>
             {
-                ShowStopStatus();
-                return;
-            }
+                try { onCancelServer?.Invoke(); }
+                catch (Exception ex) { DiagnosticLog.WriteException("MainWindow.OnCancelButtonClick", ex); }
+                try { onStopServer?.Invoke(); }
+                catch (Exception ex) { DiagnosticLog.WriteException("MainWindow.OnCancelButtonClick.Stop", ex); }
+            });
+        }
 
-            onCancelServer.Invoke();
+        private void InvalidateRun()
+        {
+            Interlocked.Increment(ref runGeneration);
+            if (Dispatcher.CheckAccess())
+                CloseOpenFluxCaptureWindow();
+            else
+                Dispatcher.BeginInvoke(new Action(CloseOpenFluxCaptureWindow));
+        }
+
+        private static void CloseOpenFluxCaptureWindow()
+        {
+            if (Application.Current == null)
+                return;
+
+            foreach (Window window in Application.Current.Windows.OfType<Window>().ToList())
+            {
+                if (window.Title == "OpenFlux")
+                    window.Close();
+            }
         }
 
         private void OnGitHubButtonClick(object sender, RoutedEventArgs e)
@@ -686,7 +840,10 @@ namespace InvisibleGorillaXRay
         {
             ServerWindow serverWindow = openServerWindow.Invoke();
             serverWindow.Owner = this;
+            serverWindow.BindOpenFluxEditor(panelOpenFlux, ApplyOpenFluxPanel);
+            serverWindow.Closing += (_, _) => serverWindow.ReleaseOpenFluxEditor(openFluxEditorHost);
             serverWindow.ShowDialog();
+            serverWindow.ReleaseOpenFluxEditor(openFluxEditorHost);
         }
 
         private void OpenSettingsWindow()
@@ -739,9 +896,13 @@ namespace InvisibleGorillaXRay
                 goidaSwitchGraceUntil = DateTime.UtcNow.AddSeconds(20);
             connectionInfoTimer.Interval = IsGoidaProfileActive()
                 ? TimeSpan.FromSeconds(8)
-                : TimeSpan.FromSeconds(20);
+                : ActiveTunnelSession.IsOpenFlux
+                    ? TimeSpan.FromSeconds(45)
+                    : TimeSpan.FromSeconds(20);
             if (!connectionInfoTimer.IsEnabled)
                 connectionInfoTimer.Start();
+            SetHomeProgress(100, Loc("Lang.Home.Step.Running"));
+            StartHomeSpeed();
             // Give the tunnel/proxy a moment to take over routing before probing the exit IP.
             ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(3));
         }
@@ -759,6 +920,20 @@ namespace InvisibleGorillaXRay
             isConnected = false;
             consecutiveTunnelFailures = 0;
             connectionInfoTimer.Stop();
+            StopHomeSpeed();
+            if (homeConnectProgress != null)
+            {
+                homeConnectProgress.Value = 0;
+                homeConnectProgress.Visibility = Visibility.Collapsed;
+            }
+            if (homeConnectStep != null)
+                homeConnectStep.Text = "";
+            if (homeTrafficPanel != null)
+                homeTrafficPanel.Visibility = Visibility.Collapsed;
+            if (homeSpeedTrace != null)
+                homeSpeedTrace.Visibility = Visibility.Collapsed;
+            if (homeTrafficText != null)
+                homeTrafficText.Visibility = Visibility.Collapsed;
             ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(1));
         }
 
@@ -778,6 +953,93 @@ namespace InvisibleGorillaXRay
             RefreshConnectionInfo();
         }
 
+        private string lastOpenFluxGeoIp = "";
+        private ConnectionInfo lastOpenFluxGeo;
+
+        private async Task<ConnectionInfo> LookupOpenFluxExitIpAsync(CancellationToken token)
+        {
+            OpenFluxManager manager = getOpenFluxManager?.Invoke();
+            int port = manager?.BoundSocksPort ?? 0;
+            if (manager == null || !manager.IsRunning || port <= 0)
+                return new ConnectionInfo { Ok = false, Error = "openflux socks down" };
+
+            System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
+            string body = await Task.Run(
+                () => Socks5Http.GetHttpsBody("127.0.0.1", port, "api.ipify.org", "/", 8000),
+                token).ConfigureAwait(true);
+            watch.Stop();
+
+            string ip = (body ?? "").Trim();
+            if (ip.Length < 7 || ip.IndexOf('.') < 0)
+                return new ConnectionInfo { Ok = false, Error = "openflux probe empty" };
+
+            ConnectionInfo info = new ConnectionInfo
+            {
+                Ok = true,
+                Ip = ip,
+                LatencyMs = (int)Math.Max(1, watch.ElapsedMilliseconds)
+            };
+            return await EnrichOpenFluxGeoAsync(info, token).ConfigureAwait(true);
+        }
+
+        private async Task<ConnectionInfo> EnrichOpenFluxGeoAsync(ConnectionInfo info, CancellationToken token)
+        {
+            if (!string.IsNullOrWhiteSpace(lastOpenFluxGeoIp)
+                && string.Equals(lastOpenFluxGeoIp, info.Ip, StringComparison.Ordinal)
+                && lastOpenFluxGeo != null)
+            {
+                return new ConnectionInfo
+                {
+                    Ok = true,
+                    Ip = lastOpenFluxGeo.Ip,
+                    LatencyMs = info.LatencyMs,
+                    City = lastOpenFluxGeo.City,
+                    Region = lastOpenFluxGeo.Region,
+                    CountryName = lastOpenFluxGeo.CountryName,
+                    CountryCode = lastOpenFluxGeo.CountryCode,
+                    Org = lastOpenFluxGeo.Org
+                };
+            }
+
+            try
+            {
+                using SocketsHttpHandler handler = new SocketsHttpHandler
+                {
+                    UseProxy = false,
+                    ConnectTimeout = TimeSpan.FromSeconds(3)
+                };
+                using HttpClient client = new HttpClient(handler, disposeHandler: true)
+                {
+                    Timeout = TimeSpan.FromSeconds(3)
+                };
+                string json = await client.GetStringAsync("https://ipwho.is/" + info.Ip, token).ConfigureAwait(true);
+                JObject root = JObject.Parse(json);
+                if (root.Value<bool?>("success") == false)
+                    return info;
+
+                JObject connection = root["connection"] as JObject;
+                ConnectionInfo geo = new ConnectionInfo
+                {
+                    Ok = true,
+                    Ip = info.Ip,
+                    LatencyMs = info.LatencyMs,
+                    City = (string)root["city"] ?? "",
+                    Region = (string)root["region"] ?? "",
+                    CountryName = (string)root["country"] ?? "",
+                    CountryCode = (string)root["country_code"] ?? "",
+                    Org = (string)connection?["org"] ?? (string)connection?["isp"] ?? ""
+                };
+                lastOpenFluxGeoIp = info.Ip;
+                lastOpenFluxGeo = geo;
+                return geo;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.Write("ConnectionInfo.OpenFluxGeo", ex.Message);
+                return info;
+            }
+        }
+
         private void ScheduleConnectionInfoRefresh(TimeSpan delay)
         {
             DispatcherTimer once = new DispatcherTimer { Interval = delay };
@@ -795,8 +1057,9 @@ namespace InvisibleGorillaXRay
                 return;
 
             connectionInfoCts?.Cancel();
-            connectionInfoCts = new CancellationTokenSource();
-            CancellationToken token = connectionInfoCts.Token;
+            CancellationTokenSource probeCts = new CancellationTokenSource();
+            connectionInfoCts = probeCts;
+            CancellationToken token = probeCts.Token;
 
             bool connected = isConnected;
 
@@ -819,18 +1082,42 @@ namespace InvisibleGorillaXRay
 
             SetModeBadge(connected, modeText);
 
+            bool openFluxProbe = connected && ActiveTunnelSession.IsOpenFlux;
+            TimeSpan requestTimeout = TimeSpan.FromSeconds(openFluxProbe ? 30 : 12);
+
             ConnectionInfo info;
+            connectionInfoInFlight = true;
             try
             {
-                info = await connectionInfoService.LookupAsync(probeProxy, token);
+                // OpenFlux runs one manual SOCKS ipify request, like the Android build.
+                // Several parallel HTTPS probes through the document channel starve it.
+                info = openFluxProbe
+                    ? await LookupOpenFluxExitIpAsync(token)
+                    : await connectionInfoService.LookupAsync(probeProxy, token, requestTimeout);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                info = new ConnectionInfo { Ok = false };
+                DiagnosticLog.Write("ConnectionInfo", "Probe error: " + ex.Message);
+                info = new ConnectionInfo { Ok = false, Error = ex.Message };
+            }
+            finally
+            {
+                if (ReferenceEquals(connectionInfoCts, probeCts))
+                    connectionInfoInFlight = false;
             }
 
             if (token.IsCancellationRequested)
                 return;
+
+            if (connected != isConnected)
+            {
+                ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(1));
+                return;
+            }
+
+            DiagnosticLog.Write("ConnectionInfo", info.Ok
+                ? $"Probe ok via {(probeProxy == null ? "route" : openFluxProbe ? "OpenFlux SOCKS" : "local proxy")} in {info.LatencyMs} ms"
+                : $"Probe failed: {info.Error}");
 
             if (!info.Ok)
             {
@@ -1145,10 +1432,9 @@ namespace InvisibleGorillaXRay
                 return;
 
             EnsureOpenFluxTransportCombo();
-            bool active = IsOpenFluxProfileActive();
-            panelOpenFlux.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
-            if (!active)
-                return;
+            if (openFluxEditorHost != null)
+                openFluxEditorHost.Visibility = Visibility.Collapsed;
+            panelOpenFlux.Visibility = Visibility.Visible;
 
             UserSettings settings = getUserSettings?.Invoke();
             OpenFluxProfile profile = settings?.GetOpenFluxProfile() ?? new OpenFluxProfile();
@@ -1384,6 +1670,446 @@ namespace InvisibleGorillaXRay
         {
             if (textOpenFluxStatus != null)
                 textOpenFluxStatus.Text = text;
+            if (!string.IsNullOrWhiteSpace(text))
+                NoteHome(text);
+        }
+
+        private void SetHomeProgress(double percent, string step)
+        {
+            if (panelHomeProgress == null)
+                return;
+
+            panelHomeProgress.Visibility = Visibility.Visible;
+            if (homeConnectProgress != null)
+            {
+                homeConnectProgress.Visibility = Visibility.Visible;
+                homeConnectProgress.Value = Math.Max(0, Math.Min(100, percent));
+                homeConnectProgress.Foreground = percent >= 100
+                    ? new SolidColorBrush(Color.FromRgb(0x6D, 0xCC, 0x8E))
+                    : new SolidColorBrush(Color.FromRgb(0x6D, 0xCC, 0x8E));
+            }
+            if (homeConnectStep != null)
+                homeConnectStep.Text = step ?? "";
+            NoteHome(step);
+        }
+
+        private const int HomeLogVisible = 8;
+
+        private static string HomeLogPath =>
+            System.IO.Path.GetFullPath(System.IO.Path.Combine(Values.Directory.LOGS, "home-activity.log"));
+
+        private void LoadHomeLog()
+        {
+            try
+            {
+                if (!File.Exists(HomeLogPath) || homeActivityLog == null)
+                    return;
+
+                string[] lines = File.ReadAllLines(HomeLogPath);
+                int start = Math.Max(0, lines.Length - HomeLogVisible);
+                homeActivityLines.Clear();
+                for (int i = start; i < lines.Length; i++)
+                {
+                    if (!string.IsNullOrWhiteSpace(lines[i]))
+                        homeActivityLines.Enqueue(lines[i].Trim());
+                }
+
+                if (homeActivityLines.Count == 0)
+                    return;
+
+                if (panelHomeProgress != null)
+                    panelHomeProgress.Visibility = Visibility.Visible;
+                homeActivityLog.Text = string.Join(Environment.NewLine, homeActivityLines);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("Home.Log.Load", ex);
+            }
+        }
+
+        private void NoteHome(string message)
+        {
+            if (homeActivityLog == null || string.IsNullOrWhiteSpace(message))
+                return;
+
+            string line = message.Replace('\r', ' ').Replace('\n', ' ').Trim();
+            string stamped = DateTime.Now.ToString("HH:mm:ss") + "  " + line;
+            if (homeActivityLines.Count > 0 && homeActivityLines.Last().EndsWith(line, StringComparison.Ordinal))
+                return;
+
+            homeActivityLines.Enqueue(stamped);
+            while (homeActivityLines.Count > HomeLogVisible)
+                homeActivityLines.Dequeue();
+
+            try
+            {
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(HomeLogPath));
+                File.AppendAllText(HomeLogPath, stamped + Environment.NewLine);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("Home.Log.Save", ex);
+            }
+
+            if (panelHomeProgress != null)
+                panelHomeProgress.Visibility = Visibility.Visible;
+            homeActivityLog.Text = string.Join(Environment.NewLine, homeActivityLines);
+            homeActivityLog.ScrollToEnd();
+        }
+
+        private const int HomeSpeedSlotCount = 18;
+        private readonly long[] homeSpeedSamples = new long[HomeSpeedSlotCount];
+        private readonly bool[] homeSpeedFaults = new bool[HomeSpeedSlotCount];
+        private Border[] homeSpeedDots;
+        private int homeSpeedWrite;
+        private int homeSpeedFilled;
+
+        private void StartHomeSpeed()
+        {
+            homeSpeedReady = false;
+            homeSpeedWrite = 0;
+            homeSpeedFilled = 0;
+            EnsureHomeSpeedDots();
+            if (homeTrafficPanel != null)
+                homeTrafficPanel.Visibility = Visibility.Visible;
+            if (homeSpeedTrace != null)
+                homeSpeedTrace.Visibility = Visibility.Visible;
+            if (homeDownText != null)
+            {
+                homeDownText.Text = "0 B/s";
+                homeDownText.Foreground = MintBrush();
+            }
+            if (homeUpText != null)
+            {
+                homeUpText.Text = "0 B/s";
+                homeUpText.Foreground = MintBrush();
+            }
+            PaintHomeSpeedDots();
+            if (homeSpeedTimer == null)
+            {
+                homeSpeedTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                homeSpeedTimer.Tick += (_, _) => RefreshHomeSpeed();
+            }
+            if (!homeSpeedTimer.IsEnabled)
+                homeSpeedTimer.Start();
+        }
+
+        private void StopHomeSpeed()
+        {
+            homeSpeedTimer?.Stop();
+            Interlocked.Exchange(ref homeSpeedBusy, 0);
+            DisposeSpeedCounters();
+        }
+
+        private void RefreshHomeSpeed()
+        {
+            if (!isConnected)
+                return;
+            if (Interlocked.CompareExchange(ref homeSpeedBusy, 1, 0) != 0)
+                return;
+
+            Task.Run(() =>
+            {
+                long down = 0;
+                long up = 0;
+                bool have = false;
+                try
+                {
+                    have = TryReadTunnelSpeed(out down, out up);
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("Home.Speed", ex);
+                    DisposeSpeedCounters();
+                }
+
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        if (!isConnected)
+                            return;
+                        ApplyHomeSpeed(have ? down : 0, have ? up : 0);
+                    }
+                    finally
+                    {
+                        Interlocked.Exchange(ref homeSpeedBusy, 0);
+                    }
+                }));
+            });
+        }
+
+        private bool TryReadTunnelSpeed(out long down, out long up)
+        {
+            if (HasTunnelAdapter())
+            {
+                if (TryReadPerfSpeed(out down, out up))
+                    return true;
+                if (TryReadNicSpeed(out down, out up))
+                    return true;
+            }
+
+            return TryReadBridgeSpeed(out down, out up);
+        }
+
+        private static bool HasTunnelAdapter()
+        {
+            try
+            {
+                return NetworkInterface.GetAllNetworkInterfaces().Any(item =>
+                    item.OperationalStatus == OperationalStatus.Up
+                    && (item.Name.IndexOf("InvisibleGorilla", StringComparison.OrdinalIgnoreCase) >= 0
+                        || item.Description.IndexOf("InvisibleGorilla", StringComparison.OrdinalIgnoreCase) >= 0
+                        || item.Description.IndexOf("Wintun", StringComparison.OrdinalIgnoreCase) >= 0));
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool TryReadBridgeSpeed(out long down, out long up)
+        {
+            down = 0;
+            up = 0;
+            OpenFluxHttpBridge.Shared.ReadTraffic(out long rx, out long tx);
+            lock (homeSpeedLock)
+            {
+                if (!homeSpeedReady)
+                {
+                    homeSpeedRx = rx;
+                    homeSpeedTx = tx;
+                    homeSpeedReady = true;
+                    return rx > 0 || tx > 0;
+                }
+
+                down = Math.Max(0, rx - homeSpeedRx);
+                up = Math.Max(0, tx - homeSpeedTx);
+                homeSpeedRx = rx;
+                homeSpeedTx = tx;
+                return true;
+            }
+        }
+
+        private bool TryReadPerfSpeed(out long down, out long up)
+        {
+            down = 0;
+            up = 0;
+            lock (homeSpeedLock)
+            {
+                if (homeRxCounter == null)
+                    BindSpeedCounters();
+                if (homeRxCounter == null || homeTxCounter == null)
+                    return false;
+
+                down = (long)Math.Max(0, homeRxCounter.NextValue());
+                up = (long)Math.Max(0, homeTxCounter.NextValue());
+                return true;
+            }
+        }
+
+        private void BindSpeedCounters()
+        {
+            string[] names;
+            try
+            {
+                names = new PerformanceCounterCategory("Network Interface").GetInstanceNames();
+            }
+            catch
+            {
+                return;
+            }
+
+            string match = names.FirstOrDefault(name =>
+                    name.IndexOf("InvisibleGorilla", StringComparison.OrdinalIgnoreCase) >= 0)
+                ?? names.FirstOrDefault(name =>
+                    name.IndexOf("Wintun", StringComparison.OrdinalIgnoreCase) >= 0);
+            if (string.IsNullOrEmpty(match))
+                return;
+
+            try
+            {
+                homeRxCounter = new PerformanceCounter("Network Interface", "Bytes Received/sec", match, true);
+                homeTxCounter = new PerformanceCounter("Network Interface", "Bytes Sent/sec", match, true);
+            }
+            catch
+            {
+                try { homeRxCounter?.Dispose(); } catch { }
+                try { homeTxCounter?.Dispose(); } catch { }
+                homeRxCounter = null;
+                homeTxCounter = null;
+            }
+        }
+
+        private bool TryReadNicSpeed(out long down, out long up)
+        {
+            down = 0;
+            up = 0;
+            NetworkInterface[] adapters;
+            try
+            {
+                adapters = NetworkInterface.GetAllNetworkInterfaces();
+            }
+            catch
+            {
+                return false;
+            }
+
+            NetworkInterface adapter = adapters
+                .Where(item => item.OperationalStatus == OperationalStatus.Up)
+                .OrderByDescending(item =>
+                    item.Name.IndexOf("InvisibleGorilla", StringComparison.OrdinalIgnoreCase) >= 0
+                    || item.Description.IndexOf("InvisibleGorilla", StringComparison.OrdinalIgnoreCase) >= 0)
+                .FirstOrDefault(item =>
+                    item.Name.IndexOf("InvisibleGorilla", StringComparison.OrdinalIgnoreCase) >= 0
+                    || item.Description.IndexOf("InvisibleGorilla", StringComparison.OrdinalIgnoreCase) >= 0
+                    || item.Description.IndexOf("Wintun", StringComparison.OrdinalIgnoreCase) >= 0);
+            if (adapter == null)
+                return false;
+
+            IPv4InterfaceStatistics stats = adapter.GetIPv4Statistics();
+            long rx = stats.BytesReceived;
+            long tx = stats.BytesSent;
+            lock (homeSpeedLock)
+            {
+                if (!homeSpeedReady)
+                {
+                    homeSpeedRx = rx;
+                    homeSpeedTx = tx;
+                    homeSpeedReady = true;
+                    return true;
+                }
+
+                down = Math.Max(0, rx - homeSpeedRx);
+                up = Math.Max(0, tx - homeSpeedTx);
+                homeSpeedRx = rx;
+                homeSpeedTx = tx;
+                return true;
+            }
+        }
+
+        private void DisposeSpeedCounters()
+        {
+            lock (homeSpeedLock)
+            {
+                try { homeRxCounter?.Dispose(); } catch { }
+                try { homeTxCounter?.Dispose(); } catch { }
+                homeRxCounter = null;
+                homeTxCounter = null;
+                homeSpeedReady = false;
+            }
+        }
+
+        private void ApplyHomeSpeed(long down, long up)
+        {
+            if (homeDownText != null)
+            {
+                homeDownText.Text = FormatRate(down);
+                homeDownText.Foreground = RateBrush(down);
+            }
+            if (homeUpText != null)
+            {
+                homeUpText.Text = FormatRate(up);
+                homeUpText.Foreground = RateBrush(up);
+            }
+            Brush speed = RateBrush(Math.Max(down, up));
+            if (homeConnectProgress != null && homeConnectProgress.Value >= 100)
+                homeConnectProgress.Foreground = speed;
+            PushHomeSpeedSample(down + up, false);
+        }
+
+        private void EnsureHomeSpeedDots()
+        {
+            if (homeSpeedTrace == null || homeSpeedDots != null)
+                return;
+
+            homeSpeedDots = new Border[HomeSpeedSlotCount];
+            homeSpeedTrace.Children.Clear();
+            for (int i = 0; i < HomeSpeedSlotCount; i++)
+            {
+                var dot = new Border
+                {
+                    Width = 8,
+                    Height = 8,
+                    Margin = new Thickness(i == 0 ? 0 : 4, 0, 0, 0),
+                    CornerRadius = new CornerRadius(2),
+                    Background = new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x3A)),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                homeSpeedDots[i] = dot;
+                homeSpeedTrace.Children.Add(dot);
+            }
+        }
+
+        private void PushHomeSpeedSample(long bytesPerSec, bool fault)
+        {
+            homeSpeedSamples[homeSpeedWrite] = bytesPerSec;
+            homeSpeedFaults[homeSpeedWrite] = fault;
+            homeSpeedWrite = (homeSpeedWrite + 1) % HomeSpeedSlotCount;
+            if (homeSpeedFilled < HomeSpeedSlotCount)
+                homeSpeedFilled++;
+            PaintHomeSpeedDots();
+        }
+
+        private void PaintHomeSpeedDots()
+        {
+            if (homeSpeedDots == null)
+                return;
+
+            for (int visual = 0; visual < HomeSpeedSlotCount; visual++)
+            {
+                int ageFromNewest = HomeSpeedSlotCount - 1 - visual;
+                Border dot = homeSpeedDots[visual];
+                if (ageFromNewest >= homeSpeedFilled)
+                {
+                    StyleHomeSpeedDot(dot, Color.FromRgb(0x3A, 0x3A, 0x3A), fault: false);
+                    continue;
+                }
+
+                int index = (homeSpeedWrite - 1 - ageFromNewest + HomeSpeedSlotCount * 2) % HomeSpeedSlotCount;
+                if (homeSpeedFaults[index])
+                    StyleHomeSpeedDot(dot, Color.FromRgb(0xFF, 0x2D, 0x2D), fault: true);
+                else
+                    StyleHomeSpeedDot(dot, ((SolidColorBrush)RateBrush(homeSpeedSamples[index])).Color, fault: false);
+            }
+        }
+
+        private static void StyleHomeSpeedDot(Border dot, Color color, bool fault)
+        {
+            dot.Width = fault ? 10 : 8;
+            dot.Height = fault ? 10 : 8;
+            dot.CornerRadius = new CornerRadius(fault ? 5 : 2);
+            dot.Background = new SolidColorBrush(color);
+        }
+
+        private static SolidColorBrush MintBrush()
+        {
+            return new SolidColorBrush(Color.FromRgb(0x6D, 0xCC, 0x8E));
+        }
+
+        private static Brush RateBrush(long bytesPerSec)
+        {
+            if (bytesPerSec < 1024)
+                return MintBrush();
+            return SpeedBrush(bytesPerSec);
+        }
+
+        private static string FormatRate(long bytesPerSec)
+        {
+            if (bytesPerSec >= 1024 * 1024)
+                return (bytesPerSec / (1024d * 1024d)).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " MB/s";
+            if (bytesPerSec >= 1024)
+                return (bytesPerSec / 1024d).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " KB/s";
+            return bytesPerSec.ToString(System.Globalization.CultureInfo.InvariantCulture) + " B/s";
+        }
+
+        private static SolidColorBrush SpeedBrush(long bytesPerSec)
+        {
+            if (bytesPerSec < 8 * 1024)
+                return new SolidColorBrush(Color.FromRgb(0xE2, 0x4B, 0x4B));
+            if (bytesPerSec < 90 * 1024)
+                return new SolidColorBrush(Color.FromRgb(0xF0, 0x9A, 0x3A));
+            return new SolidColorBrush(Color.FromRgb(0x6D, 0xCC, 0x8E));
         }
 
         private static string MapOpenFluxUiError(string detail)

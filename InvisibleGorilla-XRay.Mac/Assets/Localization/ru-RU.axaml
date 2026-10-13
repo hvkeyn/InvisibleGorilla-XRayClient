@@ -9,6 +9,10 @@
     <x:String x:Key="Lang.Button.Cancel">ОТМЕНА</x:String>
     <x:String x:Key="Lang.Button.ChooseFile">ВЫБРАТЬ ФАЙЛ</x:String>
     <x:String x:Key="Lang.Button.Paste">ВСТАВИТЬ</x:String>
+    <x:String x:Key="Lang.Text.SelectAll">Выделить всё</x:String>
+    <x:String x:Key="Lang.Text.Copy">Копировать</x:String>
+    <x:String x:Key="Lang.Text.Cut">Вырезать</x:String>
+    <x:String x:Key="Lang.Text.Paste">Вставить</x:String>
     <x:String x:Key="Lang.Button.Confirm">ПРИМЕНИТЬ</x:String>
 
     <x:String x:Key="Lang.Status.Stopped">Остановлен</x:String>

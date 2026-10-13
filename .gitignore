@@ -27,6 +27,8 @@
 /publish-macos
 /publish-windows
 /dist
+/debug-desktop
+/InvisibleGorilla-XRay-Windows-win-x64
 
 # User runtime data (must never ship in release archives)
 /Settings.json

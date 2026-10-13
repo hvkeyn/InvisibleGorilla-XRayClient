@@ -49,23 +49,47 @@ namespace InvisibleGorillaXRay.Handlers.Tor
 
         private HttpClient CreateClient()
         {
-            var handler = new HttpClientHandler();
+            HttpMessageHandler handler;
             if (!string.IsNullOrWhiteSpace(socksProxy))
             {
+                var proxyHandler = new HttpClientHandler();
                 try
                 {
-                    handler.Proxy = new WebProxy(socksProxy);
-                    handler.UseProxy = true;
+                    proxyHandler.Proxy = new WebProxy(socksProxy);
+                    proxyHandler.UseProxy = true;
                 }
                 catch
                 {
-                    handler.UseProxy = false;
+                    proxyHandler.UseProxy = false;
                 }
+                handler = proxyHandler;
+            }
+            else
+            {
+                // A live tunnel or system proxy captures bridges.torproject.org and
+                // the call sits until HttpClient.Timeout. Direct is the right path.
+                handler = new SocketsHttpHandler
+                {
+                    UseProxy = false,
+                    Proxy = null,
+                    ConnectTimeout = TimeSpan.FromSeconds(6)
+                };
             }
 
-            var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(20) };
+            var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(8) };
             client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "InvisibleGorilla-XRay/Tor");
             return client;
+        }
+
+        private static string ShortError(Exception ex)
+        {
+            if (ex is TaskCanceledException || ex is OperationCanceledException)
+                return "timed out";
+            string message = ex?.Message ?? "";
+            if (message.IndexOf("Timeout", StringComparison.OrdinalIgnoreCase) >= 0
+                || message.IndexOf("canceled", StringComparison.OrdinalIgnoreCase) >= 0)
+                return "timed out";
+            return message;
         }
 
         /// <summary>
@@ -128,7 +152,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             }
             catch (Exception ex)
             {
-                result.Error = ex.Message;
+                result.Error = ShortError(ex);
                 return result;
             }
         }
@@ -203,7 +227,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             }
             catch (Exception ex)
             {
-                result.Error = ex.Message;
+                result.Error = ShortError(ex);
                 return result;
             }
         }
@@ -239,41 +263,73 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                     return result;
                 }
 
-                if (root["settings"] is JArray settings && settings.Count > 0)
-                {
-                    foreach (JToken setting in settings)
-                    {
-                        JToken bridges = setting["bridges"];
-                        if (bridges == null)
-                            continue;
+                if (root["settings"] is JArray settings && settings.Count > 0
+                    && TryTakeBridges(settings, preferredTransport, result))
+                    return result;
 
-                        string type = (string)bridges["type"];
-                        if (bridges["bridge_strings"] is JArray strings)
-                        {
-                            foreach (JToken s in strings)
-                            {
-                                string line = (string)s;
-                                if (!string.IsNullOrWhiteSpace(line))
-                                    result.Bridges.Add(line.Trim());
-                            }
-                        }
-
-                        if (result.Bridges.Count > 0)
-                        {
-                            result.Transport = type;
-                            result.Success = true;
-                            return result;
-                        }
-                    }
-                }
-
-                // No location-specific recommendation: fall back to built-in bridges.
+                // No matching recommendation: built-in lines for the method the user picked.
                 return await GetBuiltinBridgesAsync(preferredTransport ?? "obfs4").ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                result.Error = ex.Message;
+                result.Error = ShortError(ex);
                 return result;
+            }
+        }
+
+        private static bool TryTakeBridges(JArray settings, string preferredTransport, MoatResult result)
+        {
+            foreach (JToken setting in settings)
+            {
+                JToken bridges = setting["bridges"];
+                if (bridges == null)
+                    continue;
+
+                string type = (string)bridges["type"];
+                if (!TransportMatches(preferredTransport, type))
+                    continue;
+
+                if (bridges["bridge_strings"] is JArray strings)
+                {
+                    foreach (JToken s in strings)
+                    {
+                        string line = (string)s;
+                        if (!string.IsNullOrWhiteSpace(line))
+                            result.Bridges.Add(line.Trim());
+                    }
+                }
+
+                if (result.Bridges.Count > 0)
+                {
+                    result.Transport = type;
+                    result.Success = true;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool TransportMatches(string wanted, string actual)
+        {
+            if (string.IsNullOrWhiteSpace(wanted))
+                return true;
+
+            string left = NormalizeTransport(wanted);
+            string right = NormalizeTransport(actual);
+            return left.Length > 0 && (left == right || right.StartsWith(left, StringComparison.Ordinal));
+        }
+
+        private static string NormalizeTransport(string transport)
+        {
+            switch ((transport ?? string.Empty).Trim().ToLowerInvariant())
+            {
+                case "meek-azure":
+                case "meek_lite":
+                case "meek":
+                    return "meek";
+                default:
+                    return (transport ?? string.Empty).Trim().ToLowerInvariant();
             }
         }
 
@@ -304,7 +360,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             }
             catch (Exception ex)
             {
-                result.Error = ex.Message;
+                result.Error = ShortError(ex);
                 return result;
             }
         }

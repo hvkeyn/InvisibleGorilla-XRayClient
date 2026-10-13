@@ -29,7 +29,7 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <Grid Grid.Row="0" Margin="0 0 0 2">
+            <Grid Grid.Row="0" Margin="0 0 0 2" x:Name="gridSettingsTabs">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="2"/>
@@ -449,7 +449,8 @@
                         <Label Margin="0 6 0 0" Foreground="White" Content="{DynamicResource Lang.Tor.Bridges}"
                             FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14"/>
                         <TextBox x:Name="textBoxBridges" Height="80"
-                            AcceptsReturn="True" TextWrapping="Wrap"
+                            AcceptsReturn="True" TextWrapping="NoWrap"
+                            HorizontalScrollBarVisibility="Auto"
                             VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"
                             FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="11"/>
 
@@ -487,7 +488,9 @@
                                 Foreground="{StaticResource Color.Gray}" Click="OnSubmitCaptchaClick"/>
                         </StackPanel>
 
-                        <TextBlock x:Name="textBlockTorStatus" Margin="0 6 0 0" Foreground="#C9C9C9"
+                        <TextBox x:Name="textBlockTorStatus" Margin="0 6 0 0" Foreground="#C9C9C9"
+                            IsReadOnly="True" IsReadOnlyCaretVisible="True" AcceptsReturn="True"
+                            BorderThickness="0" Background="Transparent" Padding="0"
                             TextWrapping="Wrap" FontFamily="{StaticResource SegoeUI}" FontSize="12"/>
                     </StackPanel>
                 </ScrollViewer>
@@ -527,10 +530,10 @@
                 HorizontalAlignment="Right" VerticalAlignment="Center"/>
 
             <StackPanel Grid.Column="1" Orientation="Vertical" VerticalAlignment="Center">
-                <Label Padding="0" Margin="15 0 0 0" VerticalAlignment="Bottom" 
+                <Label Padding="0" Margin="15 0 0 0" VerticalAlignment="Bottom" x:Name="labelSettingsTitle"
                         Content="{DynamicResource Lang.Window.Settings.Title}" FontFamily="{StaticResource SegoeUI}" 
                         FontWeight="Light" FontSize="20" Foreground="White"/>
-                <Label Padding="0" Margin="15 0 0 0" VerticalAlignment="Top" 
+                <Label Padding="0" Margin="15 0 0 0" VerticalAlignment="Top" x:Name="labelSettingsSubtitle"
                         Content="{DynamicResource Lang.Window.Settings.Subtitle}" FontFamily="{StaticResource SegoeUI}" 
                         FontWeight="Light" FontSize="14" Foreground="White"/>
             </StackPanel>

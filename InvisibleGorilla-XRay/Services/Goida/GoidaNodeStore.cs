@@ -86,6 +86,26 @@ namespace InvisibleGorillaXRay.Services.Goida
             }
         }
 
+        public void RememberEndpoint(string nodeId, string endpoint)
+        {
+            if (string.IsNullOrWhiteSpace(nodeId) || string.IsNullOrWhiteSpace(endpoint))
+                return;
+
+            lock (sync)
+            {
+                GoidaNode node = FindNodeLocked(nodeId, 0, null);
+                if (node == null)
+                    return;
+
+                if (string.Equals(node.Endpoint, endpoint, StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                node.Endpoint = endpoint;
+                if (bulkUpdateDepth == 0)
+                    SaveLocked();
+            }
+        }
+
         public void UpdateNodeStatus(
             string nodeId,
             int latencyMs,

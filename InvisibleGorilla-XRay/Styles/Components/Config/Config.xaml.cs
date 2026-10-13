@@ -11,6 +11,7 @@ namespace InvisibleGorillaXRay.Components
     using Services;
     using Services.Goida;
     using Services.OpenFlux;
+    using Services.Tor;
     using Services.Analytics.Configuration;
 
     public partial class Config : UserControl
@@ -20,6 +21,7 @@ namespace InvisibleGorillaXRay.Components
         private Action onSelect;
         private Action onDelete;
         private Action<string> onShare;
+        private Action onEditProfile;
         private Func<Window> getServerWindow;
         private Func<string, int> testConnection;
         private Func<string> getLogPath;
@@ -59,12 +61,14 @@ namespace InvisibleGorillaXRay.Components
             Action<string> onShare,
             Func<Window> getServerWindow,
             Func<string, int> testConnection,
-            Func<string> getLogPath)
+            Func<string> getLogPath,
+            Action onEditProfile = null)
         {
             this.config = config;
             this.onSelect = onSelect;
             this.onDelete = onDelete;
             this.onShare = onShare;
+            this.onEditProfile = onEditProfile;
             this.getServerWindow = getServerWindow;
             this.testConnection = testConnection;
             this.getLogPath = getLogPath;
@@ -75,7 +79,9 @@ namespace InvisibleGorillaXRay.Components
 
         private static bool IsVirtualProfile(string path)
         {
-            return GoidaProfilePaths.IsMarker(path) || OpenFluxProfilePaths.IsMarker(path);
+            return GoidaProfilePaths.IsMarker(path)
+                || OpenFluxProfilePaths.IsMarker(path)
+                || TorProfilePaths.IsMarker(path);
         }
 
         private void ApplyVirtualProfileMode(bool isVirtualProfile)
@@ -84,8 +90,6 @@ namespace InvisibleGorillaXRay.Components
                 return;
 
             buttonLog.Visibility = Visibility.Collapsed;
-            if (buttonCheck != null)
-                buttonCheck.Visibility = Visibility.Collapsed;
         }
 
         public void SetSelection(bool isSelect)
@@ -116,31 +120,7 @@ namespace InvisibleGorillaXRay.Components
         private void OnEditButtonClick(object sender, RoutedEventArgs e)
         {
             AnalyticsService.SendEvent(new EditButtonClickedEvent());
-
-            if (IsVirtualProfile(config.Path))
-                return;
-
-            if (!File.Exists(config.Path))
-            {
-                MessageBox.Show(
-                    getServerWindow.Invoke(),
-                    LocalizationService.GetTerm(Localization.FILE_DOESNT_EXISTS),
-                    Caption.ERROR,
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error
-                );
-                return;
-            }
-
-            OpenFileInTextEditor();
-
-            void OpenFileInTextEditor()
-            {
-                Process fileOpenProcess = new Process();
-                fileOpenProcess.StartInfo.FileName = "notepad";
-                fileOpenProcess.StartInfo.Arguments = $"\"{config.Path}\"";
-                fileOpenProcess.Start();
-            }
+            onEditProfile?.Invoke();
         }
 
         private void OnDeleteButtonClick(object sender, RoutedEventArgs e)

@@ -96,6 +96,7 @@ namespace InvisibleGorillaXRay
         public GoidaProfileWindow()
         {
             InitializeComponent();
+            TextSelectionAssist.Attach(this);
         }
 
         public void Setup(

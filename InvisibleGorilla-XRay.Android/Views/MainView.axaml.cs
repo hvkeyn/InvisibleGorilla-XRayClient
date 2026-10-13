@@ -155,6 +155,7 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             DiagnosticLog.Write("MainView", "Constructor start");
             InitializeComponent();
+            AttachedToVisualTree += (_, _) => TextSelectionAssist.Attach(this);
             DiagnosticLog.Write("MainView", "XAML loaded");
         }
 
@@ -428,7 +429,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private global::Avalonia.Controls.Image CaptchaImageControl => GetRequiredControl<global::Avalonia.Controls.Image>("CaptchaImage");
         private TextBox CaptchaInput => GetRequiredControl<TextBox>("CaptchaTextBox");
         private Button SubmitCaptchaActionButton => GetRequiredControl<Button>("SubmitCaptchaButton");
-        private TextBlock TorStatusText => GetRequiredControl<TextBlock>("TorStatusTextBlock");
+        private TextBox TorStatusText => GetRequiredControl<TextBox>("TorStatusTextBlock");
 
         private static readonly Dictionary<TorMode, string> TorModeOptions = new()
         {

@@ -169,7 +169,10 @@ namespace InvisibleGorillaXRay.Linux.Factories
                 onDeleteSubscription: configHandler.DeleteSubscription,
                 onDeleteConfig: configHandler.LoadFiles,
                 onUpdateConfig: UpdateConfig,
-                onAddBridges: AddBridges
+                onAddBridges: AddBridges,
+                getOpenFluxProfile: () => settingsHandler.UserSettings.GetOpenFluxProfile(),
+                onSaveOpenFlux: settingsHandler.UpdateOpenFlux,
+                onApplyOpenFluxUrl: core.ApplyOpenFluxDocUrl
             );
 
             SetupLocalizedWindowTitle(serverWindow, Localization.WINDOW_TITLE_SERVER);

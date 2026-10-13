@@ -47,7 +47,10 @@ namespace InvisibleGorillaXRay.Services
         public static string DescribeMode(Mode mode, Protocol protocol, TorSettings tor, string outboundProtocol)
         {
             if (string.Equals(outboundProtocol, "OpenFlux", StringComparison.OrdinalIgnoreCase))
-                return "OpenFlux · Proxy/SOCKS";
+            {
+                string openFluxRouting = mode == Mode.TUN ? "TUN" : "Proxy";
+                return $"OpenFlux · {openFluxRouting}/SOCKS";
+            }
 
             string egress;
             string protocolLabel = string.IsNullOrWhiteSpace(outboundProtocol) ? "Xray" : outboundProtocol;

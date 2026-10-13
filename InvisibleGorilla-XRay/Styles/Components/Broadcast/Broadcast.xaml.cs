@@ -27,6 +27,8 @@ namespace InvisibleGorillaXRay.Components
             {
                 appearStoryboard = TryFindResource("Appear") as Storyboard;
                 disappearStoryboard = TryFindResource("Disappear") as Storyboard;
+                if (disappearStoryboard != null)
+                    disappearStoryboard.Completed += (_, _) => Visibility = Visibility.Collapsed;
             }
         }
 

@@ -52,6 +52,12 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.54
+
+- **Tor loads a bridge line for the method you pick.** Snowflake, meek, and obfs4 fill in immediately. If the bridge service does not answer, the built-in lines for that method are used.
+- **Connect and stop return the button.** A document window that is still opening no longer keeps the session on wait, and the speed counter follows the tunnel without freezing the window.
+- **Bridge, OpenFlux, and the other input fields can be selected.** On the phone, drag highlights the text and a hold opens copy and paste. On the desktop, the same fields and the activity log can be selected and copied.
+
 ## What's new in v3.6.53
 
 - **Repeated Android connect and disconnect keeps working.** OpenFlux no longer dies on the third or fourth cycle with a tunnel-start error and a stopped channel. Closing the tunnel no longer waits on a stuck stack, and a stuck close cannot block the next start.

@@ -56,6 +56,8 @@ namespace InvisibleGorillaXRay
 
         private readonly TorManager torManager = new TorManager();
         private MoatChallenge activeMoatChallenge;
+        private bool suppressBridgeTypeLoad;
+        private bool bridgeTypeHooked;
 
         private Func<string> getLanguage;
         private Func<Mode> getMode;
@@ -88,6 +90,7 @@ namespace InvisibleGorillaXRay
         public SettingsWindow()
         {
             InitializeComponent();
+            TextSelectionAssist.Attach(this);
             InitializeItems();
 
             void InitializeItems()
@@ -210,14 +213,21 @@ namespace InvisibleGorillaXRay
         private void LoadTorSettings()
         {
             TorSettings tor = getUserSettings.Invoke().GetTorSettings();
+            suppressBridgeTypeLoad = true;
             checkBoxTorEnabled.IsChecked = tor.GetEnabled();
             comboBoxTorMode.SelectedValue = tor.GetMode();
             comboBoxBridgeType.SelectedValue = tor.GetBridgeType();
             textBoxTorSocksPort.Text = tor.GetSocksPort().ToString();
             textBoxBridges.Text = string.Join(Environment.NewLine, tor.GetBridgeLines());
+            suppressBridgeTypeLoad = false;
             textBlockTorStatus.Text = torManager.IsAvailable
                 ? Localize("Lang.Tor.Status.Ready")
                 : Localize("Lang.Tor.Status.Unavailable");
+            if (!bridgeTypeHooked)
+            {
+                comboBoxBridgeType.SelectionChanged += OnBridgeTypeChanged;
+                bridgeTypeHooked = true;
+            }
         }
 
         private TorSettings BuildTorSettingsFromUi()
@@ -257,6 +267,15 @@ namespace InvisibleGorillaXRay
                 .ToList();
         }
 
+        public void ShowTorEditorOnly()
+        {
+            gridSettingsTabs.Visibility = Visibility.Collapsed;
+            labelSettingsTitle.SetResourceReference(ContentProperty, "Lang.Tor.ServerListName");
+            labelSettingsSubtitle.SetResourceReference(ContentProperty, "Lang.Tor.EditorSubtitle");
+            Title = "Invisible Gorilla XRay - Tor";
+            OnTorTabClick(null, null);
+        }
+
         private void OnTorTabClick(object sender, RoutedEventArgs e)
         {
             EnableAllTabs();
@@ -266,18 +285,53 @@ namespace InvisibleGorillaXRay
             SetActiveTorPanel(true);
         }
 
-        private void OnUseDefaultBridgesClick(object sender, RoutedEventArgs e)
+        private async void OnBridgeTypeChanged(object sender, SelectionChangedEventArgs e)
         {
-            BridgeType type = (BridgeType)comboBoxBridgeType.SelectedValue;
+            if (suppressBridgeTypeLoad)
+                return;
+            if (!(comboBoxBridgeType.SelectedValue is BridgeType type))
+                return;
+
             if (type == BridgeType.NONE)
             {
-                comboBoxBridgeType.SelectedValue = BridgeType.OBFS4;
-                type = BridgeType.OBFS4;
+                textBoxBridges.Text = string.Empty;
+                textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.MethodSelected"), type);
+                return;
             }
 
             List<string> defaults = DefaultBridges.ForType(type);
-            textBoxBridges.Text = string.Join(Environment.NewLine, defaults);
-            textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.LoadedDefaults"), defaults.Count);
+            if (defaults.Count > 0)
+            {
+                ApplyBridgeLines(type, defaults, string.Format(Localize("Lang.Tor.Status.LoadedDefaults"), defaults.Count));
+                return;
+            }
+
+            if (type == BridgeType.WEBTUNNEL)
+            {
+                textBoxBridges.Text = string.Empty;
+                textBlockTorStatus.Text = Localize("Lang.Tor.Status.AskingTor");
+                await LoadRemoteBridgesAsync(type);
+            }
+        }
+
+        private void OnUseDefaultBridgesClick(object sender, RoutedEventArgs e)
+        {
+            BridgeType type = comboBoxBridgeType.SelectedValue is BridgeType selected
+                ? selected
+                : BridgeType.OBFS4;
+            if (type == BridgeType.NONE)
+                type = BridgeType.OBFS4;
+
+            List<string> defaults = DefaultBridges.ForType(type);
+            if (defaults.Count == 0)
+            {
+                textBlockTorStatus.Text = type == BridgeType.WEBTUNNEL
+                    ? Localize("Lang.Tor.Status.WebTunnelEmpty")
+                    : string.Format(Localize("Lang.Tor.Status.LoadedDefaults"), 0);
+                return;
+            }
+
+            ApplyBridgeLines(type, defaults, string.Format(Localize("Lang.Tor.Status.LoadedDefaults"), defaults.Count));
         }
 
         private async void OnCheckBridgeClick(object sender, RoutedEventArgs e)
@@ -306,24 +360,17 @@ namespace InvisibleGorillaXRay
         private async void OnAskTorClick(object sender, RoutedEventArgs e)
         {
             buttonAskTor.IsEnabled = false;
-            textBlockTorStatus.Text = Localize("Lang.Tor.Status.AskingTor");
-
-            MoatResult result = await new MoatClient().GetCircumventionSettingsAsync();
-
-            if (result.Success && result.Bridges.Count > 0)
+            try
             {
-                BridgeType type = MapTransportToBridgeType(result.Transport);
-                comboBoxBridgeType.SelectedValue = type;
-                textBoxBridges.Text = string.Join(Environment.NewLine, result.Bridges);
-                checkBoxTorEnabled.IsChecked = true;
-                textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.AskTorOk"), result.Bridges.Count, type);
+                textBlockTorStatus.Text = Localize("Lang.Tor.Status.AskingTor");
+                BridgeType type = SelectedBridgeType();
+                await LoadRemoteBridgesAsync(type);
             }
-            else
+            finally
             {
-                textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.MoatFail"), result.Error);
+                if (IsLoaded)
+                    buttonAskTor.IsEnabled = true;
             }
-
-            buttonAskTor.IsEnabled = true;
         }
 
         private void OnSnowflakeClick(object sender, RoutedEventArgs e)
@@ -337,10 +384,83 @@ namespace InvisibleGorillaXRay
 
         private void ApplyBuiltinMethod(BridgeType type, string bridgeLine)
         {
+            ApplyBridgeLines(type, new[] { bridgeLine }, string.Format(Localize("Lang.Tor.Status.MethodSelected"), type));
+        }
+
+        private BridgeType SelectedBridgeType()
+        {
+            return comboBoxBridgeType.SelectedValue is BridgeType type
+                ? type
+                : BridgeType.OBFS4;
+        }
+
+        private void ApplyBridgeLines(BridgeType type, IEnumerable<string> lines, string status)
+        {
+            suppressBridgeTypeLoad = true;
             comboBoxBridgeType.SelectedValue = type;
-            textBoxBridges.Text = bridgeLine;
+            suppressBridgeTypeLoad = false;
+            textBoxBridges.Text = string.Join(Environment.NewLine, lines ?? Array.Empty<string>());
             checkBoxTorEnabled.IsChecked = true;
-            textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.MethodSelected"), type);
+            textBlockTorStatus.Text = status;
+        }
+
+        private bool BridgeSelectionMatches(BridgeType type)
+        {
+            if (type == BridgeType.NONE)
+                return true;
+            return SelectedBridgeType() == type;
+        }
+
+        private async Task LoadRemoteBridgesAsync(BridgeType type)
+        {
+            string transport = type == BridgeType.NONE ? null : BridgeTypeToTransport(type);
+            MoatResult result = await new MoatClient().GetCircumventionSettingsAsync(null, transport);
+            if (!IsLoaded || !BridgeSelectionMatches(type))
+                return;
+
+            if (result.Success && result.Bridges.Count > 0)
+            {
+                BridgeType loaded = type == BridgeType.NONE
+                    ? MapTransportToBridgeType(result.Transport)
+                    : type;
+                ApplyBridgeLines(
+                    loaded,
+                    result.Bridges,
+                    string.Format(Localize("Lang.Tor.Status.AskTorOk"), result.Bridges.Count, loaded));
+                return;
+            }
+
+            ApplyLocalBridgeFallback(type);
+        }
+
+        private void ApplyLocalBridgeFallback(BridgeType type)
+        {
+            BridgeType fallbackType = type == BridgeType.NONE ? BridgeType.OBFS4 : type;
+            List<string> defaults = DefaultBridges.ForType(fallbackType);
+            if (defaults.Count == 0)
+            {
+                textBlockTorStatus.Text = fallbackType == BridgeType.WEBTUNNEL
+                    ? Localize("Lang.Tor.Status.WebTunnelEmpty")
+                    : string.Format(Localize("Lang.Tor.Status.MoatFail"), "timed out");
+                return;
+            }
+
+            ApplyBridgeLines(
+                fallbackType,
+                defaults,
+                string.Format(Localize("Lang.Tor.Status.MoatFallback"), defaults.Count));
+        }
+
+        private static string BridgeTypeToTransport(BridgeType type)
+        {
+            switch (type)
+            {
+                case BridgeType.SNOWFLAKE: return "snowflake";
+                case BridgeType.MEEK_AZURE: return "meek";
+                case BridgeType.WEBTUNNEL: return "webtunnel";
+                case BridgeType.OBFS4: return "obfs4";
+                default: return "obfs4";
+            }
         }
 
         private void OnBridgesEmailClick(object sender, RoutedEventArgs e)
@@ -378,37 +498,63 @@ namespace InvisibleGorillaXRay
         private async void OnFetchMoatClick(object sender, RoutedEventArgs e)
         {
             buttonFetchMoat.IsEnabled = false;
-            textBlockTorStatus.Text = Localize("Lang.Tor.Status.FetchingCaptcha");
-
-            MoatClient client = new MoatClient();
-            MoatResult result = await client.RequestChallengeAsync("obfs4");
-
-            if (result.Success && result.Challenge != null)
+            try
             {
-                activeMoatChallenge = result.Challenge;
-                try
+                BridgeType type = SelectedBridgeType();
+                textBlockTorStatus.Text = Localize("Lang.Tor.Status.AskingTor");
+
+                string transport = type == BridgeType.NONE ? "obfs4" : BridgeTypeToTransport(type);
+                MoatResult result = await new MoatClient().GetCircumventionSettingsAsync(null, transport);
+                if (!IsLoaded || !BridgeSelectionMatches(type))
+                    return;
+
+                if (result.Success && result.Bridges.Count > 0)
                 {
-                    BitmapImage bitmap = new BitmapImage();
-                    using (MemoryStream stream = new MemoryStream(result.Challenge.ImagePng))
-                    {
-                        bitmap.BeginInit();
-                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                        bitmap.StreamSource = stream;
-                        bitmap.EndInit();
-                    }
-                    imageCaptcha.Source = bitmap;
+                    BridgeType loaded = type == BridgeType.NONE ? MapTransportToBridgeType(result.Transport) : type;
+                    ApplyBridgeLines(
+                        loaded,
+                        result.Bridges,
+                        string.Format(Localize("Lang.Tor.Status.MoatBridges"), result.Bridges.Count));
+                    return;
                 }
-                catch { }
-                panelCaptcha.Visibility = Visibility.Visible;
-                textBoxCaptcha.Text = string.Empty;
-                textBlockTorStatus.Text = Localize("Lang.Tor.Status.CaptchaReady");
-            }
-            else
-            {
-                textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.MoatFail"), result.Error);
-            }
 
-            buttonFetchMoat.IsEnabled = true;
+                if (type == BridgeType.OBFS4 || type == BridgeType.NONE)
+                {
+                    textBlockTorStatus.Text = Localize("Lang.Tor.Status.FetchingCaptcha");
+                    MoatResult challenge = await new MoatClient().RequestChallengeAsync("obfs4");
+                    if (!IsLoaded || !BridgeSelectionMatches(type))
+                        return;
+
+                    if (challenge.Success && challenge.Challenge != null)
+                    {
+                        activeMoatChallenge = challenge.Challenge;
+                        try
+                        {
+                            BitmapImage bitmap = new BitmapImage();
+                            using (MemoryStream stream = new MemoryStream(challenge.Challenge.ImagePng))
+                            {
+                                bitmap.BeginInit();
+                                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                                bitmap.StreamSource = stream;
+                                bitmap.EndInit();
+                            }
+                            imageCaptcha.Source = bitmap;
+                        }
+                        catch { }
+                        panelCaptcha.Visibility = Visibility.Visible;
+                        textBoxCaptcha.Text = string.Empty;
+                        textBlockTorStatus.Text = Localize("Lang.Tor.Status.CaptchaReady");
+                        return;
+                    }
+                }
+
+                ApplyLocalBridgeFallback(type == BridgeType.NONE ? BridgeType.OBFS4 : type);
+            }
+            finally
+            {
+                if (IsLoaded)
+                    buttonFetchMoat.IsEnabled = true;
+            }
         }
 
         private async void OnSubmitCaptchaClick(object sender, RoutedEventArgs e)
@@ -424,8 +570,7 @@ namespace InvisibleGorillaXRay
 
             if (result.Success && result.Bridges.Count > 0)
             {
-                comboBoxBridgeType.SelectedValue = BridgeType.OBFS4;
-                textBoxBridges.Text = string.Join(Environment.NewLine, result.Bridges);
+                ApplyBridgeLines(BridgeType.OBFS4, result.Bridges, string.Format(Localize("Lang.Tor.Status.MoatBridges"), result.Bridges.Count));
                 panelCaptcha.Visibility = Visibility.Collapsed;
                 activeMoatChallenge = null;
                 textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.MoatBridges"), result.Bridges.Count);

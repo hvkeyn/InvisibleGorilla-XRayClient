@@ -90,17 +90,18 @@ namespace InvisibleGorillaXRay.Services
             return client;
         }
 
-        public async Task<ConnectionInfo> LookupAsync(IWebProxy proxy, CancellationToken token = default)
+        public async Task<ConnectionInfo> LookupAsync(IWebProxy proxy, CancellationToken token = default, TimeSpan? requestTimeout = null)
         {
             ConnectionInfo lastFailure = new ConnectionInfo { Ok = false, Error = "all endpoints failed" };
             ConnectionInfo ipOnlyFallback = null;
+            TimeSpan timeout = requestTimeout ?? TimeSpan.FromSeconds(12);
 
             foreach (string endpoint in LookupEndpoints)
             {
                 if (token.IsCancellationRequested)
                     return ipOnlyFallback ?? lastFailure;
 
-                ConnectionInfo result = await TryLookupAsync(endpoint, proxy, token).ConfigureAwait(false);
+                ConnectionInfo result = await TryLookupAsync(endpoint, proxy, timeout, token).ConfigureAwait(false);
                 if (result.Ok)
                 {
                     // Keep probing for full geo/provider data; a bare IP is only a fallback.
@@ -125,7 +126,7 @@ namespace InvisibleGorillaXRay.Services
                 || !string.IsNullOrWhiteSpace(info.Org);
         }
 
-        private static async Task<ConnectionInfo> TryLookupAsync(string url, IWebProxy proxy, CancellationToken token)
+        private static async Task<ConnectionInfo> TryLookupAsync(string url, IWebProxy proxy, TimeSpan timeout, CancellationToken token)
         {
             HttpClient ownedClient = null;
             HttpClient client = DirectClient;
@@ -137,12 +138,12 @@ namespace InvisibleGorillaXRay.Services
                     Proxy = proxy,
                     PreAuthenticate = true,
                     AllowAutoRedirect = true,
-                    ConnectTimeout = TimeSpan.FromSeconds(12)
+                    ConnectTimeout = timeout
                 };
 
                 ownedClient = new HttpClient(handler)
                 {
-                    Timeout = TimeSpan.FromSeconds(12)
+                    Timeout = timeout
                 };
                 ownedClient.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
                 client = ownedClient;
@@ -189,9 +190,14 @@ namespace InvisibleGorillaXRay.Services
                     LatencyMs = latencyMs
                 };
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
                 return new ConnectionInfo { Ok = false, Error = "canceled" };
+            }
+            catch (OperationCanceledException)
+            {
+                DiagnosticLog.Write("ConnectionInfo", $"Lookup {url} timed out after {(int)timeout.TotalSeconds}s");
+                return new ConnectionInfo { Ok = false, Error = "timeout" };
             }
             catch (Exception ex)
             {

@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using System.Windows;
 
 namespace InvisibleGorillaXRay.Factories
@@ -7,9 +9,11 @@ namespace InvisibleGorillaXRay.Factories
     using Managers;
     using Services;
     using Handlers;
+    using Handlers.Tor;
     using Values;
     using Services.Goida;
     using Services.OpenFlux;
+    using Services.Tor;
 
     public class WindowFactory
     {
@@ -201,11 +205,22 @@ namespace InvisibleGorillaXRay.Factories
 
             void UpdateUserSettings(UserSettings userSettings)
             {
+                UserSettings previous = settingsHandler.UserSettings;
+                bool reconnect = previous.GetMode() != userSettings.GetMode()
+                    || previous.GetProtocol() != userSettings.GetProtocol()
+                    || previous.GetProxyPort() != userSettings.GetProxyPort()
+                    || previous.GetTunPort() != userSettings.GetTunPort()
+                    || !string.Equals(previous.GetTunIp(), userSettings.GetTunIp(), StringComparison.Ordinal)
+                    || !string.Equals(previous.GetDns(), userSettings.GetDns(), StringComparison.Ordinal)
+                    || previous.GetSystemProxyUsed() != userSettings.GetSystemProxyUsed()
+                    || previous.GetUdpEnabled() != userSettings.GetUdpEnabled();
+
                 settingsHandler.UpdateUserSettings(userSettings);
                 localizationHandler.TryApplyCurrentLanguage();
                 notifyHandler.InitializeNotifyIcon();
                 notifyHandler.CheckModeItem(userSettings.GetMode());
-                GetMainWindow().TryDisableModeAndRerun();
+                if (reconnect)
+                    GetMainWindow().TryDisableModeAndRerun();
             }
         }
 
@@ -289,7 +304,10 @@ namespace InvisibleGorillaXRay.Factories
                 onDeleteSubscription: configHandler.DeleteSubscription,
                 onDeleteConfig: configHandler.LoadFiles,
                 onUpdateConfig: UpdateConfig,
-                onAddBridges: AddBridges
+                onAddBridges: AddBridges,
+                openTorSettings: OpenTorSettings,
+                probeTorLatency: ProbeTorLatency,
+                probeGoida: ProbeGoidaList
             );
 
             SetupLocalizedWindowTitle(
@@ -301,7 +319,7 @@ namespace InvisibleGorillaXRay.Factories
 
             Status LoadConfigForServer(string path)
             {
-                if (OpenFluxProfilePaths.IsMarker(path))
+                if (OpenFluxProfilePaths.IsMarker(path) || TorProfilePaths.IsMarker(path))
                     return core.LoadConfig(path);
 
                 if (GoidaProfilePaths.IsMarker(path))
@@ -313,6 +331,28 @@ namespace InvisibleGorillaXRay.Factories
                 }
 
                 return core.LoadConfig(path);
+            }
+
+            void OpenTorSettings()
+            {
+                SettingsWindow settingsWindow = CreateSettingsWindow();
+                settingsWindow.Owner = serverWindow;
+                settingsWindow.ShowTorEditorOnly();
+                settingsWindow.ShowDialog();
+                serverWindow.ReloadGeneralConfigsList();
+            }
+
+            int ProbeTorLatency()
+            {
+                TorSettings tor = settingsHandler.UserSettings.GetTorSettings();
+                string line = tor.GetBridgeLines().FirstOrDefault() ?? "";
+                BridgeCheckResult result = core.GetTorManager().CheckBridge(tor.GetBridgeType(), line, 45000);
+                if (!result.Success)
+                    return Availability.ERROR;
+
+                tor.LastLatencyMs = result.LatencyMs;
+                settingsHandler.UpdateUserSettings(settingsHandler.UserSettings);
+                return result.LatencyMs;
             }
 
             void OpenGoidaProfileWindow()
@@ -340,9 +380,30 @@ namespace InvisibleGorillaXRay.Factories
                 UserSettings settings = settingsHandler.UserSettings;
                 settings.Tor = Handlers.SmartInput.SmartImportService.MergeBridges(settings.GetTorSettings(), bridgeLines, bridgeType);
                 settingsHandler.UpdateUserSettings(settings);
+                settingsHandler.UpdateCurrentConfigPath(Services.Tor.TorProfilePaths.MarkerPath);
                 mainWindow.UpdateUI();
-                mainWindow.TryDisableModeAndRerun();
                 return true;
+            }
+
+            int ProbeGoidaList()
+            {
+                try
+                {
+                    GoidaProbeResult result = goidaHandler.Manager
+                        .ProbeAsync(System.Threading.CancellationToken.None, manual: true)
+                        .GetAwaiter()
+                        .GetResult();
+                    if (result.BestNode != null && result.BestNode.LatencyMs >= 0)
+                        return result.BestNode.LatencyMs;
+
+                    goidaHandler.Manager.TryEnsureActiveNode();
+                    return result.Ok > 0 ? result.BestNode?.LatencyMs ?? Availability.ERROR : Availability.ERROR;
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("ServerWindow.ProbeGoida", ex);
+                    return Availability.ERROR;
+                }
             }
         }
 

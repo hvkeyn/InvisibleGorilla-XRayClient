@@ -1,7 +1,9 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Net.Sockets;
 using System.Text.RegularExpressions;
+using Newtonsoft.Json.Linq;
 using InvisibleGorillaXRay.Values;
 
 namespace InvisibleGorillaXRay.Services.Goida
@@ -37,6 +39,81 @@ namespace InvisibleGorillaXRay.Services.Goida
             {
                 return Availability.ERROR;
             }
+        }
+
+        public static string Resolve(string endpoint, string configPath)
+        {
+            if (TryParseEndpoint(endpoint, out _, out _))
+                return endpoint ?? string.Empty;
+
+            string fromFile = FromConfigFile(configPath);
+            return TryParseEndpoint(fromFile, out _, out _) ? fromFile : endpoint ?? string.Empty;
+        }
+
+        public static string FromConfigJson(string configJson)
+        {
+            if (string.IsNullOrWhiteSpace(configJson))
+                return string.Empty;
+
+            try
+            {
+                JObject root = JObject.Parse(configJson);
+                if (root["outbounds"] is not JArray outbounds)
+                    return string.Empty;
+
+                foreach (JToken outboundToken in outbounds)
+                {
+                    if (outboundToken is not JObject outbound)
+                        continue;
+
+                    if (outbound["settings"] is not JObject settings)
+                        continue;
+
+                    if (TryFirstEndpoint(settings["vnext"] as JArray, out string endpoint))
+                        return endpoint;
+
+                    if (TryFirstEndpoint(settings["servers"] as JArray, out endpoint))
+                        return endpoint;
+                }
+            }
+            catch
+            {
+            }
+
+            return string.Empty;
+        }
+
+        public static string FromConfigFile(string configPath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath))
+                    return string.Empty;
+
+                return FromConfigJson(File.ReadAllText(configPath));
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private static bool TryFirstEndpoint(JArray entries, out string endpoint)
+        {
+            endpoint = string.Empty;
+            if (entries == null || entries.Count == 0 || entries[0] is not JObject first)
+                return false;
+
+            string address = (string)first["address"];
+            if (string.IsNullOrWhiteSpace(address))
+                return false;
+
+            string port = first["port"]?.ToString();
+            if (address.Contains(':') && !address.StartsWith("["))
+                address = $"[{address}]";
+
+            endpoint = string.IsNullOrWhiteSpace(port) ? address : address + ":" + port;
+            return true;
         }
 
         public static bool TryParseEndpoint(string endpoint, out string host, out int port)

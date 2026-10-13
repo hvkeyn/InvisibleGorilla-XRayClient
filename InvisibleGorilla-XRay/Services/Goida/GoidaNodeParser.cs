@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using Newtonsoft.Json;
 using InvisibleGorillaXRay.Models;
 using InvisibleGorillaXRay.Models.Templates.Subscriptions;
 using InvisibleGorillaXRay.Utilities;
@@ -43,7 +42,9 @@ namespace InvisibleGorillaXRay.Services.Goida
                     continue;
 
                 string sanitized = JsonUtility.SanitizeRuntimeManagedSections(configJson);
-                string endpoint = ExtractEndpoint(remark, sanitized);
+                string endpoint = GoidaEndpointProbe.FromConfigJson(sanitized);
+                if (!GoidaEndpointProbe.TryParseEndpoint(endpoint, out _, out _))
+                    endpoint = string.IsNullOrWhiteSpace(remark) ? endpoint : remark;
                 string nodeId = ComputeNodeId(listId, remark, sanitized);
                 string fileName = $"{listId}_{nodeId}.json";
                 string configPath = Path.Combine(nodesDirectory, fileName);
@@ -97,39 +98,5 @@ namespace InvisibleGorillaXRay.Services.Goida
             return Convert.ToHexString(hash.AsSpan(0, 8)).ToLowerInvariant();
         }
 
-        private static string ExtractEndpoint(string remark, string configJson)
-        {
-            try
-            {
-                dynamic parsed = JsonConvert.DeserializeObject(configJson);
-                if (parsed?.outbounds != null)
-                {
-                    foreach (dynamic outbound in parsed.outbounds)
-                    {
-                        string address = outbound?.settings?.vnext?[0]?.address
-                            ?? outbound?.settings?.servers?[0]?.address
-                            ?? outbound?.settings?.address;
-                        object port = outbound?.settings?.vnext?[0]?.port
-                            ?? outbound?.settings?.servers?[0]?.port
-                            ?? outbound?.settings?.port;
-                        if (!string.IsNullOrWhiteSpace(address?.ToString()))
-                            return FormatEndpoint(address.ToString(), port?.ToString());
-                    }
-                }
-            }
-            catch
-            {
-            }
-
-            return remark;
-        }
-
-        private static string FormatEndpoint(string address, string? port)
-        {
-            if (address.Contains(':') && !address.StartsWith('['))
-                address = $"[{address}]";
-
-            return string.IsNullOrWhiteSpace(port) ? address : $"{address}:{port}";
-        }
     }
 }

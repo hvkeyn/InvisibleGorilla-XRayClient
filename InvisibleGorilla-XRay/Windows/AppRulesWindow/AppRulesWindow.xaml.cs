@@ -45,6 +45,7 @@ namespace InvisibleGorillaXRay
         public AppRulesWindow()
         {
             InitializeComponent();
+            TextSelectionAssist.Attach(this);
         }
 
         public void Setup(

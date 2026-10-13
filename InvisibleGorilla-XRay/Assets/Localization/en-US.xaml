@@ -11,6 +11,10 @@
     <system:String x:Key="Lang.Status.Stopped">Stopped</system:String>
     <system:String x:Key="Lang.Status.Running">Running</system:String>
     <system:String x:Key="Lang.Status.WaitForRun">Wait for run</system:String>
+    <system:String x:Key="Lang.Home.ActivityLog">Connection</system:String>
+    <system:String x:Key="Lang.Home.Step.Starting">Starting the channel</system:String>
+    <system:String x:Key="Lang.Home.Step.Tunnel">Opening the tunnel</system:String>
+    <system:String x:Key="Lang.Home.Step.Running">Channel is on</system:String>
 
     <system:String x:Key="Lang.ConnectionInfo.Title">Your connection</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Checking">Checking…</system:String>
@@ -128,6 +132,8 @@
     <system:String x:Key="Lang.Tor.Status.SubmittingCaptcha">Submitting solution…</system:String>
     <system:String x:Key="Lang.Tor.Status.MoatBridges">Received {0} bridge(s).</system:String>
     <system:String x:Key="Lang.Tor.Status.MoatFail">Could not fetch bridges: {0}</system:String>
+    <system:String x:Key="Lang.Tor.Status.MoatFallback">Network did not answer. Loaded {0} built-in bridge(s).</system:String>
+    <system:String x:Key="Lang.Tor.Status.WebTunnelEmpty">No built-in WebTunnel lines. Paste the bridge lines.</system:String>
     <system:String x:Key="Lang.Window.Settings.Basic.Language">Language</system:String>
     <system:String x:Key="Lang.Window.Settings.Basic.Mode">Mode</system:String>
     <system:String x:Key="Lang.Window.Settings.Basic.Protocol">Protocol</system:String>
@@ -237,6 +243,8 @@
     <system:String x:Key="Lang.Goida.ServerListName">Goida profile</system:String>
     <system:String x:Key="Lang.Goida.ServerListNameWithNode">Goida · {0}</system:String>
     <system:String x:Key="Lang.OpenFlux.ServerListName">OpenFlux</system:String>
+    <system:String x:Key="Lang.Tor.ServerListName">Tor bridges</system:String>
+    <system:String x:Key="Lang.Tor.EditorSubtitle">Bridge method for this profile</system:String>
     <system:String x:Key="Lang.OpenFlux.ServerListHint">Yandex document</system:String>
     <system:String x:Key="Lang.OpenFlux.UrlLabel">Yandex document URL</system:String>
     <system:String x:Key="Lang.OpenFlux.Apply">Apply URL</system:String>
@@ -252,6 +260,7 @@
     <system:String x:Key="Lang.OpenFlux.Transport.Yandex">Transport: Legacy (yandex)</system:String>
     <system:String x:Key="Lang.OpenFlux.Status.Stopped">Disconnected</system:String>
     <system:String x:Key="Lang.OpenFlux.Status.Connecting">Connecting…</system:String>
+    <system:String x:Key="Lang.OpenFlux.Status.Opening">Opening the Yandex document in the browser.</system:String>
     <system:String x:Key="Lang.OpenFlux.Status.WaitingPeer">Document OK, waiting for peer</system:String>
     <system:String x:Key="Lang.OpenFlux.Status.Live">Tunnel is up</system:String>
     <system:String x:Key="Lang.OpenFlux.Status.LiveMs">Tunnel is up · {0} ms</system:String>

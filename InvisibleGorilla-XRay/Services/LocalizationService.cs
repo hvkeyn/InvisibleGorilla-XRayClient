@@ -16,8 +16,19 @@ namespace InvisibleGorillaXRay.Services
 
         public string GetTerm(string key)
         {
-            object value = LocalizationResource[key];
-            return value as string;
+            if (Application.Current?.Dispatcher != null
+                && !Application.Current.Dispatcher.CheckAccess())
+            {
+                return Application.Current.Dispatcher.Invoke(() => ReadTerm(key));
+            }
+
+            return ReadTerm(key);
+        }
+
+        private string ReadTerm(string key)
+        {
+            object value = LocalizationResource?[key];
+            return value as string ?? key;
         }
     }
 }

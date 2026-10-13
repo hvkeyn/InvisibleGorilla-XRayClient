@@ -25,7 +25,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private Button OpenFluxApplyActionButton => GetRequiredControl<Button>("OpenFluxApplyButton");
         private Button OpenFluxCopyUrlActionButton => GetRequiredControl<Button>("OpenFluxCopyUrlButton");
         private Button OpenFluxCopyKeyActionButton => GetRequiredControl<Button>("OpenFluxCopyKeyButton");
-        private TextBlock OpenFluxStatusText => GetRequiredControl<TextBlock>("OpenFluxStatusTextBlock");
+        private TextBox OpenFluxStatusText => GetRequiredControl<TextBox>("OpenFluxStatusTextBlock");
         private TextBlock OpenFluxHintText => GetRequiredControl<TextBlock>("OpenFluxHintTextBlock");
         private TextBlock OpenFluxUrlLabelText => GetRequiredControl<TextBlock>("OpenFluxUrlLabelTextBlock");
         private TextBlock OpenFluxKeyLabelText => GetRequiredControl<TextBlock>("OpenFluxKeyLabelTextBlock");

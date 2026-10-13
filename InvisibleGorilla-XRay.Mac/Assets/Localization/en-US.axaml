@@ -9,6 +9,10 @@
     <x:String x:Key="Lang.Button.Cancel">CANCEL</x:String>
     <x:String x:Key="Lang.Button.ChooseFile">CHOOSE FILE</x:String>
     <x:String x:Key="Lang.Button.Paste">PASTE</x:String>
+    <x:String x:Key="Lang.Text.SelectAll">Select all</x:String>
+    <x:String x:Key="Lang.Text.Copy">Copy</x:String>
+    <x:String x:Key="Lang.Text.Cut">Cut</x:String>
+    <x:String x:Key="Lang.Text.Paste">Paste</x:String>
     <x:String x:Key="Lang.Button.Confirm">CONFIRM</x:String>
 
     <x:String x:Key="Lang.Status.Stopped">Stopped</x:String>
