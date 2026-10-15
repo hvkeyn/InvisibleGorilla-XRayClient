@@ -44,7 +44,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="150"/>
                 <RowDefinition Height="8"/>
-                <RowDefinition Height="32"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="18"/>
                 <RowDefinition Height="52"/>
@@ -123,12 +123,25 @@
             </StackPanel>
 
             <!-- Config name -->
-            <TextBlock Grid.Row="2" Width="300"
-                HorizontalAlignment="Center"
-                TextAlignment="Center" TextTrimming="CharacterEllipsis"
-                Margin="0" Foreground="White" FontWeight="Light" FontSize="18"
-                x:Name="textServerConfig"
-                Text="{DynamicResource Lang.Message.NoServerConfiguration}"/>
+            <StackPanel Grid.Row="2" HorizontalAlignment="Center">
+                <TextBlock Width="300"
+                    HorizontalAlignment="Center"
+                    TextAlignment="Center" TextTrimming="CharacterEllipsis"
+                    Margin="0" Foreground="White" FontWeight="Light" FontSize="18"
+                    x:Name="textServerConfig"
+                    Text="{DynamicResource Lang.Message.NoServerConfiguration}"/>
+                <Border x:Name="homeLinkBadge"
+                        Margin="16,8,16,0" Padding="10,6" MaxWidth="320"
+                        HorizontalAlignment="Center"
+                        CornerRadius="8" IsVisible="False"
+                        Background="#1E3A2A" BorderBrush="#6DCC8E" BorderThickness="1">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
+                        <Ellipse Width="8" Height="8" Fill="#6DCC8E" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="homeLinkText" MaxWidth="260" TextWrapping="Wrap" TextAlignment="Center"
+                                   Foreground="#6DCC8E" FontSize="13"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
 
             <!-- Goida active node signal banner -->
             <StackPanel Grid.Row="3"

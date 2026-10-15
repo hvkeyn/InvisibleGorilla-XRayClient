@@ -902,6 +902,7 @@ namespace InvisibleGorillaXRay
             if (!connectionInfoTimer.IsEnabled)
                 connectionInfoTimer.Start();
             SetHomeProgress(100, Loc("Lang.Home.Step.Running"));
+            UpdateHomeLinkBadge();
             StartHomeSpeed();
             // Give the tunnel/proxy a moment to take over routing before probing the exit IP.
             ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(3));
@@ -918,6 +919,8 @@ namespace InvisibleGorillaXRay
             buttonStop.Visibility = Visibility.Hidden;
 
             isConnected = false;
+            if (homeLinkBadge != null)
+                homeLinkBadge.Visibility = Visibility.Collapsed;
             consecutiveTunnelFailures = 0;
             connectionInfoTimer.Stop();
             StopHomeSpeed();
@@ -1672,6 +1675,26 @@ namespace InvisibleGorillaXRay
                 textOpenFluxStatus.Text = text;
             if (!string.IsNullOrWhiteSpace(text) && IsOpenFluxProfileActive())
                 NoteHome(text);
+        }
+
+        private void UpdateHomeLinkBadge()
+        {
+            if (homeLinkBadge == null || homeLinkText == null)
+                return;
+
+            string label = Handlers.Tor.TorManager.LatestLinkLabel;
+            UserSettings settings = getUserSettings?.Invoke();
+            bool tor = Services.Tor.TorProfilePaths.IsMarker(settings?.GetCurrentConfigPath())
+                || settings?.GetTorSettings()?.GetEnabled() == true;
+            if (!tor || string.IsNullOrWhiteSpace(label))
+            {
+                homeLinkBadge.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            homeLinkText.Text = string.Format(Loc("Lang.Tor.Link.Badge"), label);
+            homeLinkBadge.Visibility = Visibility.Visible;
+            NoteHome(homeLinkText.Text);
         }
 
         private void SetHomeProgress(double percent, string step)

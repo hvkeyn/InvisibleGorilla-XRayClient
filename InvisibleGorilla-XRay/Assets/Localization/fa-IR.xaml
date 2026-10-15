@@ -122,6 +122,7 @@
     <system:String x:Key="Lang.Tor.Status.LoadedDefaults">{0} پل داخلی بارگذاری شد.</system:String>
     <system:String x:Key="Lang.Tor.Status.Checking">در حال بررسی پل…</system:String>
     <system:String x:Key="Lang.Tor.Status.CheckOk">پل سالم است — اتصال در {0} میلی‌ثانیه.</system:String>
+    <system:String x:Key="Lang.Tor.Link.Badge">Link is up · {0}</system:String>
     <system:String x:Key="Lang.Tor.Status.CheckFail">بررسی پل ناموفق بود: {0}</system:String>
     <system:String x:Key="Lang.Tor.Status.FetchingCaptcha">در حال درخواست CAPTCHA…</system:String>
     <system:String x:Key="Lang.Tor.Status.CaptchaReady">CAPTCHA زیر را حل کنید.</system:String>

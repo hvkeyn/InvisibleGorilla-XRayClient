@@ -476,6 +476,7 @@ namespace InvisibleGorillaXRay.Mac.Views
             buttonStop.IsVisible = true;
             buttonCancel.IsVisible = false;
             buttonRun.IsVisible = false;
+            UpdateHomeLinkBadge();
             ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(12));
         }
 
@@ -486,6 +487,8 @@ namespace InvisibleGorillaXRay.Mac.Views
             connectionInfoProxyWaitRetries = 0;
             connectionCheckGraceUntil = DateTime.MinValue;
             statusStop.IsVisible = true;
+            if (homeLinkBadge != null)
+                homeLinkBadge.IsVisible = false;
             statusRun.IsVisible = false;
             statusWaitForRun.IsVisible = false;
 
@@ -493,6 +496,26 @@ namespace InvisibleGorillaXRay.Mac.Views
             buttonCancel.IsVisible = false;
             buttonStop.IsVisible = false;
             ScheduleConnectionInfoRefresh(TimeSpan.FromMilliseconds(200));
+        }
+
+        private void UpdateHomeLinkBadge()
+        {
+            if (homeLinkBadge == null || homeLinkText == null)
+                return;
+
+            string label = InvisibleGorillaXRay.Handlers.Tor.TorManager.LatestLinkLabel;
+            UserSettings settings = getUserSettings?.Invoke();
+            bool tor = settings != null && (
+                InvisibleGorillaXRay.Services.Tor.TorProfilePaths.IsMarker(settings.GetCurrentConfigPath())
+                || settings.GetTorSettings().GetEnabled());
+            if (!tor || string.IsNullOrWhiteSpace(label))
+            {
+                homeLinkBadge.IsVisible = false;
+                return;
+            }
+
+            homeLinkText.Text = string.Format(Loc("Lang.Tor.Link.Badge"), label);
+            homeLinkBadge.IsVisible = true;
         }
 
         private void ShowWaitForRunStatus()

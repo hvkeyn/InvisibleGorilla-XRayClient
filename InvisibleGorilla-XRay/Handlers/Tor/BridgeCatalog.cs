@@ -65,6 +65,83 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             }
         }
 
+        public sealed class BridgeCandidate
+        {
+            public string Transport;
+            public List<string> Lines = new List<string>();
+        }
+
+        public static void StorePlan(IList<BridgeCandidate> plan)
+        {
+            if (plan == null || plan.Count == 0)
+                return;
+
+            try
+            {
+                JObject root = LoadOrCreate();
+                var array = new JArray();
+                foreach (BridgeCandidate candidate in plan)
+                {
+                    if (candidate == null || candidate.Lines == null)
+                        continue;
+                    var lines = new JArray();
+                    foreach (string line in candidate.Lines)
+                    {
+                        if (LooksLikeBridge(line))
+                            lines.Add(line.Trim());
+                    }
+                    if (lines.Count == 0 || string.IsNullOrWhiteSpace(candidate.Transport))
+                        continue;
+                    array.Add(new JObject
+                    {
+                        ["type"] = candidate.Transport,
+                        ["lines"] = lines
+                    });
+                    root[candidate.Transport] = lines;
+                }
+
+                if (array.Count == 0)
+                    return;
+                root["plan"] = array;
+                Save(root);
+            }
+            catch
+            {
+            }
+        }
+
+        public static List<BridgeCandidate> ReadPlan()
+        {
+            var plan = new List<BridgeCandidate>();
+            try
+            {
+                string path = CatalogPath();
+                if (!File.Exists(path))
+                    return plan;
+                if (DateTime.UtcNow - File.GetLastWriteTimeUtc(path) > Ttl)
+                    return plan;
+
+                JObject root = JObject.Parse(File.ReadAllText(path));
+                if (root["plan"] is JArray array)
+                {
+                    foreach (JToken item in array)
+                    {
+                        var lines = new List<string>();
+                        AddLines(item["lines"] as JArray, lines);
+                        string type = (string)item["type"];
+                        if (lines.Count == 0 || string.IsNullOrWhiteSpace(type))
+                            continue;
+                        plan.Add(new BridgeCandidate { Transport = type, Lines = lines });
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return plan;
+        }
+
         public static void StoreLines(string transport, IList<string> lines)
         {
             if (string.IsNullOrWhiteSpace(transport) || lines == null || lines.Count == 0)

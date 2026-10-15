@@ -249,19 +249,31 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 string resolved = ResolveCountry(country);
                 if (!string.IsNullOrEmpty(resolved))
                     body["country"] = resolved;
-                if (!string.IsNullOrWhiteSpace(preferredTransport))
-                    body["transports"] = new JArray { preferredTransport };
+                // Orbot asks for every transport it can run, then keeps the whole list
+                // so a stalled bootstrap can move to the next group.
+                body["transports"] = new JArray { "obfs4", "snowflake", "webtunnel" };
 
                 JObject root = await SendCircumventionAsync(HttpMethod.Post, $"{MoatBaseUrl}/circumvention/settings", body).ConfigureAwait(false);
                 JToken errors = root?["errors"]?[0];
+                List<BridgeCatalog.BridgeCandidate> plan = null;
                 if (errors != null)
                 {
                     result.Error = (string)errors["detail"] ?? "Circumvention API error.";
                 }
-                else if (root?["settings"] is JArray settings
-                    && TryTakeBridges(settings, preferredTransport, result))
+                else
                 {
-                    BridgeCatalog.StoreLines(result.Transport, result.Bridges);
+                    plan = CollectPlan(root?["settings"] as JArray);
+                }
+
+                if (plan == null || plan.Count == 0)
+                {
+                    JObject defaults = await SendCircumventionAsync(HttpMethod.Post, $"{MoatBaseUrl}/circumvention/defaults", body).ConfigureAwait(false);
+                    plan = CollectPlan(defaults?["settings"] as JArray);
+                }
+
+                if (plan != null && plan.Count > 0 && TakeCandidate(plan, preferredTransport, result))
+                {
+                    BridgeCatalog.StorePlan(plan);
                     return result;
                 }
             }
@@ -276,6 +288,84 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             if (string.IsNullOrEmpty(builtin.Error))
                 builtin.Error = result.Error;
             return builtin;
+        }
+
+        private static List<BridgeCatalog.BridgeCandidate> CollectPlan(JArray settings)
+        {
+            var plan = new List<BridgeCatalog.BridgeCandidate>();
+            if (settings == null)
+                return plan;
+
+            foreach (JToken setting in settings)
+            {
+                JToken bridges = setting["bridges"];
+                if (bridges == null)
+                    continue;
+
+                string type = NormalizeTransport((string)bridges["type"]);
+                if (type.Length == 0 || type == "dnstt")
+                    continue;
+
+                var lines = new List<string>();
+                if (bridges["bridge_strings"] is JArray strings)
+                {
+                    foreach (JToken token in strings)
+                    {
+                        string line = (string)token;
+                        if (!string.IsNullOrWhiteSpace(line))
+                            lines.Add(line.Trim());
+                    }
+                }
+
+                if (lines.Count == 0)
+                    continue;
+
+                BridgeCatalog.BridgeCandidate existing = null;
+                foreach (BridgeCatalog.BridgeCandidate candidate in plan)
+                {
+                    if (NormalizeTransport(candidate.Transport) == type)
+                    {
+                        existing = candidate;
+                        break;
+                    }
+                }
+
+                if (existing != null)
+                {
+                    existing.Lines.AddRange(lines);
+                    continue;
+                }
+
+                plan.Add(new BridgeCatalog.BridgeCandidate { Transport = type, Lines = lines });
+            }
+
+            return plan;
+        }
+
+        private static bool TakeCandidate(List<BridgeCatalog.BridgeCandidate> plan, string preferredTransport, MoatResult result)
+        {
+            BridgeCatalog.BridgeCandidate chosen = null;
+            if (!string.IsNullOrWhiteSpace(preferredTransport))
+            {
+                foreach (BridgeCatalog.BridgeCandidate candidate in plan)
+                {
+                    if (TransportMatches(preferredTransport, candidate.Transport))
+                    {
+                        chosen = candidate;
+                        break;
+                    }
+                }
+            }
+
+            if (chosen == null && plan.Count > 0)
+                chosen = plan[0];
+            if (chosen == null)
+                return false;
+
+            result.Transport = chosen.Transport;
+            result.Bridges.AddRange(chosen.Lines);
+            result.Success = result.Bridges.Count > 0;
+            return result.Success;
         }
 
         private static bool TryTakeBridges(JArray settings, string preferredTransport, MoatResult result)

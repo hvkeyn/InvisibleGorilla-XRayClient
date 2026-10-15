@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net.Sockets;
 using System.Text;
@@ -90,6 +91,57 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             {
                 return -1;
             }
+        }
+
+        /// <summary>
+        /// First hop of each built circuit. With bridges that hop is the bridge,
+        /// returned as a hex fingerprint and nothing else.
+        /// </summary>
+        public List<string> ReadFirstHopFingerprints()
+        {
+            var found = new List<string>();
+            try
+            {
+                writer.WriteLine("GETINFO circuit-status");
+                bool inBlock = false;
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    if (line == ".")
+                    {
+                        inBlock = false;
+                        continue;
+                    }
+                    if (line.StartsWith("250+") && line.Contains("circuit-status"))
+                    {
+                        inBlock = true;
+                        continue;
+                    }
+                    if (line.StartsWith("250 OK") || (line.StartsWith("250 ") && !line.StartsWith("250-")))
+                        break;
+                    if (line.Length > 0 && line[0] == '5')
+                        break;
+
+                    string body = line.StartsWith("250-") ? line.Substring(4) : line;
+                    if (!inBlock && !line.StartsWith("250-"))
+                        continue;
+                    if (body.IndexOf(" BUILT ", StringComparison.Ordinal) < 0)
+                        continue;
+
+                    int dollar = body.IndexOf('$');
+                    if (dollar < 0)
+                        continue;
+                    int end = dollar + 1;
+                    while (end < body.Length && Uri.IsHexDigit(body[end]))
+                        end++;
+                    if (end - dollar > 1)
+                        found.Add(body.Substring(dollar + 1, end - dollar - 1));
+                }
+            }
+            catch
+            {
+            }
+            return found;
         }
 
         public void SignalShutdown()

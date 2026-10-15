@@ -123,6 +123,15 @@
                         <TextBlock x:Name="homeConnectStep" Width="320" Margin="0,8,0,0"
                                    TextAlignment="Center" TextWrapping="Wrap"
                                    FontFamily="{StaticResource SegoeUI}" FontSize="13" Foreground="#BDBDBD"/>
+                        <Border x:Name="homeLinkBadge" Width="320" Margin="0,8,0,0" Padding="10,6"
+                                CornerRadius="8" Visibility="Collapsed"
+                                Background="#1E3A2A" BorderBrush="#6DCC8E" BorderThickness="1">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Ellipse Width="8" Height="8" Fill="#6DCC8E" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="homeLinkText" Width="280" TextWrapping="Wrap" TextAlignment="Center"
+                                           FontFamily="{StaticResource SegoeUI}" FontSize="13" Foreground="#6DCC8E"/>
+                            </StackPanel>
+                        </Border>
                         <Grid x:Name="homeTrafficPanel" Width="320" Margin="0,8,0,0" Visibility="Collapsed">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>

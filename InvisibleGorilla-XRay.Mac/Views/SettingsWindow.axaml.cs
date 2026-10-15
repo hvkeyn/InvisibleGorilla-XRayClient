@@ -461,10 +461,19 @@ namespace InvisibleGorillaXRay.Mac.Views
             buttonCheckBridge.IsEnabled = false;
             textBlockTorStatus.Text = Localize("Lang.Tor.Status.Checking");
 
-            BridgeCheckResult result = await Task.Run(() => torManager.CheckBridge(type, lines));
+            BridgeCheckResult result = await Task.Run(() => torManager.CheckBridge(type, lines, 150000));
+
+            if (result.Success && result.UsedLines != null && result.UsedLines.Count > 0)
+            {
+                if (result.UsedType != BridgeType.NONE)
+                    SelectComboBoxItem(comboBoxBridgeType, result.UsedType);
+                textBoxBridges.Text = string.Join(Environment.NewLine, result.UsedLines);
+            }
 
             textBlockTorStatus.Text = result.Success
-                ? string.Format(Localize("Lang.Tor.Status.CheckOk"), result.LatencyMs)
+                ? (string.IsNullOrWhiteSpace(result.LinkLabel)
+                    ? string.Format(Localize("Lang.Tor.Status.CheckOk"), result.LatencyMs)
+                    : string.Format(Localize("Lang.Tor.Link.Badge"), result.LinkLabel))
                 : string.Format(Localize("Lang.Tor.Status.CheckFail"), result.Message);
             buttonCheckBridge.IsEnabled = true;
         }

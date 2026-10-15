@@ -218,6 +218,7 @@
     <x:String x:Key="Lang.Android.Home.Subtitle.Stopped">Канал выключен</x:String>
     <x:String x:Key="Lang.Android.Home.Subtitle.Starting">Идёт подключение</x:String>
     <x:String x:Key="Lang.Android.Home.Subtitle.Running">Канал включён</x:String>
+    <x:String x:Key="Lang.Tor.Link.Badge">Связь есть · {0}</x:String>
     <x:String x:Key="Lang.Android.Home.ProxyAvailability">Android теперь использует VpnService tunnel и локальный mobile bridge вместо старого proxy-only listener пути.</x:String>
     <x:String x:Key="Lang.Android.Home.UpdateAvailable">Доступно обновление: v{0}. Откройте Настройки → Обновления.</x:String>
 

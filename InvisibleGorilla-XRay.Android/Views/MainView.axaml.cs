@@ -3044,6 +3044,25 @@ namespace InvisibleGorillaXRay.Android.Views
             return Color.FromRgb(Mix(from.R, to.R), Mix(from.G, to.G), Mix(from.B, to.B));
         }
 
+        private void UpdateHomeLinkBadge(bool running)
+        {
+            Border badge = this.FindControl<Border>("HomeLinkBadge");
+            TextBlock text = this.FindControl<TextBlock>("HomeLinkText");
+            if (badge == null || text == null)
+                return;
+
+            string label = global::InvisibleGorillaXRay.Handlers.Tor.TorManager.LatestLinkLabel;
+            bool tor = running && (IsCurrentConfigTor() || settingsHandler.UserSettings.GetTorSettings().GetEnabled());
+            if (!tor || string.IsNullOrWhiteSpace(label))
+            {
+                badge.IsVisible = false;
+                return;
+            }
+
+            text.Text = LocalizeFormat("Lang.Tor.Link.Badge", label);
+            badge.IsVisible = true;
+        }
+
         private void ApplyConnectionState(ConnectionState state)
         {
             bool stateChanged = displayedConnectionState != state;
@@ -3076,6 +3095,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     ConnectionStateTitleText.Text = Localize("Lang.Status.Running");
                     ConnectionStateSubtitleText.Text = Localize("Lang.Android.Home.Subtitle.Running");
                     SetHomeProgress(100, ConnectionStateSubtitleText.Text);
+                    UpdateHomeLinkBadge(true);
                     StartHomeTraffic();
                     ShowLiveConnectionCard(tracking: true);
                     break;
@@ -3090,6 +3110,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     ConnectionStateIndicatorDot.Background = StoppedBrush;
                     ConnectionStateTitleText.Text = Localize("Lang.Status.Stopped");
                     ConnectionStateSubtitleText.Text = Localize("Lang.Android.Home.Subtitle.Stopped");
+                    UpdateHomeLinkBadge(false);
                     if (connectionInfoTimer != null)
                         connectionInfoTimer.Interval = TimeSpan.FromSeconds(45);
                     lastOpenFluxGeo = null;
@@ -4005,14 +4026,53 @@ namespace InvisibleGorillaXRay.Android.Views
             UserSettings current = settingsHandler.UserSettings;
             if (result.Success)
             {
+                if (result.UsedLines != null && result.UsedLines.Count > 0 && result.UsedType != BridgeType.NONE)
+                {
+                    suppressBridgeTypeLoad = true;
+                    try
+                    {
+                        int index = BridgeTypeOptions.Keys.ToList().IndexOf(result.UsedType);
+                        if (index >= 0 && BridgeTypeSelector != null)
+                            BridgeTypeSelector.SelectedIndex = index;
+                        if (BridgesInput != null)
+                            BridgesInput.Text = string.Join(Environment.NewLine, result.UsedLines);
+                        if (TorEnabledToggle != null)
+                            TorEnabledToggle.IsChecked = true;
+                    }
+                    finally
+                    {
+                        suppressBridgeTypeLoad = false;
+                    }
+
+                    profile.BridgeType = result.UsedType;
+                    profile.BridgeLines = result.UsedLines;
+                    PersistTorEditor();
+                }
+
                 SetConfigAvailability(profile.ConfigPath, result.LatencyMs);
                 TorProfile? stored = current.FindTorProfileByPath(profile.ConfigPath);
                 if (stored != null)
+                {
                     stored.LastLatencyMs = result.LatencyMs;
+                    if (result.UsedLines != null && result.UsedLines.Count > 0 && result.UsedType != BridgeType.NONE)
+                    {
+                        stored.BridgeType = result.UsedType;
+                        stored.BridgeLines = result.UsedLines;
+                    }
+                }
                 if (TorProfilePaths.IsMarker(profile.ConfigPath))
+                {
                     current.GetTorSettings().LastLatencyMs = result.LatencyMs;
+                    if (result.UsedLines != null && result.UsedLines.Count > 0 && result.UsedType != BridgeType.NONE)
+                    {
+                        current.GetTorSettings().BridgeType = result.UsedType;
+                        current.GetTorSettings().BridgeLines = result.UsedLines;
+                    }
+                }
                 settingsHandler.UpdateUserSettings(current);
-                SetTorCheckStatus(LocalizeFormat("Lang.Tor.Status.CheckOk", result.LatencyMs));
+                SetTorCheckStatus(string.IsNullOrWhiteSpace(result.LinkLabel)
+                    ? LocalizeFormat("Lang.Tor.Status.CheckOk", result.LatencyMs)
+                    : LocalizeFormat("Lang.Tor.Link.Badge", result.LinkLabel));
             }
             else
             {

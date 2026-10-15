@@ -126,6 +126,7 @@
     <system:String x:Key="Lang.Tor.Status.LoadedDefaults">Loaded {0} built-in bridge(s).</system:String>
     <system:String x:Key="Lang.Tor.Status.Checking">Checking bridge…</system:String>
     <system:String x:Key="Lang.Tor.Status.CheckOk">Bridge OK — connected in {0} ms.</system:String>
+    <system:String x:Key="Lang.Tor.Link.Badge">Link is up · {0}</system:String>
     <system:String x:Key="Lang.Tor.Status.CheckFail">Bridge check failed: {0}</system:String>
     <system:String x:Key="Lang.Tor.Status.FetchingCaptcha">Requesting CAPTCHA…</system:String>
     <system:String x:Key="Lang.Tor.Status.CaptchaReady">Solve the CAPTCHA below.</system:String>

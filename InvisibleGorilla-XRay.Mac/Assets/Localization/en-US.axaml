@@ -218,6 +218,7 @@
     <x:String x:Key="Lang.Android.Home.Subtitle.Stopped">Channel is off</x:String>
     <x:String x:Key="Lang.Android.Home.Subtitle.Starting">Connecting</x:String>
     <x:String x:Key="Lang.Android.Home.Subtitle.Running">Channel is on</x:String>
+    <x:String x:Key="Lang.Tor.Link.Badge">Link is up · {0}</x:String>
     <x:String x:Key="Lang.Android.Home.ProxyAvailability">Android now uses a VpnService tunnel with a local mobile bridge instead of the old proxy-only listener path.</x:String>
     <x:String x:Key="Lang.Android.Home.UpdateAvailable">Update available: v{0}. Open Settings → Updates to install it.</x:String>
 

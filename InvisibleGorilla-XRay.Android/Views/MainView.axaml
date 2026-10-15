@@ -462,6 +462,26 @@
                                Foreground="{StaticResource TextMuted}"
                                FontSize="14" />
 
+                    <Border x:Name="HomeLinkBadge"
+                            Margin="16,8,16,0"
+                            Padding="10,6"
+                            MaxWidth="320"
+                            CornerRadius="8"
+                            IsVisible="False"
+                            Background="#1E3A2A"
+                            BorderBrush="#6DCC8E"
+                            BorderThickness="1">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
+                            <Ellipse Width="8" Height="8" Fill="#6DCC8E" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="HomeLinkText"
+                                       MaxWidth="260"
+                                       TextWrapping="Wrap"
+                                       TextAlignment="Center"
+                                       Foreground="#6DCC8E"
+                                       FontSize="13"/>
+                        </StackPanel>
+                    </Border>
+
                     <ProgressBar x:Name="HomeConnectProgress"
                                  Width="280"
                                  Height="4"

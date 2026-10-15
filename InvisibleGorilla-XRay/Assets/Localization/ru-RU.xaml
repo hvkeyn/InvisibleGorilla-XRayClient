@@ -126,6 +126,7 @@
     <system:String x:Key="Lang.Tor.Status.LoadedDefaults">Загружено встроенных мостов: {0}.</system:String>
     <system:String x:Key="Lang.Tor.Status.Checking">Проверка моста…</system:String>
     <system:String x:Key="Lang.Tor.Status.CheckOk">Мост работает — подключение за {0} мс.</system:String>
+    <system:String x:Key="Lang.Tor.Link.Badge">Связь есть · {0}</system:String>
     <system:String x:Key="Lang.Tor.Status.CheckFail">Проверка моста не удалась: {0}</system:String>
     <system:String x:Key="Lang.Tor.Status.FetchingCaptcha">Запрос CAPTCHA…</system:String>
     <system:String x:Key="Lang.Tor.Status.CaptchaReady">Решите CAPTCHA ниже.</system:String>

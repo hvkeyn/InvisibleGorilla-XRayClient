@@ -348,11 +348,22 @@ namespace InvisibleGorillaXRay
             buttonCheckBridge.IsEnabled = false;
             textBlockTorStatus.Text = Localize("Lang.Tor.Status.Checking");
 
-            BridgeCheckResult result = await Task.Run(() => torManager.CheckBridge(type, lines));
+            BridgeCheckResult result = await Task.Run(() => torManager.CheckBridge(type, lines, 150000));
 
-            textBlockTorStatus.Text = result.Success
-                ? string.Format(Localize("Lang.Tor.Status.CheckOk"), result.LatencyMs)
-                : string.Format(Localize("Lang.Tor.Status.CheckFail"), result.Message);
+            if (result.Success && result.UsedLines != null && result.UsedLines.Count > 0)
+            {
+                BridgeType used = result.UsedType == BridgeType.NONE ? type : result.UsedType;
+                string status = string.IsNullOrWhiteSpace(result.LinkLabel)
+                    ? string.Format(Localize("Lang.Tor.Status.CheckOk"), result.LatencyMs)
+                    : string.Format(Localize("Lang.Tor.Link.Badge"), result.LinkLabel);
+                ApplyBridgeLines(used, result.UsedLines, status);
+            }
+            else
+            {
+                textBlockTorStatus.Text = result.Success
+                    ? string.Format(Localize("Lang.Tor.Status.CheckOk"), result.LatencyMs)
+                    : string.Format(Localize("Lang.Tor.Status.CheckFail"), result.Message);
+            }
             buttonCheckBridge.IsEnabled = true;
         }
 
@@ -401,6 +412,24 @@ namespace InvisibleGorillaXRay
             textBoxBridges.Text = string.Join(Environment.NewLine, lines ?? Array.Empty<string>());
             checkBoxTorEnabled.IsChecked = true;
             textBlockTorStatus.Text = status;
+            PersistTorFromUi();
+        }
+
+        private void PersistTorFromUi()
+        {
+            try
+            {
+                if (getUserSettings == null || onUpdateUserSettings == null)
+                    return;
+                UserSettings current = getUserSettings.Invoke();
+                if (current == null)
+                    return;
+                current.Tor = BuildTorSettingsFromUi();
+                onUpdateUserSettings.Invoke(current);
+            }
+            catch
+            {
+            }
         }
 
         private bool BridgeSelectionMatches(BridgeType type)
@@ -419,9 +448,9 @@ namespace InvisibleGorillaXRay
 
             if (result.Success && result.Bridges.Count > 0)
             {
-                BridgeType loaded = type == BridgeType.NONE
-                    ? MapTransportToBridgeType(result.Transport)
-                    : type;
+                BridgeType loaded = string.IsNullOrWhiteSpace(result.Transport)
+                    ? (type == BridgeType.NONE ? BridgeType.OBFS4 : type)
+                    : MapTransportToBridgeType(result.Transport);
                 ApplyBridgeLines(
                     loaded,
                     result.Bridges,
@@ -509,7 +538,9 @@ namespace InvisibleGorillaXRay
 
                 if (result.Success && result.Bridges.Count > 0)
                 {
-                    BridgeType loaded = type == BridgeType.NONE ? MapTransportToBridgeType(result.Transport) : type;
+                    BridgeType loaded = string.IsNullOrWhiteSpace(result.Transport)
+                        ? (type == BridgeType.NONE ? BridgeType.OBFS4 : type)
+                        : MapTransportToBridgeType(result.Transport);
                     ApplyBridgeLines(
                         loaded,
                         result.Bridges,

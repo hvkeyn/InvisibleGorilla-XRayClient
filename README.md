@@ -52,6 +52,11 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.56
+
+- **The working bridge is marked.** When Tor connects, the home screen shows a green "link is up" line with the transport and a short id of the bridge that carried the circuit. The full bridge address stays off the screen.
+- **A live bootstrap is allowed to finish.** Fresh bridges are loaded, checked, and used. If a bridge has already answered, the app keeps it while the directory loads. A silent bridge still changes to the next fresh group, then obfs4, then meek.
+
 ## What's new in v3.6.55
 
 - **A live channel stays green.** The bar under "Channel is on" no longer turns red when the tunnel is only moving a few kilobytes. Quiet traffic is amber, a failed check is still a red spot.

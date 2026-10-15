@@ -16,9 +16,34 @@ namespace InvisibleGorillaXRay.Handlers.Tor
         public bool Success;
         public int LatencyMs;
         public string Message;
+        public BridgeType UsedType;
+        public List<string> UsedLines;
+        public string LinkLabel;
 
         public static BridgeCheckResult Ok(int latencyMs) =>
-            new BridgeCheckResult { Success = true, LatencyMs = latencyMs, Message = "OK" };
+            Ok(latencyMs, BridgeType.NONE, null);
+
+        public static BridgeCheckResult Ok(int latencyMs, BridgeType type, IList<string> lines)
+        {
+            var copy = new List<string>();
+            if (lines != null)
+            {
+                foreach (string line in lines)
+                {
+                    if (!string.IsNullOrWhiteSpace(line))
+                        copy.Add(line.Trim());
+                }
+            }
+
+            return new BridgeCheckResult
+            {
+                Success = true,
+                LatencyMs = latencyMs,
+                Message = "OK",
+                UsedType = type,
+                UsedLines = copy
+            };
+        }
 
         public static BridgeCheckResult Fail(string message) =>
             new BridgeCheckResult { Success = false, LatencyMs = -1, Message = message };
@@ -38,6 +63,9 @@ namespace InvisibleGorillaXRay.Handlers.Tor
 
         public int BootstrapPercent { get; private set; }
         public string StatusSummary { get; private set; } = "Off";
+        /// <summary>Transport and short bridge ids for the live session. No addresses.</summary>
+        public string ActiveLinkLabel { get; private set; } = "";
+        public static string LatestLinkLabel { get; private set; } = "";
         public bool IsRunning
         {
             get
@@ -51,7 +79,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
 
         public bool IsAvailable => File.Exists(Path.TOR_EXE);
 
-        public Status Start(TorSettings settings, int maxWaitMs = 90000)
+        public Status Start(TorSettings settings, int maxWaitMs = 180000)
         {
             if (settings == null)
                 return new Status(Code.ERROR, SubCode.CANT_CONNECT, "Tor settings are missing.");
@@ -60,6 +88,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 return new Status(Code.ERROR, SubCode.CANT_CONNECT,
                     $"Tor binary not found at {Path.TOR_EXE}. Reinstall the app or run the build with the Tor step.");
 
+            settings = PrepareSettings(settings);
             Stop();
 
             int socksPort = settings.GetSocksPort();
@@ -132,6 +161,8 @@ namespace InvisibleGorillaXRay.Handlers.Tor
 
             BootstrapPercent = 0;
             StatusSummary = "Off";
+            ActiveLinkLabel = "";
+            LatestLinkLabel = "";
         }
 
         private bool StartProcess(string torrcPath)
@@ -185,11 +216,12 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 elapsed += interval;
             }
 
-            BridgeType active = settings?.GetBridgeType() ?? BridgeType.NONE;
-            var tried = new HashSet<BridgeType> { active };
+            List<BridgeAttempt> chain = BuildChain(settings?.GetBridgeType() ?? BridgeType.NONE, settings?.GetBridgeLines());
+            int activeIndex = 0;
+            BridgeType active = chain.Count > 0 ? chain[0].Type : (settings?.GetBridgeType() ?? BridgeType.NONE);
             int lastPercent = -1;
             int stallMs = 0;
-            bool chainExhausted = false;
+            bool chainExhausted = chain.Count <= 1;
 
             // Phase 2: poll bootstrap. If progress stalls for 30s, switch transport
             // with SETCONF (Orbot Smart Connect) instead of killing tor.
@@ -211,8 +243,15 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                                 : $"{percent}% {summary} ({active})";
                             if (percent >= 100)
                             {
-                                StatusSummary = $"Connected via {active}";
-                                DiagnosticLog.Write(Tag, $"Tor bootstrap complete via {active}.");
+                                IList<string> activeLines = activeIndex >= 0 && activeIndex < chain.Count
+                                    ? chain[activeIndex].Lines
+                                    : null;
+                                ActiveLinkLabel = DescribeLink(control, active, activeLines);
+                                LatestLinkLabel = ActiveLinkLabel;
+                                StatusSummary = string.IsNullOrEmpty(ActiveLinkLabel)
+                                    ? $"Connected via {active}"
+                                    : ActiveLinkLabel;
+                                DiagnosticLog.Write(Tag, "Tor bootstrap complete via " + active + ".");
                                 return new Status(Code.SUCCESS, SubCode.SUCCESS, null);
                             }
 
@@ -237,27 +276,34 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                     }
                 }
 
-                if (!chainExhausted && stallMs >= stallLimitMs && BootstrapPercent < 100)
+                // Below 15% the bridge itself has not answered, so 30s is enough.
+                // After the relay answers, directory downloads often sit still longer than 30s.
+                int stallLimit = BootstrapPercent >= 15 ? 120000 : stallLimitMs;
+                if (!chainExhausted && stallMs >= stallLimit && BootstrapPercent < 100)
                 {
-                    BridgeType? next = NextTransport(tried);
-                    if (next == null)
+                    int nextIndex = activeIndex + 1;
+                    if (nextIndex >= chain.Count)
                     {
                         chainExhausted = true;
                         DiagnosticLog.Write(Tag, $"Smart connect: {active} stalled at {BootstrapPercent}% and no further transport is available.");
                     }
-                    else if (SwitchTransport(controlPort, cookieFile, next.Value))
-                    {
-                        DiagnosticLog.Write(Tag, $"Smart connect: {active} stalled at {BootstrapPercent}%, switching to {next.Value}.");
-                        active = next.Value;
-                        tried.Add(active);
-                        lastPercent = -1;
-                        stallMs = 0;
-                        StatusSummary = $"Switching to {active}";
-                    }
                     else
                     {
-                        tried.Add(next.Value);
-                        stallMs = 0;
+                        BridgeAttempt next = chain[nextIndex];
+                        activeIndex = nextIndex;
+                        if (SwitchTransport(controlPort, cookieFile, next.Type, next.Lines))
+                        {
+                            DiagnosticLog.Write(Tag, $"Smart connect: {active} stalled at {BootstrapPercent}%, switching to {next.Type}.");
+                            active = next.Type;
+                            lastPercent = -1;
+                            stallMs = 0;
+                            BootstrapPercent = 0;
+                            StatusSummary = $"Switching to {active}";
+                        }
+                        else
+                        {
+                            stallMs = stallLimitMs;
+                        }
                     }
                 }
 
@@ -269,27 +315,219 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 $"Tor did not finish bootstrapping within {maxWaitMs / 1000}s (reached {BootstrapPercent}% on {active}). Try different bridges.");
         }
 
-        /// <summary>
-        /// Orbot order after the user's current choice: snowflake, then obfs4, then meek.
-        /// Direct is never a fallback once a bridge was requested.
-        /// </summary>
-        private static BridgeType? NextTransport(HashSet<BridgeType> tried)
+        private sealed class BridgeAttempt
         {
-            BridgeType[] order = { BridgeType.SNOWFLAKE, BridgeType.OBFS4, BridgeType.MEEK_AZURE };
-            foreach (BridgeType candidate in order)
-            {
-                if (tried.Contains(candidate))
-                    continue;
-                if (!TorrcBuilder.TryGetRuntimeBridge(candidate, null, out _, out _, out _))
-                    continue;
-                return candidate;
-            }
-            return null;
+            public BridgeType Type;
+            public List<string> Lines;
         }
 
-        private bool SwitchTransport(int controlPort, string cookieFile, BridgeType type)
+        /// <summary>
+        /// The user's lines first, then every fresh Moat group, then snowflake, obfs4, and meek.
+        /// Direct is never a fallback once a bridge was requested.
+        /// </summary>
+        private List<BridgeAttempt> BuildChain(BridgeType type, IList<string> lines)
         {
-            if (!TorrcBuilder.TryGetRuntimeBridge(type, null, out string plugin, out List<string> bridges, out string error))
+            bool requested = type != BridgeType.NONE || HasLines(lines);
+            if (type == BridgeType.NONE)
+                type = InferBridgeType(lines);
+
+            var chain = new List<BridgeAttempt>();
+            var seen = new HashSet<BridgeType>();
+            if (!requested || type == BridgeType.NONE && !HasLines(lines))
+                return chain;
+
+            AddAttempt(chain, seen, type, lines);
+            foreach (BridgeCatalog.BridgeCandidate candidate in BridgeCatalog.ReadPlan())
+                AddAttempt(chain, seen, MapTransport(candidate.Transport), candidate.Lines);
+            AddAttempt(chain, seen, BridgeType.SNOWFLAKE, null);
+            AddAttempt(chain, seen, BridgeType.OBFS4, null);
+            AddAttempt(chain, seen, BridgeType.MEEK_AZURE, null);
+            return chain;
+        }
+
+        private static void AddAttempt(List<BridgeAttempt> chain, HashSet<BridgeType> seen, BridgeType type, IList<string> lines)
+        {
+            if (type == BridgeType.NONE || seen.Contains(type))
+                return;
+
+            var copy = new List<string>();
+            if (lines != null)
+            {
+                foreach (string line in lines)
+                {
+                    if (!string.IsNullOrWhiteSpace(line))
+                        copy.Add(line.Trim());
+                }
+            }
+
+            if (copy.Count == 0)
+                copy = DefaultBridges.ForType(type) ?? new List<string>();
+            if (copy.Count == 0)
+                return;
+
+            seen.Add(type);
+            chain.Add(new BridgeAttempt { Type = type, Lines = copy });
+        }
+
+        private TorSettings PrepareSettings(TorSettings settings)
+        {
+            TorSettings copy = settings.Clone();
+            List<string> lines = copy.GetBridgeLines();
+            BridgeType type = copy.GetBridgeType();
+            if (type == BridgeType.NONE && lines.Count > 0)
+                type = InferBridgeType(lines);
+
+            if (type != BridgeType.NONE && BridgeCatalog.ReadPlan().Count == 0)
+                TryRefreshPlan();
+
+            if (type != BridgeType.NONE && lines.Count == 0)
+            {
+                foreach (BridgeCatalog.BridgeCandidate candidate in BridgeCatalog.ReadPlan())
+                {
+                    if (MapTransport(candidate.Transport) != type)
+                        continue;
+                    lines = candidate.Lines;
+                    break;
+                }
+            }
+
+            copy.BridgeType = type;
+            copy.BridgeLines = lines ?? new List<string>();
+            return copy;
+        }
+
+        private static void TryRefreshPlan()
+        {
+            try
+            {
+                new MoatClient().GetCircumventionSettingsAsync().GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.Write(Tag, "Moat refresh failed: " + ex.GetType().Name);
+            }
+        }
+
+        private static bool HasLines(IList<string> lines)
+        {
+            if (lines == null)
+                return false;
+            foreach (string line in lines)
+            {
+                if (!string.IsNullOrWhiteSpace(line))
+                    return true;
+            }
+            return false;
+        }
+
+        private static BridgeType InferBridgeType(IList<string> lines)
+        {
+            if (lines == null)
+                return BridgeType.NONE;
+            foreach (string line in lines)
+            {
+                string trimmed = (line ?? string.Empty).TrimStart();
+                if (trimmed.StartsWith("snowflake ", StringComparison.Ordinal))
+                    return BridgeType.SNOWFLAKE;
+                if (trimmed.StartsWith("meek", StringComparison.Ordinal))
+                    return BridgeType.MEEK_AZURE;
+                if (trimmed.StartsWith("webtunnel ", StringComparison.Ordinal))
+                    return BridgeType.WEBTUNNEL;
+                if (trimmed.StartsWith("obfs4 ", StringComparison.Ordinal))
+                    return BridgeType.OBFS4;
+            }
+            return BridgeType.NONE;
+        }
+
+        private static BridgeType MapTransport(string transport)
+        {
+            switch ((transport ?? string.Empty).Trim().ToLowerInvariant())
+            {
+                case "snowflake":
+                    return BridgeType.SNOWFLAKE;
+                case "meek":
+                case "meek-azure":
+                case "meek_lite":
+                    return BridgeType.MEEK_AZURE;
+                case "webtunnel":
+                    return BridgeType.WEBTUNNEL;
+                case "obfs4":
+                    return BridgeType.OBFS4;
+                default:
+                    return BridgeType.NONE;
+            }
+        }
+
+        private static string DescribeLink(TorControlClient control, BridgeType type, IList<string> lines)
+        {
+            string pretty = PrettyTransport(type);
+            var shown = new List<string>();
+            if (control != null)
+            {
+                foreach (string fingerprint in control.ReadFirstHopFingerprints())
+                {
+                    string tail = FingerprintTail(fingerprint);
+                    if (tail.Length == 0)
+                        continue;
+                    string piece = "…" + tail;
+                    if (shown.Contains(piece))
+                        continue;
+                    shown.Add(piece);
+                    if (shown.Count == 3)
+                        break;
+                }
+            }
+
+            if (shown.Count == 0)
+            {
+                int count = 0;
+                if (lines != null)
+                {
+                    foreach (string line in lines)
+                    {
+                        if (!string.IsNullOrWhiteSpace(line))
+                            count++;
+                    }
+                }
+                return count > 1 ? pretty + " · " + count : pretty;
+            }
+
+            string label = pretty;
+            foreach (string piece in shown)
+                label += " · " + piece;
+            return label;
+        }
+
+        private static string PrettyTransport(BridgeType type)
+        {
+            switch (type)
+            {
+                case BridgeType.SNOWFLAKE: return "Snowflake";
+                case BridgeType.OBFS4: return "obfs4";
+                case BridgeType.MEEK_AZURE: return "meek";
+                case BridgeType.WEBTUNNEL: return "WebTunnel";
+                default: return "Tor";
+            }
+        }
+
+        private static string FingerprintTail(string fingerprint)
+        {
+            if (string.IsNullOrWhiteSpace(fingerprint))
+                return string.Empty;
+            var hex = new System.Text.StringBuilder();
+            foreach (char c in fingerprint)
+            {
+                if (Uri.IsHexDigit(c))
+                    hex.Append(char.ToUpperInvariant(c));
+            }
+            if (hex.Length < 8)
+                return string.Empty;
+            return hex.ToString(hex.Length - 8, 8);
+        }
+
+        private bool SwitchTransport(int controlPort, string cookieFile, BridgeType type, IList<string> lines)
+        {
+            if (!TorrcBuilder.TryGetRuntimeBridge(type, lines, out string plugin, out List<string> bridges, out string error))
             {
                 DiagnosticLog.Write(Tag, $"Smart connect cannot use {type}: {error}");
                 return false;
@@ -322,6 +560,10 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                     DiagnosticLog.Write(Tag, "Smart connect SETCONF failed: " + setReply);
                     return false;
                 }
+
+                // A transport change has to drop the old circuits or bootstrap stays on the stalled percent.
+                control.SetConf(out _, "DisableNetwork=1");
+                control.SetConf(out _, "DisableNetwork=0");
             }
 
             return true;
@@ -376,7 +618,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
         /// Validates a single bridge by booting a throwaway tor instance with only that bridge,
         /// on isolated ports, and timing how long it takes to reach 100% bootstrap.
         /// </summary>
-        public BridgeCheckResult CheckBridge(BridgeType bridgeType, string bridgeLine, int timeoutMs = 60000)
+        public BridgeCheckResult CheckBridge(BridgeType bridgeType, string bridgeLine, int timeoutMs = 150000)
         {
             var lines = new List<string>();
             if (!string.IsNullOrWhiteSpace(bridgeLine))
@@ -388,7 +630,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
         /// Boots one throwaway tor with every supplied line. Tor tries them together,
         /// so a dead first line no longer hides a working later line.
         /// </summary>
-        public BridgeCheckResult CheckBridge(BridgeType bridgeType, IList<string> bridgeLines, int timeoutMs = 60000)
+        public BridgeCheckResult CheckBridge(BridgeType bridgeType, IList<string> bridgeLines, int timeoutMs = 150000)
         {
             if (!IsAvailable)
                 return BridgeCheckResult.Fail("Tor binary not bundled.");
@@ -406,15 +648,28 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 try { if (System.IO.Directory.Exists(dataDir)) System.IO.Directory.Delete(dataDir, true); } catch { }
                 System.IO.Directory.CreateDirectory(dataDir);
 
-                var lines = new List<string>();
+                var supplied = new List<string>();
                 if (bridgeLines != null)
                 {
                     foreach (string line in bridgeLines)
                     {
                         if (!string.IsNullOrWhiteSpace(line))
-                            lines.Add(line.Trim());
+                            supplied.Add(line.Trim());
                     }
                 }
+
+                if (bridgeType != BridgeType.NONE && BridgeCatalog.ReadPlan().Count == 0)
+                    TryRefreshPlan();
+
+                List<BridgeAttempt> chain = BuildChain(bridgeType, supplied);
+                if (chain.Count == 0)
+                    return BridgeCheckResult.Fail("No bridge lines for " + bridgeType + ". Refusing a direct connection.");
+
+                int attempt = 0;
+                bridgeType = chain[0].Type;
+                List<string> lines = chain[0].Lines;
+                int stallMs = 0;
+                int lastPercent = -1;
 
                 string torrc = TorrcBuilder.Build(socksPort, controlPort, dataDir, cookieFile, logFile, bridgeType, lines);
                 File.WriteAllText(torrcPath, torrc);
@@ -456,9 +711,53 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                                 if (percent >= 100)
                                 {
                                     stopwatch.Stop();
-                                    return BridgeCheckResult.Ok((int)stopwatch.ElapsedMilliseconds);
+                                    BridgeCheckResult ok = BridgeCheckResult.Ok((int)stopwatch.ElapsedMilliseconds, bridgeType, lines);
+                                    ok.LinkLabel = DescribeLink(control, bridgeType, lines);
+                                    return ok;
+                                }
+
+                                if (percent > lastPercent)
+                                {
+                                    lastPercent = percent;
+                                    stallMs = 0;
+                                    BootstrapPercent = percent;
+                                    StatusSummary = $"{percent}% {bridgeType}";
+                                }
+                                else
+                                {
+                                    stallMs += interval;
                                 }
                             }
+                            else
+                            {
+                                stallMs += interval;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        stallMs += interval;
+                    }
+
+                    int checkStallLimit = BootstrapPercent >= 15 ? 120000 : 30000;
+                    if (stallMs >= checkStallLimit && attempt + 1 < chain.Count)
+                    {
+                        BridgeAttempt next = chain[attempt + 1];
+                        if (SwitchTransport(controlPort, cookieFile, next.Type, next.Lines))
+                        {
+                            attempt++;
+                            bridgeType = next.Type;
+                            lines = next.Lines;
+                            lastPercent = -1;
+                            stallMs = 0;
+                            BootstrapPercent = 0;
+                            StatusSummary = $"Switching to {bridgeType}";
+                            DiagnosticLog.Write(Tag, "Bridge check switching to " + bridgeType);
+                        }
+                        else
+                        {
+                            attempt++;
+                            stallMs = checkStallLimit;
                         }
                     }
 
@@ -466,7 +765,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                     elapsed += interval;
                 }
 
-                return BridgeCheckResult.Fail($"Bridge did not connect within {timeoutMs / 1000}s.");
+                return BridgeCheckResult.Fail($"Bridge did not connect within {timeoutMs / 1000}s ({BootstrapPercent}% {bridgeType}).");
             }
             catch (Exception ex)
             {
