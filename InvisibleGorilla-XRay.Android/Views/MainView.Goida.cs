@@ -562,17 +562,9 @@ namespace InvisibleGorillaXRay.Android.Views
             try
             {
                 string? selectedId = (GoidaNodesListBox.SelectedItem as GoidaNodeRow)?.Id;
-                if (goidaNodesListRows == null || !ReferenceEquals(GoidaNodesListBox.ItemsSource, goidaNodesListRows))
-                {
-                    goidaNodesListRows = new ObservableCollection<GoidaNodeRow>(rows);
-                    GoidaNodesListBox.ItemsSource = goidaNodesListRows;
-                }
-                else
-                {
-                    goidaNodesListRows.Clear();
-                    foreach (GoidaNodeRow row in rows)
-                        goidaNodesListRows.Add(row);
-                }
+                UsePlainItemsPanel(GoidaNodesListBox);
+                goidaNodesListRows = new ObservableCollection<GoidaNodeRow>(rows);
+                GoidaNodesListBox.ItemsSource = goidaNodesListRows;
 
                 if (string.IsNullOrWhiteSpace(selectedId))
                     return;

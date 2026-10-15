@@ -98,7 +98,7 @@
     <!-- Tor / Bridges -->
     <x:String x:Key="Lang.Tor.Enable">Route traffic through Tor</x:String>
     <x:String x:Key="Lang.Tor.HowTo">Choose Ask Tor or a bridge method, press CONFIRM, then press RUN. If Gorilla is already running, it reconnects automatically.</x:String>
-    <x:String x:Key="Lang.Tor.HowTo.Card">Method for this Tor profile. It is saved on the card. Press RUN to connect.</x:String>
+    <x:String x:Key="Lang.Tor.HowTo.Card">Method for this Tor profile. Changing it reconnects a running tunnel, or checks the bridge if the tunnel is off.</x:String>
     <x:String x:Key="Lang.Tor.Mode">Mode</x:String>
     <x:String x:Key="Lang.Tor.BridgeType">Bridge type</x:String>
     <x:String x:Key="Lang.Tor.SocksPort">Tor SOCKS port</x:String>
@@ -126,6 +126,7 @@
     <x:String x:Key="Lang.Tor.Status.Unavailable">Tor binary is not bundled in this build.</x:String>
     <x:String x:Key="Lang.Tor.Status.LoadedDefaults">Loaded {0} built-in bridge(s).</x:String>
     <x:String x:Key="Lang.Tor.Status.MoatFallback">Bridge service unreachable — loaded {0} built-in bridge(s).</x:String>
+    <x:String x:Key="Lang.Tor.Status.WebTunnelEmpty">WebTunnel has no built-in line. Paste a bridge or request one.</x:String>
     <x:String x:Key="Lang.Tor.Profile.Subtitle">Tor bridge · {0}</x:String>
     <x:String x:Key="Lang.Tor.Status.Checking">Checking bridge…</x:String>
     <x:String x:Key="Lang.Tor.Status.CheckOk">Bridge OK — connected in {0} ms.</x:String>

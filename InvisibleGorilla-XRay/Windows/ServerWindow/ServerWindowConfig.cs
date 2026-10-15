@@ -220,34 +220,44 @@ namespace InvisibleGorillaXRay
 
         private void TryAddSmartImport()
         {
-            PastedInputResult classified = PastedInputClassifier.Classify(textBoxConfigLink.Text);
-            if (!classified.HasAny)
+            try
+            {
+                PastedInputResult classified = PastedInputClassifier.Classify(textBoxConfigLink.Text);
+                if (!classified.HasAny)
+                {
+                    SetActiveLoadingPanel(false);
+                    ShowSmartImportStatus(Localize("Lang.SmartImport.Nothing"), false);
+                    return;
+                }
+
+                SmartImportOutcome outcome = SmartImportService.Apply(
+                    classified,
+                    convertLinkToConfig,
+                    onCreateConfig,
+                    convertLinkToSubscription,
+                    onCreateSubscription,
+                    onAddBridges);
+
+                if (outcome.ServersAdded > 0 || outcome.SubscriptionsAdded > 0)
+                {
+                    string importedPath = GetLastConfigPath(GroupType.GENERAL);
+                    groupPath = importedPath;
+                    if (!string.IsNullOrWhiteSpace(importedPath))
+                        onUpdateConfig?.Invoke(importedPath);
+                }
+
+                LoadGroupsList();
+                LoadConfigsList(GroupType.GENERAL);
+                LoadConfigsList(GroupType.SUBSCRIPTION);
+                SetActiveLoadingPanel(false);
+                ClearConfigLink();
+                ShowSmartImportStatus(BuildSmartImportSummary(outcome), outcome.AnyAdded);
+            }
+            catch (Exception)
             {
                 SetActiveLoadingPanel(false);
-                ShowSmartImportStatus(Localize("Lang.SmartImport.Nothing"), false);
-                return;
+                ShowSmartImportStatus(Localize("Lang.Message.InvalidConfig"), false);
             }
-
-            SmartImportOutcome outcome = SmartImportService.Apply(
-                classified,
-                convertLinkToConfig,
-                onCreateConfig,
-                convertLinkToSubscription,
-                onCreateSubscription,
-                onAddBridges);
-
-            if (outcome.ServersAdded > 0 || outcome.SubscriptionsAdded > 0)
-            {
-                groupPath = GetLastConfigPath(GroupType.GENERAL);
-                onUpdateConfig.Invoke(GetLastConfigPath(GroupType.GENERAL));
-            }
-
-            LoadGroupsList();
-            LoadConfigsList(GroupType.GENERAL);
-            LoadConfigsList(GroupType.SUBSCRIPTION);
-            SetActiveLoadingPanel(false);
-            ClearConfigLink();
-            ShowSmartImportStatus(BuildSmartImportSummary(outcome), outcome.AnyAdded);
         }
 
         private string BuildSmartImportSummary(SmartImportOutcome outcome)

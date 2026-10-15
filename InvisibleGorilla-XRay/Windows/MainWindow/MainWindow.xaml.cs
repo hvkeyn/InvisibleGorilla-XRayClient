@@ -1670,7 +1670,7 @@ namespace InvisibleGorillaXRay
         {
             if (textOpenFluxStatus != null)
                 textOpenFluxStatus.Text = text;
-            if (!string.IsNullOrWhiteSpace(text))
+            if (!string.IsNullOrWhiteSpace(text) && IsOpenFluxProfileActive())
                 NoteHome(text);
         }
 
@@ -2012,9 +2012,6 @@ namespace InvisibleGorillaXRay
                 homeUpText.Text = FormatRate(up);
                 homeUpText.Foreground = RateBrush(up);
             }
-            Brush speed = RateBrush(Math.Max(down, up));
-            if (homeConnectProgress != null && homeConnectProgress.Value >= 100)
-                homeConnectProgress.Foreground = speed;
             PushHomeSpeedSample(down + up, false);
         }
 
@@ -2105,10 +2102,11 @@ namespace InvisibleGorillaXRay
 
         private static SolidColorBrush SpeedBrush(long bytesPerSec)
         {
-            if (bytesPerSec < 8 * 1024)
-                return new SolidColorBrush(Color.FromRgb(0xE2, 0x4B, 0x4B));
-            if (bytesPerSec < 90 * 1024)
+            // A quiet but live tunnel is amber. Red is reserved for a failed check.
+            if (bytesPerSec < 32 * 1024)
                 return new SolidColorBrush(Color.FromRgb(0xF0, 0x9A, 0x3A));
+            if (bytesPerSec < 256 * 1024)
+                return new SolidColorBrush(Color.FromRgb(0xD6, 0xC4, 0x4A));
             return new SolidColorBrush(Color.FromRgb(0x6D, 0xCC, 0x8E));
         }
 

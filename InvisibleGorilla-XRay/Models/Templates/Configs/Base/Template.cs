@@ -14,7 +14,24 @@
         
         public abstract Status FetchDataFromLink(string link);
 
-        public string GetValidRemark() => FileUtility.GetValidFileName(Adapter.remark);
+        public string GetValidRemark()
+        {
+            try
+            {
+                string remark = FileUtility.GetValidFileName(Adapter.remark);
+                if (!string.IsNullOrWhiteSpace(remark))
+                    return remark.Length > 60 ? remark.Substring(0, 60) : remark;
+
+                string host = FileUtility.GetValidFileName(Adapter.address);
+                if (!string.IsNullOrWhiteSpace(host))
+                    return host;
+            }
+            catch
+            {
+            }
+
+            return "server";
+        }
         
         public V2Ray ConvertToV2Ray()
         {
@@ -230,7 +247,7 @@
                         'Pragma':'no-cache'}}
                     ";
                     
-                    string[] hostArray = Adapter.requestHost.Split(',');
+                    string[] hostArray = (Adapter.requestHost ?? string.Empty).Split(',');
                     string hostsString = string.Join("','", hostArray);
                     request = request.Replace("$requestHost$", $"'{hostsString}'");
 

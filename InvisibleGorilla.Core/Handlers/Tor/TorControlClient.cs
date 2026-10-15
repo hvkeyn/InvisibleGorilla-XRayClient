@@ -104,6 +104,64 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             }
         }
 
+        public bool SignalNewNym(out string reply) => Command("SIGNAL NEWNYM", out reply);
+
+        public bool ResetConf(out string reply, params string[] keywords)
+        {
+            reply = string.Empty;
+            if (keywords == null || keywords.Length == 0)
+                return false;
+            return Command("RESETCONF " + string.Join(" ", keywords), out reply);
+        }
+
+        public bool SetConf(out string reply, params string[] assignments)
+        {
+            reply = string.Empty;
+            if (assignments == null || assignments.Length == 0)
+                return false;
+            return Command("SETCONF " + string.Join(" ", assignments), out reply);
+        }
+
+        private bool Command(string command, out string reply)
+        {
+            reply = string.Empty;
+            try
+            {
+                writer.WriteLine(command);
+                var sb = new StringBuilder();
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    if (sb.Length > 0)
+                        sb.Append(' ');
+                    sb.Append(line);
+                    if (line == "250" || line.StartsWith("250 "))
+                    {
+                        reply = sb.ToString();
+                        return true;
+                    }
+                    if (line.Length > 0 && (line[0] == '4' || line[0] == '5'))
+                    {
+                        reply = line;
+                        return false;
+                    }
+                    if (!line.StartsWith("250"))
+                    {
+                        reply = line;
+                        return false;
+                    }
+                }
+
+                reply = "no reply";
+                return false;
+            }
+            catch (Exception ex)
+            {
+                reply = ex.GetType().Name;
+                return false;
+            }
+        }
+
         private static int ParseInt(string line, string key)
         {
             int idx = line.IndexOf(key, StringComparison.Ordinal);

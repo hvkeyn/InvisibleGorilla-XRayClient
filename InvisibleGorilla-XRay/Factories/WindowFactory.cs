@@ -345,8 +345,7 @@ namespace InvisibleGorillaXRay.Factories
             int ProbeTorLatency()
             {
                 TorSettings tor = settingsHandler.UserSettings.GetTorSettings();
-                string line = tor.GetBridgeLines().FirstOrDefault() ?? "";
-                BridgeCheckResult result = core.GetTorManager().CheckBridge(tor.GetBridgeType(), line, 45000);
+                BridgeCheckResult result = core.GetTorManager().CheckBridge(tor.GetBridgeType(), tor.GetBridgeLines(), 45000);
                 if (!result.Success)
                     return Availability.ERROR;
 

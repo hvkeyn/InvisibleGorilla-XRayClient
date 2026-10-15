@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -219,62 +221,39 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             var result = new MoatResult();
             try
             {
-                var inner = new JObject();
-                if (!string.IsNullOrWhiteSpace(country))
-                    inner["country"] = country.Trim().ToLowerInvariant();
+                var body = new JObject();
+                string resolved = ResolveCountry(country);
+                if (!string.IsNullOrEmpty(resolved))
+                    body["country"] = resolved;
                 if (!string.IsNullOrWhiteSpace(preferredTransport))
-                    inner["transports"] = new JArray { preferredTransport };
+                    body["transports"] = new JArray { preferredTransport };
 
-                JObject root = await PostJsonAsync($"{MoatBaseUrl}/circumvention/settings", inner).ConfigureAwait(false);
-                if (root == null)
-                {
-                    result.Error = "No response from the circumvention service.";
-                    return result;
-                }
-
-                JToken errors = root["errors"]?[0];
+                JObject root = await SendCircumventionAsync(HttpMethod.Post, $"{MoatBaseUrl}/circumvention/settings", body).ConfigureAwait(false);
+                JToken errors = root?["errors"]?[0];
                 if (errors != null)
                 {
                     result.Error = (string)errors["detail"] ?? "Circumvention API error.";
+                }
+                else if (root?["settings"] is JArray settings
+                    && TryTakeBridges(settings, preferredTransport, result))
+                {
+                    BridgeCatalog.StoreLines(result.Transport, result.Bridges);
                     return result;
                 }
-
-                if (root["settings"] is JArray settings && settings.Count > 0)
-                {
-                    foreach (JToken setting in settings)
-                    {
-                        JToken bridges = setting["bridges"];
-                        if (bridges == null)
-                            continue;
-
-                        string type = (string)bridges["type"];
-                        if (bridges["bridge_strings"] is JArray strings)
-                        {
-                            foreach (JToken s in strings)
-                            {
-                                string line = (string)s;
-                                if (!string.IsNullOrWhiteSpace(line))
-                                    result.Bridges.Add(line.Trim());
-                            }
-                        }
-
-                        if (result.Bridges.Count > 0)
-                        {
-                            result.Transport = type;
-                            result.Success = true;
-                            return result;
-                        }
-                    }
-                }
-
-                // No location-specific recommendation: fall back to built-in bridges.
-                return await GetBuiltinBridgesAsync(preferredTransport ?? "obfs4").ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 result.Error = ex.Message;
-                return result;
             }
+
+            // No country-specific recommendation, or the settings call did not arrive.
+            // Built-in lines are still refreshed from Moat (GET /circumvention/builtin).
+            MoatResult builtin = await GetBuiltinBridgesAsync(preferredTransport ?? "obfs4").ConfigureAwait(false);
+            if (builtin.Success)
+                return builtin;
+            if (string.IsNullOrEmpty(builtin.Error))
+                builtin.Error = result.Error;
+            return builtin;
         }
 
         /// <summary>
@@ -286,8 +265,13 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             var result = new MoatResult { Transport = transport };
             try
             {
-                JObject root = await PostJsonAsync($"{MoatBaseUrl}/circumvention/builtin", new JObject()).ConfigureAwait(false);
-                if (root != null && root[transport] is JArray strings && strings.Count > 0)
+                JObject root = await SendCircumventionAsync(HttpMethod.Get, $"{MoatBaseUrl}/circumvention/builtin", null).ConfigureAwait(false);
+                BridgeCatalog.Store(root);
+                string key = NormalizeTransport(transport);
+                JArray strings = root?[transport] as JArray ?? root?[key] as JArray;
+                if (strings == null && key == "meek")
+                    strings = root?["meek-azure"] as JArray ?? root?["meek"] as JArray;
+                if (strings != null)
                 {
                     foreach (JToken s in strings)
                     {
@@ -307,6 +291,158 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 result.Error = ex.Message;
                 return result;
             }
+        }
+
+        private static string ResolveCountry(string country)
+        {
+            string value = country;
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                try { value = RegionInfo.CurrentRegion.TwoLetterISORegionName; }
+                catch { value = null; }
+            }
+
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            value = value.Trim().ToLowerInvariant();
+            if (value.Length != 2 || !char.IsLetter(value[0]) || !char.IsLetter(value[1]))
+                return null;
+            return value;
+        }
+
+        private static bool TryTakeBridges(JArray settings, string preferredTransport, MoatResult result)
+        {
+            foreach (JToken setting in settings)
+            {
+                JToken bridges = setting["bridges"];
+                if (bridges == null)
+                    continue;
+
+                string type = (string)bridges["type"];
+                if (!TransportMatches(preferredTransport, type))
+                    continue;
+
+                if (bridges["bridge_strings"] is JArray strings)
+                {
+                    foreach (JToken s in strings)
+                    {
+                        string line = (string)s;
+                        if (!string.IsNullOrWhiteSpace(line))
+                            result.Bridges.Add(line.Trim());
+                    }
+                }
+
+                if (result.Bridges.Count > 0)
+                {
+                    result.Transport = type;
+                    result.Success = true;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool TransportMatches(string wanted, string actual)
+        {
+            if (string.IsNullOrWhiteSpace(wanted))
+                return true;
+
+            string left = NormalizeTransport(wanted);
+            string right = NormalizeTransport(actual);
+            return left.Length > 0 && (left == right || right.StartsWith(left, StringComparison.Ordinal));
+        }
+
+        private static string NormalizeTransport(string transport)
+        {
+            switch ((transport ?? string.Empty).Trim().ToLowerInvariant())
+            {
+                case "meek-azure":
+                case "meek_lite":
+                case "meek":
+                    return "meek";
+                default:
+                    return (transport ?? string.Empty).Trim().ToLowerInvariant();
+            }
+        }
+
+        private async Task<JObject> SendCircumventionAsync(HttpMethod method, string url, JObject body)
+        {
+            try
+            {
+                using (HttpClient direct = CreateClient())
+                {
+                    direct.Timeout = TimeSpan.FromSeconds(8);
+                    return await SendWithClient(direct, method, url, body).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                InvisibleGorillaXRay.Core.DiagnosticLog.Write("Moat", "Direct request failed: " + ex.GetType().Name);
+            }
+
+            using (MeekFrontSession meek = MeekFrontSession.TryStart())
+            {
+                if (meek == null)
+                    throw new InvalidOperationException("Circumvention service is unreachable.");
+
+                Exception last = null;
+                foreach (string front in MeekFrontSession.Fronts)
+                {
+                    try
+                    {
+                        using var client = new HttpClient(CreateMeekHandler(meek, front), true)
+                        {
+                            Timeout = TimeSpan.FromSeconds(25)
+                        };
+                        return await SendWithClient(client, method, url, body).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        last = ex;
+                        InvisibleGorillaXRay.Core.DiagnosticLog.Write("Moat", "Meek request failed: " + ex.GetType().Name);
+                    }
+                }
+
+                throw last ?? new InvalidOperationException("Meek tunnel failed.");
+            }
+        }
+
+        private static HttpMessageHandler CreateMeekHandler(MeekFrontSession meek, string front)
+        {
+            return new SocketsHttpHandler
+            {
+                UseProxy = false,
+                ConnectTimeout = TimeSpan.FromSeconds(20),
+                ConnectCallback = (context, _) =>
+                {
+                    string host = context.DnsEndPoint.Host;
+                    int port = context.DnsEndPoint.Port;
+                    Stream stream = meek.Open(front, host, port);
+                    return new ValueTask<Stream>(stream);
+                }
+            };
+        }
+
+        private static async Task<JObject> SendWithClient(HttpClient client, HttpMethod method, string url, JObject body)
+        {
+            using var request = new HttpRequestMessage(method, url);
+            request.Headers.TryAddWithoutValidation("Accept", JsonApiContentType);
+            if (body != null && method != HttpMethod.Get)
+            {
+                var content = new StringContent(body.ToString(Newtonsoft.Json.Formatting.None), Encoding.UTF8, "application/json");
+                request.Content = content;
+            }
+
+            using HttpResponseMessage response = await client.SendAsync(request).ConfigureAwait(false);
+            string json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(json) || json.TrimStart().StartsWith("<"))
+                throw new InvalidOperationException("Circumvention service returned no JSON.");
+            if ((int)response.StatusCode >= 500)
+                throw new HttpRequestException("Circumvention service status " + (int)response.StatusCode);
+
+            return JObject.Parse(json);
         }
 
         private async Task<JObject> PostJsonAsync(string url, JObject inner)

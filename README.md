@@ -52,6 +52,12 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.55
+
+- **A live channel stays green.** The bar under "Channel is on" no longer turns red when the tunnel is only moving a few kilobytes. Quiet traffic is amber, a failed check is still a red spot.
+- **The activity log stays on the server you selected.** An OpenFlux document check is no longer written into a VLESS or Tor session.
+- **Tor asks for fresh bridges the way Orbot does.** The request includes the device region, and if the bridge service is blocked the app reaches it through meek. An empty method no longer falls through to a direct connection. If bootstrap stalls for 30 seconds, the transport changes without restarting tor.
+
 ## What's new in v3.6.54
 
 - **Tor loads a bridge line for the method you pick.** Snowflake, meek, and obfs4 fill in immediately. If the bridge service does not answer, the built-in lines for that method are used.

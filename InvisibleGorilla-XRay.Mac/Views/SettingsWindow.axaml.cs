@@ -457,12 +457,11 @@ namespace InvisibleGorillaXRay.Mac.Views
 
             BridgeType type = GetComboBoxSelectedKey<BridgeType>(comboBoxBridgeType);
             List<string> lines = SplitBridgeLines(textBoxBridges.Text);
-            string firstLine = lines.FirstOrDefault() ?? string.Empty;
 
             buttonCheckBridge.IsEnabled = false;
             textBlockTorStatus.Text = Localize("Lang.Tor.Status.Checking");
 
-            BridgeCheckResult result = await Task.Run(() => torManager.CheckBridge(type, firstLine));
+            BridgeCheckResult result = await Task.Run(() => torManager.CheckBridge(type, lines));
 
             textBlockTorStatus.Text = result.Success
                 ? string.Format(Localize("Lang.Tor.Status.CheckOk"), result.LatencyMs)

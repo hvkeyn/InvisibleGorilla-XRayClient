@@ -47,6 +47,7 @@
 *.vmess
 publish-windows-v*/
 publish-android-v*/
+/publish-android-*/
 publish-linux-v*/
 publish-macos-*/
 InvisibleGorilla-XRay-v*.zip
@@ -96,3 +97,6 @@ InvisibleGorilla-XRay/TUN/InvisibleGorilla-TUN.pdb
 /InvisibleGorilla-XRay/bin-*/
 build-*.log
 InvisibleGorilla-XRay-Windows-*.zip
+
+# Orbot analysis workspace (APK, decompiled sources, tools) — see docs/ORBOT-VS-INVISIBLEGORILLA.md
+/.orbot-analysis/

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -54,11 +55,66 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             return sb.ToString();
         }
 
+        /// <summary>
+        /// Resolves the transport plugin and bridge statements for a live SETCONF.
+        /// A non-direct type with no lines fails closed: callers must not omit UseBridges.
+        /// </summary>
+        public static bool TryGetRuntimeBridge(
+            BridgeType bridgeType,
+            IEnumerable<string> bridgeLines,
+            out string clientTransportPlugin,
+            out List<string> bridgeStatements,
+            out string error)
+        {
+            clientTransportPlugin = null;
+            bridgeStatements = new List<string>();
+            error = null;
+
+            if (bridgeType == BridgeType.NONE)
+                return true;
+
+            List<string> lines = ResolveLines(bridgeType, bridgeLines);
+            if (lines.Count == 0)
+            {
+                error = $"No bridge lines for {bridgeType}. Refusing a direct connection.";
+                return false;
+            }
+
+            clientTransportPlugin = PluginBody(bridgeType);
+            if (string.IsNullOrEmpty(clientTransportPlugin))
+            {
+                error = $"No pluggable transport for {bridgeType}.";
+                return false;
+            }
+
+            foreach (string line in lines)
+                bridgeStatements.Add(NormalizeBridgeLine(bridgeType, line));
+            return true;
+        }
+
+        public static string QuoteConfValue(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return "\"\"";
+            return "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+        }
+
         private static void AppendBridges(StringBuilder sb, BridgeType bridgeType, IEnumerable<string> bridgeLines)
         {
+            if (!TryGetRuntimeBridge(bridgeType, bridgeLines, out string plugin, out List<string> bridges, out string error))
+                throw new InvalidOperationException(error);
+
             if (bridgeType == BridgeType.NONE)
                 return;
 
+            sb.AppendLine("UseBridges 1");
+            sb.AppendLine($"ClientTransportPlugin {plugin}");
+            foreach (string line in bridges)
+                sb.AppendLine($"Bridge {line}");
+        }
+
+        private static List<string> ResolveLines(BridgeType bridgeType, IEnumerable<string> bridgeLines)
+        {
             List<string> lines = new List<string>();
             if (bridgeLines != null)
             {
@@ -70,40 +126,29 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             }
 
             if (lines.Count == 0)
-                lines = DefaultBridges.ForType(bridgeType);
+                lines = DefaultBridges.ForType(bridgeType) ?? new List<string>();
+            return lines;
+        }
 
-            if (lines.Count == 0)
-                return;
-
-            sb.AppendLine("UseBridges 1");
-
-            string pt = Path.PLUGGABLE_TRANSPORT_EXE;
-            // Newer Tor Expert Bundles (14.5+) no longer ship a standalone snowflake-client;
-            // snowflake is served by lyrebird. Fall back to the bundled PT binary when the
-            // dedicated snowflake-client binary is absent.
-            string snowflake = File.Exists(Path.SNOWFLAKE_EXE) ? Path.SNOWFLAKE_EXE : Path.PLUGGABLE_TRANSPORT_EXE;
+        private static string PluginBody(BridgeType bridgeType)
+        {
+            string pt = ExecPath(Path.PLUGGABLE_TRANSPORT_EXE);
+            // Tor Expert Bundle 14.5+ has no snowflake-client. Lyrebird speaks the
+            // snowflake transport when the plugin name is "snowflake", not "obfs4".
+            string snowflake = File.Exists(Path.SNOWFLAKE_EXE) ? ExecPath(Path.SNOWFLAKE_EXE) : pt;
 
             switch (bridgeType)
             {
                 case BridgeType.OBFS4:
-                    sb.AppendLine($"ClientTransportPlugin obfs4 exec {ExecPath(pt)}");
-                    break;
+                    return $"obfs4 exec {pt}";
                 case BridgeType.MEEK_AZURE:
-                    sb.AppendLine($"ClientTransportPlugin meek_lite exec {ExecPath(pt)}");
-                    break;
+                    return $"meek_lite exec {pt}";
                 case BridgeType.WEBTUNNEL:
-                    sb.AppendLine($"ClientTransportPlugin webtunnel exec {ExecPath(pt)}");
-                    break;
+                    return $"webtunnel exec {pt}";
                 case BridgeType.SNOWFLAKE:
-                    sb.AppendLine($"ClientTransportPlugin snowflake exec {ExecPath(snowflake)}");
-                    break;
-            }
-
-            foreach (string line in lines)
-            {
-                // Bridge lines may already start with the transport name; tor expects
-                // "Bridge <transport> <addr> ...". Prefix the transport if missing.
-                sb.AppendLine($"Bridge {NormalizeBridgeLine(bridgeType, line)}");
+                    return $"snowflake exec {snowflake}";
+                default:
+                    return null;
             }
         }
 

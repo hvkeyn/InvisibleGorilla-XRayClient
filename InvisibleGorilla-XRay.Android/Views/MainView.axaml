@@ -951,9 +951,9 @@
                             </Button>
                         </WrapPanel>
 
-                        <TextBlock x:Name="TorModeTitleTextBlock" IsVisible="False"
+                        <TextBlock x:Name="TorModeTitleTextBlock"
                                    Text="Mode" />
-                        <ComboBox x:Name="TorModeComboBox" IsVisible="False"
+                        <ComboBox x:Name="TorModeComboBox"
                                   HorizontalAlignment="Stretch" />
 
                         <TextBlock x:Name="BridgeTypeTitleTextBlock"

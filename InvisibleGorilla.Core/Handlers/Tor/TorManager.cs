@@ -90,7 +90,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 StatusSummary = "Starting";
                 BootstrapPercent = 0;
 
-                Status bootstrap = WaitForBootstrap(controlPort, cookieFile, maxWaitMs);
+                Status bootstrap = WaitForBootstrap(controlPort, cookieFile, maxWaitMs, settings);
                 if (bootstrap.Code != Code.SUCCESS)
                 {
                     Stop();
@@ -166,10 +166,11 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             return true;
         }
 
-        private Status WaitForBootstrap(int controlPort, string cookieFile, int maxWaitMs)
+        private Status WaitForBootstrap(int controlPort, string cookieFile, int maxWaitMs, TorSettings settings)
         {
             int elapsed = 0;
             const int interval = 1000;
+            const int stallLimitMs = 30000;
 
             // Phase 1: wait for the control port + cookie file to appear.
             while (elapsed < maxWaitMs)
@@ -184,7 +185,14 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 elapsed += interval;
             }
 
-            // Phase 2: poll bootstrap progress until 100% (or timeout).
+            BridgeType active = settings?.GetBridgeType() ?? BridgeType.NONE;
+            var tried = new HashSet<BridgeType> { active };
+            int lastPercent = -1;
+            int stallMs = 0;
+            bool chainExhausted = false;
+
+            // Phase 2: poll bootstrap. If progress stalls for 30s, switch transport
+            // with SETCONF (Orbot Smart Connect) instead of killing tor.
             while (elapsed < maxWaitMs)
             {
                 if (!IsRunning)
@@ -198,11 +206,58 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                         if (percent >= 0)
                         {
                             BootstrapPercent = percent;
-                            if (!string.IsNullOrEmpty(summary))
-                                StatusSummary = $"{percent}% {summary}";
+                            StatusSummary = string.IsNullOrEmpty(summary)
+                                ? $"{percent}% {active}"
+                                : $"{percent}% {summary} ({active})";
                             if (percent >= 100)
+                            {
+                                StatusSummary = $"Connected via {active}";
+                                DiagnosticLog.Write(Tag, $"Tor bootstrap complete via {active}.");
                                 return new Status(Code.SUCCESS, SubCode.SUCCESS, null);
+                            }
+
+                            if (percent > lastPercent)
+                            {
+                                lastPercent = percent;
+                                stallMs = 0;
+                            }
+                            else
+                            {
+                                stallMs += interval;
+                            }
                         }
+                        else
+                        {
+                            stallMs += interval;
+                        }
+                    }
+                    else
+                    {
+                        stallMs += interval;
+                    }
+                }
+
+                if (!chainExhausted && stallMs >= stallLimitMs && BootstrapPercent < 100)
+                {
+                    BridgeType? next = NextTransport(tried);
+                    if (next == null)
+                    {
+                        chainExhausted = true;
+                        DiagnosticLog.Write(Tag, $"Smart connect: {active} stalled at {BootstrapPercent}% and no further transport is available.");
+                    }
+                    else if (SwitchTransport(controlPort, cookieFile, next.Value))
+                    {
+                        DiagnosticLog.Write(Tag, $"Smart connect: {active} stalled at {BootstrapPercent}%, switching to {next.Value}.");
+                        active = next.Value;
+                        tried.Add(active);
+                        lastPercent = -1;
+                        stallMs = 0;
+                        StatusSummary = $"Switching to {active}";
+                    }
+                    else
+                    {
+                        tried.Add(next.Value);
+                        stallMs = 0;
                     }
                 }
 
@@ -211,7 +266,65 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             }
 
             return new Status(Code.ERROR, SubCode.CANT_CONNECT,
-                $"Tor did not finish bootstrapping within {maxWaitMs / 1000}s (reached {BootstrapPercent}%). Try different bridges.");
+                $"Tor did not finish bootstrapping within {maxWaitMs / 1000}s (reached {BootstrapPercent}% on {active}). Try different bridges.");
+        }
+
+        /// <summary>
+        /// Orbot order after the user's current choice: snowflake, then obfs4, then meek.
+        /// Direct is never a fallback once a bridge was requested.
+        /// </summary>
+        private static BridgeType? NextTransport(HashSet<BridgeType> tried)
+        {
+            BridgeType[] order = { BridgeType.SNOWFLAKE, BridgeType.OBFS4, BridgeType.MEEK_AZURE };
+            foreach (BridgeType candidate in order)
+            {
+                if (tried.Contains(candidate))
+                    continue;
+                if (!TorrcBuilder.TryGetRuntimeBridge(candidate, null, out _, out _, out _))
+                    continue;
+                return candidate;
+            }
+            return null;
+        }
+
+        private bool SwitchTransport(int controlPort, string cookieFile, BridgeType type)
+        {
+            if (!TorrcBuilder.TryGetRuntimeBridge(type, null, out string plugin, out List<string> bridges, out string error))
+            {
+                DiagnosticLog.Write(Tag, $"Smart connect cannot use {type}: {error}");
+                return false;
+            }
+
+            using (var control = new TorControlClient())
+            {
+                if (!control.Connect(controlPort, cookieFile))
+                    return false;
+
+                if (!control.ResetConf(out string resetReply, "UseBridges", "ClientTransportPlugin", "Bridge"))
+                {
+                    DiagnosticLog.Write(Tag, "Smart connect RESETCONF failed: " + resetReply);
+                    return false;
+                }
+
+                if (type == BridgeType.NONE)
+                    return true;
+
+                var args = new List<string>
+                {
+                    "UseBridges=1",
+                    "ClientTransportPlugin=" + TorrcBuilder.QuoteConfValue(plugin)
+                };
+                foreach (string bridge in bridges)
+                    args.Add("Bridge=" + TorrcBuilder.QuoteConfValue(bridge));
+
+                if (!control.SetConf(out string setReply, args.ToArray()))
+                {
+                    DiagnosticLog.Write(Tag, "Smart connect SETCONF failed: " + setReply);
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private Status Exited(string headline)
@@ -265,6 +378,18 @@ namespace InvisibleGorillaXRay.Handlers.Tor
         /// </summary>
         public BridgeCheckResult CheckBridge(BridgeType bridgeType, string bridgeLine, int timeoutMs = 60000)
         {
+            var lines = new List<string>();
+            if (!string.IsNullOrWhiteSpace(bridgeLine))
+                lines.Add(bridgeLine.Trim());
+            return CheckBridge(bridgeType, lines, timeoutMs);
+        }
+
+        /// <summary>
+        /// Boots one throwaway tor with every supplied line. Tor tries them together,
+        /// so a dead first line no longer hides a working later line.
+        /// </summary>
+        public BridgeCheckResult CheckBridge(BridgeType bridgeType, IList<string> bridgeLines, int timeoutMs = 60000)
+        {
             if (!IsAvailable)
                 return BridgeCheckResult.Fail("Tor binary not bundled.");
 
@@ -282,8 +407,14 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 System.IO.Directory.CreateDirectory(dataDir);
 
                 var lines = new List<string>();
-                if (!string.IsNullOrWhiteSpace(bridgeLine))
-                    lines.Add(bridgeLine.Trim());
+                if (bridgeLines != null)
+                {
+                    foreach (string line in bridgeLines)
+                    {
+                        if (!string.IsNullOrWhiteSpace(line))
+                            lines.Add(line.Trim());
+                    }
+                }
 
                 string torrc = TorrcBuilder.Build(socksPort, controlPort, dataDir, cookieFile, logFile, bridgeType, lines);
                 File.WriteAllText(torrcPath, torrc);

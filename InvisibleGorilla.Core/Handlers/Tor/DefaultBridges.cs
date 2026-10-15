@@ -61,6 +61,10 @@ namespace InvisibleGorillaXRay.Handlers.Tor
 
         public static List<string> ForType(BridgeType type)
         {
+            List<string> cached = ReadCached(type);
+            if (cached.Count > 0)
+                return cached;
+
             switch (type)
             {
                 case BridgeType.SNOWFLAKE:
@@ -69,6 +73,24 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                     return new List<string> { MeekAzure };
                 case BridgeType.OBFS4:
                     return new List<string>(Obfs4);
+                default:
+                    return new List<string>();
+            }
+        }
+
+        private static List<string> ReadCached(BridgeType type)
+        {
+            switch (type)
+            {
+                case BridgeType.SNOWFLAKE:
+                    return BridgeCatalog.Read("snowflake");
+                case BridgeType.WEBTUNNEL:
+                    return BridgeCatalog.Read("webtunnel");
+                case BridgeType.MEEK_AZURE:
+                    List<string> meek = BridgeCatalog.Read("meek");
+                    return meek.Count > 0 ? meek : BridgeCatalog.Read("meek-azure");
+                case BridgeType.OBFS4:
+                    return BridgeCatalog.Read("obfs4");
                 default:
                     return new List<string>();
             }

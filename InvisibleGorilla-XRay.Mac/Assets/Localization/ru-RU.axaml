@@ -98,7 +98,7 @@
     <!-- Tor / Мосты -->
     <x:String x:Key="Lang.Tor.Enable">Пускать трафик через Tor</x:String>
     <x:String x:Key="Lang.Tor.HowTo">Выберите «Спросить Tor» или метод моста, нажмите «ПОДТВЕРДИТЬ», затем «ЗАПУСК». Если Горилла уже работает, она переподключится автоматически.</x:String>
-    <x:String x:Key="Lang.Tor.HowTo.Card">Метод этого профиля Tor. Сохраняется на карточке. Нажмите «ЗАПУСК», чтобы подключиться.</x:String>
+    <x:String x:Key="Lang.Tor.HowTo.Card">Метод этого профиля Tor. Смена метода переподключает открытый туннель, а если туннель выключен — сразу проверяет мост.</x:String>
     <x:String x:Key="Lang.Tor.Mode">Режим</x:String>
     <x:String x:Key="Lang.Tor.BridgeType">Тип моста</x:String>
     <x:String x:Key="Lang.Tor.SocksPort">SOCKS-порт Tor</x:String>
@@ -126,6 +126,7 @@
     <x:String x:Key="Lang.Tor.Status.Unavailable">Бинарник Tor не включён в эту сборку.</x:String>
     <x:String x:Key="Lang.Tor.Status.LoadedDefaults">Загружено встроенных мостов: {0}.</x:String>
     <x:String x:Key="Lang.Tor.Status.MoatFallback">Сервис мостов недоступен — загружено встроенных мостов: {0}.</x:String>
+    <x:String x:Key="Lang.Tor.Status.WebTunnelEmpty">У WebTunnel нет встроенной строки. Вставьте мост или запросите его.</x:String>
     <x:String x:Key="Lang.Tor.Profile.Subtitle">Tor-мост · {0}</x:String>
     <x:String x:Key="Lang.Tor.Status.Checking">Проверка моста…</x:String>
     <x:String x:Key="Lang.Tor.Status.CheckOk">Мост работает — подключение за {0} мс.</x:String>

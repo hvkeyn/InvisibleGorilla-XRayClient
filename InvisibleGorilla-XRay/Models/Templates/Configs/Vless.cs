@@ -26,7 +26,7 @@ namespace InvisibleGorillaXRay.Models.Templates.Configs
         {
             try
             {
-                data = new Data(link);
+                data = new Data(NormalizeLink(link));
             }
             catch
             {
@@ -59,7 +59,7 @@ namespace InvisibleGorillaXRay.Models.Templates.Configs
             {
                 Adapter adapter = new Adapter() {
                     type = "vless",
-                    remark = data.uri.GetComponents(UriComponents.Fragment, UriFormat.Unescaped),
+                    remark = SafeFragment(data.uri),
                     address = data.uri.IdnHost,
                     port = data.uri.Port,
                     id = data.uri.UserInfo,
@@ -158,6 +158,65 @@ namespace InvisibleGorillaXRay.Models.Templates.Configs
                         }
                     }
                 };
+            }
+        }
+
+        private static string NormalizeLink(string link)
+        {
+            string value = (link ?? string.Empty).Trim().Trim('"', '\'');
+            if (value.Length == 0)
+                return value;
+
+            int hash = value.IndexOf('#');
+            string fragment = hash >= 0 ? value.Substring(hash + 1) : null;
+            string head = hash >= 0 ? value.Substring(0, hash) : value;
+
+            int scheme = head.IndexOf("://", StringComparison.Ordinal);
+            int at = scheme >= 0 ? head.IndexOf('@', scheme + 3) : -1;
+            if (at > 0)
+            {
+                int query = head.IndexOf('?', at);
+                int hostEnd = query >= 0 ? query : head.Length;
+                string hostPort = head.Substring(at + 1, hostEnd - (at + 1));
+                bool hasPort;
+                if (hostPort.StartsWith("[", StringComparison.Ordinal))
+                {
+                    int bracket = hostPort.IndexOf(']');
+                    hasPort = bracket >= 0 && hostPort.IndexOf(':', bracket + 1) > bracket;
+                }
+                else
+                {
+                    hasPort = hostPort.IndexOf(':') >= 0;
+                }
+
+                if (!hasPort && hostPort.Length > 0)
+                    head = head.Insert(hostEnd, ":443");
+            }
+
+            if (fragment == null)
+                return head;
+
+            string decoded = fragment;
+            try
+            {
+                decoded = Uri.UnescapeDataString(fragment);
+            }
+            catch
+            {
+            }
+
+            return head + "#" + Uri.EscapeDataString(decoded);
+        }
+
+        private static string SafeFragment(Uri uri)
+        {
+            try
+            {
+                return uri?.GetComponents(UriComponents.Fragment, UriFormat.Unescaped) ?? string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
             }
         }
     }
