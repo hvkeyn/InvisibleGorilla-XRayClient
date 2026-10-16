@@ -251,17 +251,45 @@ namespace InvisibleGorillaXRay.Models
             return templates;
         }
 
+        public string ResolveAppRuleBindingKey(string? configPath = null)
+        {
+            string normalizedConfigPath = NormalizeConfigPath(configPath ?? CurrentConfigPath);
+            if (string.IsNullOrWhiteSpace(normalizedConfigPath))
+                return string.Empty;
+
+            string directory = System.IO.Directory.Exists(normalizedConfigPath)
+                ? normalizedConfigPath
+                : System.IO.Path.GetDirectoryName(normalizedConfigPath) ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(directory)
+                && System.IO.File.Exists(System.IO.Path.Combine(directory, "info.dat")))
+                return NormalizeConfigPath(directory);
+
+            return normalizedConfigPath;
+        }
+
         public string GetBoundAppRuleTemplateId(string? configPath = null)
         {
             string normalizedConfigPath = NormalizeConfigPath(configPath ?? CurrentConfigPath);
             if (string.IsNullOrWhiteSpace(normalizedConfigPath))
                 return AppRuleTemplate.DefaultTemplateId;
 
-            AppRuleTemplateBinding? binding = GetAppRuleTemplateBindings()
-                .LastOrDefault(candidate => string.Equals(
+            System.Collections.Generic.List<AppRuleTemplateBinding> bindings = GetAppRuleTemplateBindings();
+            string groupKey = ResolveAppRuleBindingKey(normalizedConfigPath);
+            if (!string.IsNullOrWhiteSpace(groupKey)
+                && !string.Equals(groupKey, normalizedConfigPath, StringComparison.OrdinalIgnoreCase))
+            {
+                AppRuleTemplateBinding? groupBinding = bindings.LastOrDefault(candidate => string.Equals(
                     candidate.ConfigPath,
-                    normalizedConfigPath,
+                    groupKey,
                     StringComparison.OrdinalIgnoreCase));
+                if (groupBinding != null)
+                    return groupBinding.TemplateId;
+            }
+
+            AppRuleTemplateBinding? binding = bindings.LastOrDefault(candidate => string.Equals(
+                candidate.ConfigPath,
+                normalizedConfigPath,
+                StringComparison.OrdinalIgnoreCase));
 
             return binding?.TemplateId ?? AppRuleTemplate.DefaultTemplateId;
         }

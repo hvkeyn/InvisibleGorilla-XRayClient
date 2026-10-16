@@ -1190,7 +1190,7 @@ $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
 Write-Host ""
 Write-Host "  Invisible Gorilla - XRay Client :: Build Script" -ForegroundColor Magenta
-Write-Host "  v3.6.57.0" -ForegroundColor DarkGray
+Write-Host "  v3.6.58.0" -ForegroundColor DarkGray
 Write-Host ""
 
 Test-Prerequisites -BuildStep $Step

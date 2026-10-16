@@ -90,6 +90,39 @@ namespace InvisibleGorillaXRay.Services
             return port == "0" || port == "1" || host == "0.0.0.0" || host == "127.0.0.1";
         }
 
+        /// <summary>
+        /// A panel that refuses this device sends advertisement links instead of VPN servers.
+        /// The remark is the whole message, so the card title is the notice itself.
+        /// </summary>
+        public static bool IsProviderNotice(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return false;
+
+            string text = name.Trim();
+            if (text.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                text = text.Substring(0, text.Length - 5);
+            text = text.ToLowerInvariant();
+
+            return text.Contains("лимит устройств")
+                || text.Contains("device limit")
+                || text.Contains("приложение не поддерживается")
+                || text.Contains("not supported")
+                || text.Contains("свяжитесь с нами")
+                || text.Contains("управление устройствами")
+                || text.Contains("безлимит на");
+        }
+
+        public static bool IsDeviceLimitText(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return false;
+
+            string value = text.ToLowerInvariant();
+            return value.Contains("лимит устройств")
+                || value.Contains("device limit");
+        }
+
         private static string Format(string address, string port)
         {
             if (string.IsNullOrWhiteSpace(address) || string.IsNullOrWhiteSpace(port))

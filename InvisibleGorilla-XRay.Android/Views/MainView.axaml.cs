@@ -94,6 +94,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private readonly List<AppRuleTemplateBinding> workingAppRuleBindings = new();
         private AppRuleTemplate workingDefaultAppRuleTemplate = new();
         private string activeAppRulesTemplateId = AppRuleTemplate.DefaultTemplateId;
+        private string appRulesBindingOverride = string.Empty;
         private bool isApplyingAppRulesEditor;
         private bool isCheckWorkerBusy;
         private bool torBridgeCheckBusy;
@@ -142,7 +143,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private string baselineIp = string.Empty;
         private bool isConnectionInfoConnected;
         private int connectionInfoFailureRetries;
-        private const int ConnectionInfoMaxFailureRetries = 4;
+        private const int ConnectionInfoMaxFailureRetries = 1;
         private int connectionInfoProxyWaitRetries;
         private const int ConnectionInfoMaxProxyWaitRetries = 8;
         private bool isConnectionInfoTor;
@@ -337,6 +338,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private Button CheckSubscriptionActionButton => GetRequiredControl<Button>("CheckSubscriptionButton");
         private Button RefreshSubscriptionActionButton => GetRequiredControl<Button>("RefreshSubscriptionButton");
         private Button ShareSubscriptionActionButton => GetRequiredControl<Button>("ShareSubscriptionButton");
+        private Button SubscriptionAppRulesActionButton => GetRequiredControl<Button>("SubscriptionAppRulesButton");
         private Button DeleteSubscriptionActionButton => GetRequiredControl<Button>("DeleteSubscriptionButton");
         private Button CancelSubscriptionActionButton => GetRequiredControl<Button>("CancelSubscriptionButton");
         private Button SaveSubscriptionActionButton => GetRequiredControl<Button>("SaveSubscriptionButton");
@@ -1391,6 +1393,27 @@ namespace InvisibleGorillaXRay.Android.Views
             }
         }
 
+        private void OnSubscriptionAppRulesClick(object? sender, RoutedEventArgs e)
+        {
+            if (selectedSubscription == null)
+            {
+                SetStatus("Lang.Android.Status.SelectSubscriptionFirst");
+                return;
+            }
+
+            appRulesBindingOverride = selectedSubscription.Directory.FullName;
+            try
+            {
+                OpenAppRulesEditor();
+            }
+            catch (Exception ex)
+            {
+                appRulesBindingOverride = string.Empty;
+                DiagnosticLog.WriteException("MainView.SubscriptionAppRules", ex);
+                SetStatus("Lang.AppRules.LoadFailed");
+            }
+        }
+
         private void OpenAppRulesEditor()
         {
             CaptureActiveAppRulesEditorTemplateState();
@@ -1404,9 +1427,18 @@ namespace InvisibleGorillaXRay.Android.Views
             workingAppRuleBindings.Clear();
             workingAppRuleBindings.AddRange(settings.GetAppRuleTemplateBindings());
 
-            AppRulesEditorCurrentConfigText.Text = CurrentConfigNameText.Text;
+            string bindingKey = string.IsNullOrWhiteSpace(appRulesBindingOverride)
+                ? settings.ResolveAppRuleBindingKey()
+                : settings.ResolveAppRuleBindingKey(appRulesBindingOverride);
+            appRulesBindingOverride = bindingKey;
+            AppRulesEditorCurrentConfigText.Text = string.IsNullOrWhiteSpace(bindingKey)
+                ? CurrentConfigNameText.Text
+                : System.IO.Directory.Exists(bindingKey)
+                    ? System.IO.Path.GetFileName(bindingKey)
+                    : CurrentConfigNameText.Text;
 
-            PopulateAppRulesTemplateSelector(settings.GetBoundAppRuleTemplateId());
+            PopulateAppRulesTemplateSelector(settings.GetBoundAppRuleTemplateId(
+                string.IsNullOrWhiteSpace(bindingKey) ? null : bindingKey));
             AppRulesEditorOverlay.IsVisible = true;
         }
 
@@ -1415,6 +1447,7 @@ namespace InvisibleGorillaXRay.Android.Views
             CloseAppPicker();
             AppRulesEditorOverlay.IsVisible = false;
             isApplyingAppRulesEditor = false;
+            appRulesBindingOverride = string.Empty;
         }
 
         private async void OnOpenAppPickerClick(object? sender, RoutedEventArgs e)
@@ -1858,6 +1891,23 @@ namespace InvisibleGorillaXRay.Android.Views
             }
         }
 
+        private static bool BindingMatchesAppRuleTarget(string? bindingPath, string targetPath, bool targetIsGroup)
+        {
+            string normalizedBinding = NormalizeConfigPathKey(bindingPath);
+            string normalizedTarget = NormalizeConfigPathKey(targetPath);
+            if (string.IsNullOrWhiteSpace(normalizedBinding) || string.IsNullOrWhiteSpace(normalizedTarget))
+                return false;
+
+            if (string.Equals(normalizedBinding, normalizedTarget, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (!targetIsGroup)
+                return false;
+
+            string? parent = System.IO.Path.GetDirectoryName(normalizedBinding);
+            return string.Equals(parent, normalizedTarget, StringComparison.OrdinalIgnoreCase);
+        }
+
         private void OnAppRulesTemplateSelectionChanged(object? sender, SelectionChangedEventArgs e)
         {
             if (isApplyingAppRulesEditor)
@@ -1930,13 +1980,15 @@ namespace InvisibleGorillaXRay.Android.Views
                 .Append(AppRuleTemplate.DefaultTemplateId)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            string normalizedCurrentConfigPath = NormalizeConfigPathKey(current.GetCurrentConfigPath());
+            string normalizedCurrentConfigPath = string.IsNullOrWhiteSpace(appRulesBindingOverride)
+                ? current.ResolveAppRuleBindingKey()
+                : current.ResolveAppRuleBindingKey(appRulesBindingOverride);
+            bool bindingIsGroup = !string.IsNullOrWhiteSpace(normalizedCurrentConfigPath)
+                && System.IO.Directory.Exists(normalizedCurrentConfigPath)
+                && System.IO.File.Exists(System.IO.Path.Combine(normalizedCurrentConfigPath, "info.dat"));
             List<AppRuleTemplateBinding> bindings = workingAppRuleBindings
                 .Select(binding => binding.Clone())
-                .Where(binding => !string.Equals(
-                    NormalizeConfigPathKey(binding.ConfigPath),
-                    normalizedCurrentConfigPath,
-                    StringComparison.OrdinalIgnoreCase))
+                .Where(binding => !BindingMatchesAppRuleTarget(binding.ConfigPath, normalizedCurrentConfigPath, bindingIsGroup))
                 .Where(binding => validTemplateIds.Contains(binding.TemplateId))
                 .ToList();
 
@@ -2064,7 +2116,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private void RenderSubscriptionBlockCards(StackPanel host, IReadOnlyList<Config> configs)
         {
             host.Children.Clear();
-            AddSubscriptionBanner(host, configs.Count);
+            AddSubscriptionBanner(host, configs);
             bool grouped = false;
             foreach (Config config in configs)
             {
@@ -2130,18 +2182,21 @@ namespace InvisibleGorillaXRay.Android.Views
                 : name;
         }
 
-        private void AddSubscriptionBanner(StackPanel host, int serverCount)
+        private void AddSubscriptionBanner(StackPanel host, IReadOnlyList<Config> configs)
         {
             if (selectedSubscription == null)
                 return;
 
             SubscriptionMeta meta = SubscriptionMeta.Load(selectedSubscription.Directory.FullName);
             string usage = meta.FormatUserInfo();
+            bool noticeOnly = SubscriptionServerEndpoint.IsDeviceLimitText(meta.Announce)
+                || (configs != null && configs.Any(config => SubscriptionServerEndpoint.IsDeviceLimitText(config.Name)));
             string text = string.Join("\n", new[]
             {
+                noticeOnly ? Localize("Lang.Android.Status.DeviceLimitNotice") : null,
                 usage,
                 meta.Announce,
-                serverCount == 0 ? null : meta.Notice
+                configs == null || configs.Count == 0 ? null : meta.Notice
             }.Where(line => !string.IsNullOrWhiteSpace(line)));
 
             if (string.IsNullOrWhiteSpace(text))
@@ -3727,7 +3782,10 @@ namespace InvisibleGorillaXRay.Android.Views
                 // A failed lookup must not leave a permanently stale "unknown location" in the
                 // widget. Retry a few times with a short backoff so a transient network hiccup
                 // (common right after start or right after the tunnel comes up) self-heals.
-                if (!IsOpenFluxProfileActive()
+                bool hardProbeFailure = string.Equals(info.Error, "SSL", StringComparison.OrdinalIgnoreCase)
+                    || (info.Error != null && info.Error.StartsWith("HTTP", StringComparison.OrdinalIgnoreCase));
+                if (!hardProbeFailure
+                    && !IsOpenFluxProfileActive()
                     && !string.Equals(info.Error, "Canceled", StringComparison.OrdinalIgnoreCase)
                     && connectionInfoFailureRetries < ConnectionInfoMaxFailureRetries)
                 {
@@ -3736,7 +3794,7 @@ namespace InvisibleGorillaXRay.Android.Views
                         || string.Equals(ConnectionInfoIpText.Text, Localize("Lang.ConnectionInfo.Unknown"), StringComparison.Ordinal))
                         ConnectionInfoIpText.Text = Localize("Lang.ConnectionInfo.Checking");
                     ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Checking");
-                    ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(4));
+                    ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(3));
                     return;
                 }
 
@@ -3909,6 +3967,7 @@ namespace InvisibleGorillaXRay.Android.Views
             CheckSubscriptionActionButton.IsEnabled = hasSelectedSubscription;
             RefreshSubscriptionActionButton.IsEnabled = hasSelectedSubscription;
             ShareSubscriptionActionButton.IsEnabled = hasSelectedSubscription;
+            SubscriptionAppRulesActionButton.IsEnabled = hasSelectedSubscription;
             DeleteSubscriptionActionButton.IsEnabled = hasSelectedSubscription;
         }
 
@@ -4343,25 +4402,43 @@ namespace InvisibleGorillaXRay.Android.Views
             }, DispatcherPriority.Background);
         }
 
-        private void TryFailoverSubscriptionBlock(int epoch)
+        private bool TryFailoverSubscriptionBlock(int epoch, out string blockedStatus)
         {
+            blockedStatus = null;
             string path = settingsHandler.UserSettings.GetCurrentConfigPath();
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-                return;
+                return true;
 
             string? directory = System.IO.Path.GetDirectoryName(path);
             if (string.IsNullOrWhiteSpace(directory) || !File.Exists(System.IO.Path.Combine(directory, "info.dat")))
-                return;
+                return true;
 
             List<Config> configs = configHandler.GetAllSubscriptionConfigs(directory);
-            if (configs.Count < 2)
-                return;
+            SubscriptionMeta groupMeta = SubscriptionMeta.Load(directory);
+            bool deviceLimited = SubscriptionServerEndpoint.IsDeviceLimitText(groupMeta.Announce)
+                || configs.Any(config => SubscriptionServerEndpoint.IsDeviceLimitText(config.Name));
+            List<Config> usable = deviceLimited
+                ? new List<Config>()
+                : configs.Where(config => !SubscriptionServerEndpoint.IsProviderNotice(config.Name)).ToList();
+            if (configs.Count > 0 && usable.Count == 0)
+            {
+                blockedStatus = "Lang.Android.Status.DeviceLimitNotice";
+                return false;
+            }
+
+            if (usable.Count < 2)
+            {
+                if (usable.Count == 1
+                    && !string.Equals(usable[0].Path, path, StringComparison.OrdinalIgnoreCase))
+                    settingsHandler.UpdateCurrentConfigPath(usable[0].Path);
+                return true;
+            }
 
             PostConnectionUi(epoch, () => SetStatus("Lang.Android.Status.CheckingBlocks"));
-            if (!TryPickFastestSubscriptionServer(configs, out Config fastest, out int latency))
+            if (!TryPickFastestSubscriptionServer(usable, out Config fastest, out int latency))
             {
                 PostConnectionUi(epoch, () => SetStatus("Lang.Android.Status.NoReachableServer"));
-                return;
+                return true;
             }
 
             if (!string.Equals(fastest.Path, path, StringComparison.OrdinalIgnoreCase))
@@ -4376,6 +4453,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 RefreshSubscriptions();
                 SetStatus(LocalizeFormat("Lang.Android.Status.FastestServer", fastestName, fastestLatency));
             });
+            return true;
         }
 
         private bool TrySwitchSubscriptionAfterProbeFailure()
@@ -4399,11 +4477,12 @@ namespace InvisibleGorillaXRay.Android.Views
             Config next = null;
             foreach (Config candidate in configs)
             {
-                if (!subscriptionFailoverTried.Contains(candidate.Path))
-                {
-                    next = candidate;
-                    break;
-                }
+                if (subscriptionFailoverTried.Contains(candidate.Path))
+                    continue;
+                if (SubscriptionServerEndpoint.IsProviderNotice(candidate.Name))
+                    continue;
+                next = candidate;
+                break;
             }
 
             if (next == null)
@@ -4441,6 +4520,8 @@ namespace InvisibleGorillaXRay.Android.Views
             int bestLatency = int.MaxValue;
             for (int index = 0; index < latencies.Length; index++)
             {
+                if (SubscriptionServerEndpoint.IsProviderNotice(configs[index].Name))
+                    continue;
                 if (latencies[index] < 0 || latencies[index] >= bestLatency)
                     continue;
 
@@ -4634,7 +4715,11 @@ namespace InvisibleGorillaXRay.Android.Views
                     return;
 
                 RefreshBuiltinTorBridgesIfSelected();
-                TryFailoverSubscriptionBlock(epoch);
+                if (!TryFailoverSubscriptionBlock(epoch, out string blockedStatus))
+                {
+                    failureMessage = blockedStatus;
+                    return;
+                }
 
                 if (OpenFluxProfilePaths.IsMarker(settingsHandler.UserSettings.GetCurrentConfigPath()))
                 {

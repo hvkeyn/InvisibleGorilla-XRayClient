@@ -98,6 +98,11 @@ namespace InvisibleGorillaXRay
 
         private void PopulateConnectionSelector(string preferredConfigPath)
         {
+            string preferredDirectory = System.IO.Path.GetDirectoryName(preferredConfigPath) ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(preferredDirectory)
+                && System.IO.File.Exists(System.IO.Path.Combine(preferredDirectory, "info.dat")))
+                preferredConfigPath = preferredDirectory;
+
             List<ConnectionComboItem> items = new();
 
             List<Config> configs = getAllConfigs?.Invoke() ?? new List<Config>();
@@ -195,10 +200,20 @@ namespace InvisibleGorillaXRay
             if (string.IsNullOrWhiteSpace(normalized))
                 return;
 
-            workingBindings.RemoveAll(binding => string.Equals(
-                NormalizeConfigPath(binding.ConfigPath),
-                normalized,
-                StringComparison.OrdinalIgnoreCase));
+            bool group = System.IO.Directory.Exists(normalized)
+                && System.IO.File.Exists(System.IO.Path.Combine(normalized, "info.dat"));
+            workingBindings.RemoveAll(binding =>
+            {
+                string bindingPath = NormalizeConfigPath(binding.ConfigPath);
+                if (string.Equals(bindingPath, normalized, StringComparison.OrdinalIgnoreCase))
+                    return true;
+                if (!group)
+                    return false;
+                return string.Equals(
+                    System.IO.Path.GetDirectoryName(bindingPath),
+                    normalized,
+                    StringComparison.OrdinalIgnoreCase);
+            });
 
             workingBindings.Add(new AppRuleTemplateBinding(
                 configPath: normalized,

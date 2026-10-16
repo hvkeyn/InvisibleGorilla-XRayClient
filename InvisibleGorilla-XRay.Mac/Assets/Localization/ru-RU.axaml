@@ -466,6 +466,7 @@
     <x:String x:Key="Lang.Android.Status.RunningTunnel">Android VPN/TUN запущен...</x:String>
     <x:String x:Key="Lang.Android.Status.EncryptedSubscription">Подписка зашифрована, ключ провайдера недоступен.</x:String>
     <x:String x:Key="Lang.Android.Status.NoRealServers">Провайдер прислал сообщение, а не рабочие серверы.</x:String>
+    <x:String x:Key="Lang.Android.Status.DeviceLimitNotice">Провайдер прислал ограничение устройств, а не список VPN. Освободите слот и обновите подписку.</x:String>
     <x:String x:Key="Lang.Android.Status.BlockCount">Серверы в блоке: {0}</x:String>
     <x:String x:Key="Lang.Android.Status.CheckingBlocks">Проверяю серверы в блоке...</x:String>
     <x:String x:Key="Lang.Android.Status.CheckingProxy">Проверяю через прокси: {0}</x:String>

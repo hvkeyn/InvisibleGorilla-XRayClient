@@ -467,6 +467,7 @@
     <x:String x:Key="Lang.Android.Status.RunningTunnel">Running Android VPN/TUN...</x:String>
     <x:String x:Key="Lang.Android.Status.EncryptedSubscription">This subscription is encrypted. The provider key is not available.</x:String>
     <x:String x:Key="Lang.Android.Status.NoRealServers">The provider sent a notice, not working servers.</x:String>
+    <x:String x:Key="Lang.Android.Status.DeviceLimitNotice">The provider sent a device limit, not the VPN list. Free a slot and refresh the subscription.</x:String>
     <x:String x:Key="Lang.Android.Status.BlockCount">Servers in this block: {0}</x:String>
     <x:String x:Key="Lang.Android.Status.CheckingBlocks">Checking servers in the block...</x:String>
     <x:String x:Key="Lang.Android.Status.CheckingProxy">Checking through the proxy: {0}</x:String>

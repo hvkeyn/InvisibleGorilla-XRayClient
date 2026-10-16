@@ -52,6 +52,11 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.58
+
+- **App exceptions belong to the whole subscription.** The phone and the desktop attach the same application list to every server in the group, and a live switch keeps that list.
+- **A device-limit notice is not started as a tunnel.** The address check reports the provider's notice instead of staying on Unknown.
+
 ## What's new in v3.6.57
 
 - **The address check no longer stops on an SSL error.** The probe speaks HTTP/1.1 through the local SOCKS listener, then tries another address service if the first one fails.

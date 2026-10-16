@@ -45,7 +45,7 @@ namespace InvisibleGorillaXRay
         private bool? lastTunnelCheckOk;
         private int consecutiveTunnelFailures;
         private int connectionInfoFailureRetries;
-        private const int ConnectionInfoMaxFailureRetries = 4;
+        private const int ConnectionInfoMaxFailureRetries = 1;
         private DateTime goidaSwitchGraceUntil = DateTime.MinValue;
         private DateTime connectionCheckGraceUntil = DateTime.MinValue;
         private readonly Queue<string> homeActivityLines = new Queue<string>();
@@ -173,8 +173,9 @@ namespace InvisibleGorillaXRay
                         Dispatcher.BeginInvoke(new Action(delegate {
                             if (!RunAlive())
                                 return;
-                            HandleError();
-                            ShowStopStatus();
+                        NoteHome(configStatus.Content?.ToString());
+                        HandleError();
+                        ShowStopStatus();
                         }));
 
                         return;
@@ -1130,7 +1131,10 @@ namespace InvisibleGorillaXRay
             {
                 // A failed lookup (SSL timeout, ipinfo down, etc.) is not proof the tunnel
                 // is broken. Retry with backoff; never tear down a live session for this.
-                if (connected
+                bool hardProbeFailure = string.Equals(info.Error, "SSL", StringComparison.OrdinalIgnoreCase)
+                    || (info.Error != null && info.Error.StartsWith("HTTP", StringComparison.OrdinalIgnoreCase));
+                if (!hardProbeFailure
+                    && connected
                     && !string.Equals(info.Error, "canceled", StringComparison.OrdinalIgnoreCase)
                     && connectionInfoFailureRetries < ConnectionInfoMaxFailureRetries)
                 {

@@ -61,13 +61,13 @@ namespace InvisibleGorillaXRay.Services
     {
         private static readonly string[] LookupEndpoints =
         {
+            "http://ip-api.com/json/?fields=status,country,countryCode,city,isp,query",
+            "https://1.1.1.1/cdn-cgi/trace",
+            "https://ipwho.is/",
             "https://ipinfo.io/json",
             "https://ifconfig.co/json",
             "https://api.ipify.org?format=json",
-            "https://ipwho.is/",
-            "https://ipapi.co/json/",
-            "https://1.1.1.1/cdn-cgi/trace",
-            "http://ip-api.com/json/?fields=status,country,countryCode,city,isp,query"
+            "https://ipapi.co/json/"
         };
 
         private const string UserAgent = "InvisibleGorilla-XRay";

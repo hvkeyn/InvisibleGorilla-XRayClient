@@ -58,7 +58,7 @@ namespace InvisibleGorillaXRay.Factories
                 isNeedToAutoConnect: IsNeedToAutoConnect,
                 getConfig: configHandler.GetCurrentConfig,
                 getUserSettings: () => settingsHandler.UserSettings,
-                loadConfig: core.LoadConfig,
+                loadConfig: LoadConfigUnlessDeviceLimited,
                 enableMode: core.EnableMode,
                 checkForUpdate: updateHandler.CheckForUpdate,
                 checkForBroadcast: broadcastHandler.CheckForBroadcast,
@@ -99,6 +99,25 @@ namespace InvisibleGorillaXRay.Factories
                 return goidaHandler.Manager.ReportTunnelFailure();
             }
 
+            Status LoadConfigUnlessDeviceLimited()
+            {
+                string path = settingsHandler.UserSettings.GetCurrentConfigPath();
+                string directory = System.IO.Path.GetDirectoryName(path);
+                if (!string.IsNullOrWhiteSpace(directory))
+                {
+                    SubscriptionMeta meta = SubscriptionMeta.Load(directory);
+                    if (SubscriptionServerEndpoint.IsDeviceLimitText(meta.Announce))
+                    {
+                        return new Status(
+                            Code.ERROR,
+                            SubCode.CANT_CONNECT,
+                            LocalizationService.GetTerm("Lang.ConnectionInfo.DeviceLimit"));
+                    }
+                }
+
+                return core.LoadConfig();
+            }
+
             bool TrySwitchLiveServer()
             {
                 string path = settingsHandler.UserSettings.GetCurrentConfigPath();
@@ -121,11 +140,12 @@ namespace InvisibleGorillaXRay.Factories
                 Config next = null;
                 foreach (Config candidate in configs)
                 {
-                    if (!skippedLiveServers.Contains(candidate.Path))
-                    {
-                        next = candidate;
-                        break;
-                    }
+                    if (skippedLiveServers.Contains(candidate.Path))
+                        continue;
+                    if (SubscriptionServerEndpoint.IsProviderNotice(candidate.Name))
+                        continue;
+                    next = candidate;
+                    break;
                 }
 
                 if (next == null)
@@ -506,7 +526,12 @@ namespace InvisibleGorillaXRay.Factories
                         if (string.IsNullOrWhiteSpace(groupPath))
                             continue;
 
-                        configs.AddRange(configHandler.GetAllSubscriptionConfigs(groupPath));
+                        configs.Add(new Config(
+                            path: groupPath,
+                            name: group.Directory.Name,
+                            type: ConfigType.URL,
+                            group: GroupType.SUBSCRIPTION,
+                            updateTime: string.Empty));
                     }
                 }
                 catch
