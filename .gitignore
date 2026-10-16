@@ -32,6 +32,7 @@
 
 # User runtime data (must never ship in release archives)
 /Settings.json
+/subscription-hwid.txt
 /Configs/
 /Logs/
 /Goida/
@@ -100,3 +101,7 @@ InvisibleGorilla-XRay-Windows-*.zip
 
 # Orbot analysis workspace (APK, decompiled sources, tools) — see docs/ORBOT-VS-INVISIBLEGORILLA.md
 /.orbot-analysis/
+
+# Happ analysis workspace (installer, APK, decompiled sources) — see .happ-analysis/HAPP-REPORT.md
+/.happ-analysis/
+/happ-win-analysis/

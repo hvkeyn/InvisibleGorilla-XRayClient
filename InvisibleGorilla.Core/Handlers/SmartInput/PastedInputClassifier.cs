@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 namespace InvisibleGorillaXRay.Handlers.SmartInput
 {
     using Models;
+    using Utilities;
     using Values;
 
     /// <summary>
@@ -88,6 +89,29 @@ namespace InvisibleGorillaXRay.Handlers.SmartInput
                 if (line.Length == 0)
                     continue;
 
+                string prepared = ImportLink.Unwrap(line);
+                if (prepared.IndexOf('\n') >= 0 || prepared.IndexOf('\r') >= 0)
+                {
+                    foreach (string part in prepared.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n'))
+                    {
+                        string piece = StripBridgePrefix(part.Trim());
+                        if (piece.Length > 0)
+                            ClassifyPreparedLine(result, piece);
+                    }
+                    continue;
+                }
+
+                ClassifyPreparedLine(result, prepared);
+            }
+
+            if (result.HasBridges && result.DetectedBridgeType == BridgeType.NONE)
+                result.DetectedBridgeType = BridgeType.OBFS4;
+
+            return result;
+        }
+
+        private static void ClassifyPreparedLine(PastedInputResult result, string line)
+        {
                 // invxray:// deep links exported by the app itself (config / config-data / subscription).
                 if (TryNormalizeDeepLink(line, out string deepPayload, out PastedItemKind deepKind))
                 {
@@ -95,7 +119,7 @@ namespace InvisibleGorillaXRay.Handlers.SmartInput
                         result.SubscriptionLinks.Add(deepPayload);
                     else
                         result.ServerLinks.Add(deepPayload);
-                    continue;
+                    return;
                 }
 
                 switch (ClassifyLine(line, out BridgeType bridgeType))
@@ -115,12 +139,6 @@ namespace InvisibleGorillaXRay.Handlers.SmartInput
                         result.Unknown.Add(line);
                         break;
                 }
-            }
-
-            if (result.HasBridges && result.DetectedBridgeType == BridgeType.NONE)
-                result.DetectedBridgeType = BridgeType.OBFS4;
-
-            return result;
         }
 
         public static PastedItemKind ClassifyLine(string line) => ClassifyLine(line, out _);

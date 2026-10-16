@@ -69,7 +69,7 @@ namespace InvisibleGorillaXRay.Android.Handlers.DeepLinks
 
         internal static bool DispatchExternalValue(string? value)
         {
-            string normalizedValue = value?.Trim() ?? string.Empty;
+            string normalizedValue = InvisibleGorillaXRay.Utilities.ImportLink.Unwrap(value?.Trim() ?? string.Empty);
             if (string.IsNullOrWhiteSpace(normalizedValue))
                 return false;
 

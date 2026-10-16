@@ -48,6 +48,8 @@ namespace InvisibleGorillaXRay.Factories
             SettingsHandler settingsHandler = handlersManager.GetHandler<SettingsHandler>();
             LinkHandler linkHandler = handlersManager.GetHandler<LinkHandler>();
             GoidaProfileHandler goidaHandler = handlersManager.GetHandler<GoidaProfileHandler>();
+            System.Collections.Generic.HashSet<string> skippedLiveServers =
+                new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             MainWindow mainWindow = new MainWindow();
             mainWindow.Setup(
@@ -76,6 +78,7 @@ namespace InvisibleGorillaXRay.Factories
                 onCustomLinkClick: linkHandler.OpenCustomLink,
                 getGoidaPresentation: BuildGoidaPresentation,
                 onTunnelBroken: OnTunnelBroken,
+                trySwitchLiveServer: TrySwitchLiveServer,
                 onSaveOpenFlux: SaveOpenFlux,
                 onApplyOpenFluxUrl: ApplyOpenFluxUrl,
                 getOpenFluxManager: core.GetOpenFluxManager,
@@ -94,6 +97,47 @@ namespace InvisibleGorillaXRay.Factories
                     return false;
 
                 return goidaHandler.Manager.ReportTunnelFailure();
+            }
+
+            bool TrySwitchLiveServer()
+            {
+                string path = settingsHandler.UserSettings.GetCurrentConfigPath();
+                if (string.IsNullOrWhiteSpace(path)
+                    || GoidaProfilePaths.IsMarker(path)
+                    || OpenFluxProfilePaths.IsMarker(path)
+                    || TorProfilePaths.IsMarker(path))
+                    return false;
+
+                string directory = System.IO.Path.GetDirectoryName(path);
+                if (string.IsNullOrWhiteSpace(directory)
+                    || !System.IO.File.Exists(System.IO.Path.Combine(directory, "info.dat")))
+                    return false;
+
+                System.Collections.Generic.List<Config> configs = configHandler.GetAllSubscriptionConfigs(directory);
+                if (configs == null || configs.Count < 2)
+                    return false;
+
+                skippedLiveServers.Add(path);
+                Config next = null;
+                foreach (Config candidate in configs)
+                {
+                    if (!skippedLiveServers.Contains(candidate.Path))
+                    {
+                        next = candidate;
+                        break;
+                    }
+                }
+
+                if (next == null)
+                {
+                    skippedLiveServers.Clear();
+                    return false;
+                }
+
+                settingsHandler.UpdateCurrentConfigPath(next.Path);
+                mainWindow.UpdateUI();
+                mainWindow.TryRerun();
+                return true;
             }
 
             bool IsNeedToShowPolicyWindow() => settingsHandler.UserSettings.GetClientId() == "";

@@ -1110,14 +1110,27 @@
                                     BorderBrush="{StaticResource SurfaceBright}"
                                     BorderThickness="1"
                                     Background="{StaticResource SurfaceLight}">
-                                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
                                     <ComboBox x:Name="SubscriptionGroupComboBox"
                                               Grid.Column="0"
                                               Margin="0,0,8,0"
                                               SelectionChanged="OnSubscriptionSelectionChanged" />
 
-                                    <Button x:Name="RefreshSubscriptionButton"
+                                    <Button x:Name="CheckSubscriptionButton"
                                             Grid.Column="1"
+                                            Width="30"
+                                            Height="30"
+                                            Theme="{StaticResource IconActionButton}"
+                                            Click="OnCheckSubscriptionClick">
+                                        <Rectangle Fill="{StaticResource Icon.Connection}"
+                                                   Width="15"
+                                                   Height="11"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" />
+                                    </Button>
+
+                                    <Button x:Name="RefreshSubscriptionButton"
+                                            Grid.Column="2"
                                             Width="30"
                                             Height="30"
                                             Theme="{StaticResource IconActionButton}"
@@ -1130,7 +1143,7 @@
                                     </Button>
 
                                     <Button x:Name="ShareSubscriptionButton"
-                                            Grid.Column="2"
+                                            Grid.Column="3"
                                             Width="30"
                                             Height="30"
                                             Margin="6,0,0,0"
@@ -1144,7 +1157,7 @@
                                     </Button>
 
                                     <Button x:Name="DeleteSubscriptionButton"
-                                            Grid.Column="3"
+                                            Grid.Column="4"
                                             Width="30"
                                             Height="30"
                                             Margin="6,0,0,0"

@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using Android.OS;
 using InvisibleGorillaXRay.Handlers;
 using InvisibleGorillaXRay.Handlers.DeepLinks;
 using InvisibleGorillaXRay.Handlers.Settings.Startup;
@@ -27,6 +28,11 @@ namespace InvisibleGorillaXRay.Android.Managers
 
         public void Register()
         {
+            InvisibleGorillaXRay.Utilities.SubscriptionClientProfile.Configure(
+                "Android",
+                Build.VERSION.Release ?? "14",
+                string.IsNullOrWhiteSpace(Build.Model) ? "Android" : Build.Model);
+
             HandlersManager = new HandlersManager();
             LocalizationHandler = new AndroidLocalizationHandler();
 

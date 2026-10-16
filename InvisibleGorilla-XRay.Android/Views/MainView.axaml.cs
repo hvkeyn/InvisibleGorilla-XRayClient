@@ -85,6 +85,9 @@ namespace InvisibleGorillaXRay.Android.Views
         private List<Subscription> subscriptionGroups = new();
         private List<AndroidInstalledAppInfo> discoveredAndroidApps = new();
         private Subscription? selectedSubscription;
+        private DateTime subscriptionProbeUtc = DateTime.MinValue;
+        private int subscriptionFailoverSteps;
+        private readonly HashSet<string> subscriptionFailoverTried = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, int> configAvailability = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, CheckBox> appRuleToggles = new(StringComparer.OrdinalIgnoreCase);
         private readonly List<AppRuleTemplate> workingAppRuleTemplates = new();
@@ -208,6 +211,7 @@ namespace InvisibleGorillaXRay.Android.Views
             TrySetupStep("ApplyTorEditorPanel", ApplyTorEditorPanel);
 
             InitializeControls();
+            TrySetupStep("SubscriptionMaintenance", StartSubscriptionMaintenance);
             ApplyLocalizedText();
             AndroidDeepLinkDispatcher.Register(HandlePendingImport);
             AndroidDeepLinkDispatcher.OnDebugRunRequested = () =>
@@ -330,6 +334,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private Button SaveRawConfigActionButton => GetRequiredControl<Button>("SaveRawConfigButton");
         private TextBlock AddSubscriptionTitleText => GetRequiredControl<TextBlock>("AddSubscriptionTitleTextBlock");
         private TextBlock AddSubscriptionDescriptionText => GetRequiredControl<TextBlock>("AddSubscriptionDescriptionTextBlock");
+        private Button CheckSubscriptionActionButton => GetRequiredControl<Button>("CheckSubscriptionButton");
         private Button RefreshSubscriptionActionButton => GetRequiredControl<Button>("RefreshSubscriptionButton");
         private Button ShareSubscriptionActionButton => GetRequiredControl<Button>("ShareSubscriptionButton");
         private Button DeleteSubscriptionActionButton => GetRequiredControl<Button>("DeleteSubscriptionButton");
@@ -1998,6 +2003,7 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void RefreshConfigs()
         {
+            SubscriptionJanitor.Clean(InvisibleGorillaXRay.Values.Directory.CONFIGS);
             generalConfigs = configHandler.GetAllGeneralConfigs();
 
             foreach (Config config in generalConfigs)
@@ -2022,6 +2028,9 @@ namespace InvisibleGorillaXRay.Android.Views
                 selectedIndex = subscriptionGroups.FindIndex(group =>
                     string.Equals(group.Directory.FullName, previousSelection, StringComparison.OrdinalIgnoreCase));
             }
+
+            if (selectedIndex < 0 && subscriptionGroups.Count > 0)
+                selectedIndex = 0;
 
             SubscriptionGroupSelector.SelectedIndex = selectedIndex;
             suppressSubscriptionSelectionChanged = false;
@@ -2048,8 +2057,150 @@ namespace InvisibleGorillaXRay.Android.Views
             foreach (Config config in subscriptionConfigs)
                 ApplyCachedAvailability(config);
 
-            RenderConfigCards(SubscriptionConfigsItemsHost, subscriptionConfigs);
+            RenderSubscriptionBlockCards(SubscriptionConfigsItemsHost, subscriptionConfigs);
             UpdateSubscriptionEmptyState();
+        }
+
+        private void RenderSubscriptionBlockCards(StackPanel host, IReadOnlyList<Config> configs)
+        {
+            host.Children.Clear();
+            AddSubscriptionBanner(host, configs.Count);
+            bool grouped = false;
+            foreach (Config config in configs)
+            {
+                if (BlockTitle(config.Name) != null)
+                {
+                    grouped = true;
+                    break;
+                }
+            }
+
+            if (!grouped && configs.Count > 1)
+            {
+                host.Children.Add(new TextBlock
+                {
+                    Text = LocalizeFormat("Lang.Android.Status.BlockCount", configs.Count),
+                    FontSize = 15,
+                    FontWeight = FontWeight.SemiBold,
+                    Margin = new Thickness(4, 4, 0, 0)
+                });
+            }
+
+            string? lastBlock = null;
+            foreach (Config config in configs)
+            {
+                string? block = BlockTitle(config.Name);
+                if (grouped && !string.Equals(block, lastBlock, StringComparison.Ordinal))
+                {
+                    lastBlock = block;
+                    host.Children.Add(new TextBlock
+                    {
+                        Text = string.IsNullOrWhiteSpace(block)
+                            ? LocalizeFormat("Lang.Android.Status.BlockCount", configs.Count)
+                            : block,
+                        FontSize = 15,
+                        FontWeight = FontWeight.SemiBold,
+                        Margin = new Thickness(4, 8, 0, 0)
+                    });
+                }
+
+                host.Children.Add(CreateConfigCard(config));
+            }
+        }
+
+        private static string? BlockTitle(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return null;
+
+            int separator = name.IndexOf(" · ", StringComparison.Ordinal);
+            if (separator <= 0)
+                return null;
+
+            return name.Substring(0, separator);
+        }
+
+        private static string DisplayConfigName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return name ?? string.Empty;
+
+            return name.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+                ? name.Substring(0, name.Length - 5)
+                : name;
+        }
+
+        private void AddSubscriptionBanner(StackPanel host, int serverCount)
+        {
+            if (selectedSubscription == null)
+                return;
+
+            SubscriptionMeta meta = SubscriptionMeta.Load(selectedSubscription.Directory.FullName);
+            string usage = meta.FormatUserInfo();
+            string text = string.Join("\n", new[]
+            {
+                usage,
+                meta.Announce,
+                serverCount == 0 ? null : meta.Notice
+            }.Where(line => !string.IsNullOrWhiteSpace(line)));
+
+            if (string.IsNullOrWhiteSpace(text))
+                return;
+
+            host.Children.Add(new TextBlock
+            {
+                Text = text,
+                FontSize = 13,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = GetBrushResource("TextMuted", Brushes.Gray),
+                Margin = new Thickness(4, 0, 4, 4)
+            });
+        }
+
+        private void StartSubscriptionMaintenance()
+        {
+            DispatcherTimer timer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(15) };
+            timer.Tick += (_, _) => _ = Task.Run(RefreshDueSubscriptions);
+            timer.Start();
+            _ = Task.Run(RefreshDueSubscriptions);
+        }
+
+        private void RefreshDueSubscriptions()
+        {
+            if (isRunWorkerBusy || configHandler == null || templateHandler == null)
+                return;
+
+            bool changed = false;
+            foreach (Subscription group in configHandler.GetAllGroups().ToList())
+            {
+                SubscriptionMeta meta = SubscriptionMeta.Load(group.Directory.FullName);
+                if (meta.UpdateIntervalHours <= 0)
+                    continue;
+
+                string infoPath = System.IO.Path.Combine(group.Directory.FullName, "info.dat");
+                if (!System.IO.File.Exists(infoPath))
+                    continue;
+
+                if ((DateTime.UtcNow - System.IO.File.GetLastWriteTimeUtc(infoPath)).TotalHours < meta.UpdateIntervalHours)
+                    continue;
+
+                SubscriptionFetchContext.Previous = meta;
+                Status status = templateHandler.ConvertLinkToSubscription(group.Directory.Name, group.Url);
+                if (status.Code == Code.ERROR || status.Content is not string[] payload || payload.Length < 2)
+                    continue;
+
+                configHandler.CreateSubscription(payload[0], group.Url, payload[1]);
+                changed = true;
+            }
+
+            if (!changed)
+                return;
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                RefreshSubscriptions();
+                RefreshConfigs();
+            });
         }
 
         private void UpdateSubscriptionEmptyState()
@@ -2061,7 +2212,18 @@ namespace InvisibleGorillaXRay.Android.Views
                 return;
             }
 
-            NoSubscriptionConfigsText.Text = Localize("Lang.Android.Server.NoSubscriptionConfigs");
+            if (selectedSubscription == null)
+            {
+                NoSubscriptionConfigsText.IsVisible = false;
+                return;
+            }
+
+            SubscriptionMeta notice = SubscriptionMeta.Load(selectedSubscription.Directory.FullName);
+            NoSubscriptionConfigsText.Text = !string.IsNullOrWhiteSpace(notice?.Notice)
+                ? notice.Notice
+                : !string.IsNullOrWhiteSpace(notice?.Announce)
+                    ? notice.Announce
+                    : Localize("Lang.Android.Status.NoRealServers");
             NoSubscriptionConfigsText.IsVisible = subscriptionConfigs.Count == 0;
         }
 
@@ -2146,15 +2308,22 @@ namespace InvisibleGorillaXRay.Android.Views
             };
             textColumn.Children.Add(new TextBlock
             {
-                Text = config.Name,
+                Text = DisplayConfigName(config.Name),
                 Foreground = Brushes.White,
                 FontSize = 14,
                 FontWeight = FontWeight.Normal,
+                TextWrapping = TextWrapping.Wrap,
+                MaxHeight = 40,
                 TextTrimming = TextTrimming.CharacterEllipsis
             });
+            string protocolLine = config.Group == GroupType.SUBSCRIPTION
+                ? SubscriptionProtocolLine(config)
+                : null;
             textColumn.Children.Add(new TextBlock
             {
-                Text = torProfile != null ? BuildTorProfileSubtitle(torProfile) : config.UpdateTime,
+                Text = torProfile != null
+                    ? BuildTorProfileSubtitle(torProfile)
+                    : protocolLine ?? config.UpdateTime,
                 Foreground = torProfile != null
                     ? (IBrush)SelectedMarkerBrush
                     : GetBrushResource("TextMuted", Brushes.Gray),
@@ -2219,6 +2388,8 @@ namespace InvisibleGorillaXRay.Android.Views
                         _ = CheckGoidaProfileAsync();
                     else if (isOpenFluxMarker)
                         _ = CheckOpenFluxProfileAsync();
+                    else if (config.Group == GroupType.SUBSCRIPTION)
+                        _ = CheckSubscriptionServerAsync(config);
                     else
                         _ = CheckConfigAsync(config);
                 }
@@ -2235,9 +2406,8 @@ namespace InvisibleGorillaXRay.Android.Views
             root.Children.Add(rightColumn);
             border.Child = root;
 
-            border.PointerPressed += (_, e) =>
+            void SelectCard(Control? sourceControl)
             {
-                Control? sourceControl = e.Source as Control;
                 if (sourceControl is Button || sourceControl?.FindAncestorOfType<Button>() != null)
                     return;
 
@@ -2252,6 +2422,13 @@ namespace InvisibleGorillaXRay.Android.Views
                     DiagnosticLog.WriteException("MainView.SelectConfigCard", ex);
                     SetStatus(ex.Message);
                 }
+            }
+
+            border.PointerPressed += (_, e) => SelectCard(e.Source as Control);
+            border.Tapped += (_, e) =>
+            {
+                SelectCard(e.Source as Control);
+                e.Handled = true;
             };
 
             return border;
@@ -2553,8 +2730,8 @@ namespace InvisibleGorillaXRay.Android.Views
             else
             {
                 currentConfigText = currentConfig.Group == GroupType.SUBSCRIPTION
-                    ? $"{Localize("Lang.Window.Server.Subscriptions")} / {currentConfig.Name}"
-                    : currentConfig.Name;
+                    ? $"{Localize("Lang.Window.Server.Subscriptions")} / {DisplayConfigName(currentConfig.Name)}"
+                    : DisplayConfigName(currentConfig.Name);
             }
 
             CurrentConfigNameText.Text = currentConfigText;
@@ -3563,6 +3740,9 @@ namespace InvisibleGorillaXRay.Android.Views
                     return;
                 }
 
+                if (isConnectionInfoConnected && TrySwitchSubscriptionAfterProbeFailure())
+                    return;
+
                 ConnectionInfoDotControl.Background = AvailabilityErrorBrush;
                 ConnectionInfoIpText.Text = Localize("Lang.ConnectionInfo.Unknown");
                 ConnectionInfoLocationText.Text = string.Empty;
@@ -3574,6 +3754,8 @@ namespace InvisibleGorillaXRay.Android.Views
             }
 
             connectionInfoFailureRetries = 0;
+            subscriptionFailoverSteps = 0;
+            subscriptionFailoverTried.Clear();
             ApplyConnectionModeLine();
 
             if (string.IsNullOrWhiteSpace(baselineIp) && !isConnectionInfoConnected)
@@ -3724,6 +3906,7 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             bool hasSelectedSubscription = selectedSubscription != null;
             SubscriptionGroupSelector.IsEnabled = subscriptionGroups.Count > 0;
+            CheckSubscriptionActionButton.IsEnabled = hasSelectedSubscription;
             RefreshSubscriptionActionButton.IsEnabled = hasSelectedSubscription;
             ShareSubscriptionActionButton.IsEnabled = hasSelectedSubscription;
             DeleteSubscriptionActionButton.IsEnabled = hasSelectedSubscription;
@@ -3769,7 +3952,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     : ServerTab.Configurations);
 
                 if (showStatus)
-                    SetStatus(LocalizeFormat("Lang.Android.Status.SelectedConfig", selectedConfig.Name));
+                    SetStatus(LocalizeFormat("Lang.Android.Status.SelectedConfig", DisplayConfigName(selectedConfig.Name)));
 
                 return true;
             }
@@ -4160,6 +4343,225 @@ namespace InvisibleGorillaXRay.Android.Views
             }, DispatcherPriority.Background);
         }
 
+        private void TryFailoverSubscriptionBlock(int epoch)
+        {
+            string path = settingsHandler.UserSettings.GetCurrentConfigPath();
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+                return;
+
+            string? directory = System.IO.Path.GetDirectoryName(path);
+            if (string.IsNullOrWhiteSpace(directory) || !File.Exists(System.IO.Path.Combine(directory, "info.dat")))
+                return;
+
+            List<Config> configs = configHandler.GetAllSubscriptionConfigs(directory);
+            if (configs.Count < 2)
+                return;
+
+            PostConnectionUi(epoch, () => SetStatus("Lang.Android.Status.CheckingBlocks"));
+            if (!TryPickFastestSubscriptionServer(configs, out Config fastest, out int latency))
+            {
+                PostConnectionUi(epoch, () => SetStatus("Lang.Android.Status.NoReachableServer"));
+                return;
+            }
+
+            if (!string.Equals(fastest.Path, path, StringComparison.OrdinalIgnoreCase))
+                settingsHandler.UpdateCurrentConfigPath(fastest.Path);
+
+            string fastestName = DisplayConfigName(fastest.Name);
+            int fastestLatency = latency;
+            PostConnectionUi(epoch, () =>
+            {
+                UpdateCurrentConfigSummary();
+                RefreshConfigs();
+                RefreshSubscriptions();
+                SetStatus(LocalizeFormat("Lang.Android.Status.FastestServer", fastestName, fastestLatency));
+            });
+        }
+
+        private bool TrySwitchSubscriptionAfterProbeFailure()
+        {
+            if (subscriptionFailoverSteps >= 4)
+                return false;
+
+            if (IsOpenFluxProfileActive() || IsCurrentConfigTor() || GoidaProfilePaths.IsMarker(settingsHandler.UserSettings.GetCurrentConfigPath()))
+                return false;
+
+            string path = settingsHandler.UserSettings.GetCurrentConfigPath();
+            string directory = System.IO.Path.GetDirectoryName(path);
+            if (string.IsNullOrWhiteSpace(directory) || !System.IO.File.Exists(System.IO.Path.Combine(directory, "info.dat")))
+                return false;
+
+            List<Config> configs = configHandler.GetAllSubscriptionConfigs(directory);
+            if (configs.Count < 2)
+                return false;
+
+            subscriptionFailoverTried.Add(path);
+            Config next = null;
+            foreach (Config candidate in configs)
+            {
+                if (!subscriptionFailoverTried.Contains(candidate.Path))
+                {
+                    next = candidate;
+                    break;
+                }
+            }
+
+            if (next == null)
+                return false;
+
+            subscriptionFailoverSteps++;
+            settingsHandler.UpdateCurrentConfigPath(next.Path);
+            SetStatus(LocalizeFormat("Lang.Android.Status.SwitchedServer", DisplayConfigName(next.Name)));
+            OnRunClick(null, new RoutedEventArgs());
+            return true;
+        }
+
+        private bool TryPickFastestSubscriptionServer(IReadOnlyList<Config> configs, out Config fastest, out int latency)
+        {
+            fastest = null;
+            latency = InvisibleGorillaXRay.Values.Availability.ERROR;
+            if (configs == null || configs.Count == 0)
+                return false;
+
+            bool fresh = subscriptionProbeUtc != DateTime.MinValue
+                && (DateTime.UtcNow - subscriptionProbeUtc).TotalMinutes < 3
+                && configs.All(config => configAvailability.ContainsKey(config.Path));
+
+            int[] latencies = fresh
+                ? configs.Select(config => configAvailability[config.Path]).ToArray()
+                : SubscriptionServerEndpoint.ProbeFiles(configs.Select(config => config.Path).ToList());
+
+            for (int index = 0; index < configs.Count; index++)
+                SetConfigAvailability(configs[index].Path, latencies[index]);
+
+            if (!fresh)
+                subscriptionProbeUtc = DateTime.UtcNow;
+
+            int best = -1;
+            int bestLatency = int.MaxValue;
+            for (int index = 0; index < latencies.Length; index++)
+            {
+                if (latencies[index] < 0 || latencies[index] >= bestLatency)
+                    continue;
+
+                best = index;
+                bestLatency = latencies[index];
+            }
+
+            if (best < 0)
+                return false;
+
+            fastest = configs[best];
+            latency = bestLatency;
+            return true;
+        }
+
+        private async void OnCheckSubscriptionClick(object? sender, RoutedEventArgs e)
+        {
+            if (selectedSubscription == null)
+            {
+                SetStatus("Lang.Android.Status.SelectSubscriptionFirst");
+                return;
+            }
+
+            if (AndroidVpnServiceController.IsRunning || isRunWorkerBusy)
+            {
+                SetStatus("Lang.Android.Status.CheckWhileConnected");
+                return;
+            }
+
+            if (isCheckWorkerBusy)
+                return;
+
+            List<Config> configs = configHandler.GetAllSubscriptionConfigs(selectedSubscription.Directory.FullName);
+            if (configs.Count == 0)
+            {
+                SetStatus("Lang.Android.Status.NoRealServers");
+                return;
+            }
+
+            isCheckWorkerBusy = true;
+            CheckSubscriptionActionButton.IsEnabled = false;
+            SetStatus("Lang.Android.Status.CheckingBlocks");
+            try
+            {
+                int[] latencies = await Task.Run(() =>
+                    SubscriptionServerEndpoint.ProbeFiles(configs.Select(config => config.Path).ToList()));
+                for (int index = 0; index < configs.Count; index++)
+                    SetConfigAvailability(configs[index].Path, latencies[index]);
+
+                subscriptionProbeUtc = DateTime.UtcNow;
+                RefreshSubscriptions();
+
+                if (TryPickFastestSubscriptionServer(configs, out Config fastest, out int latency))
+                {
+                    TrySelectConfigByPath(fastest.Path, showStatus: false);
+                    SetStatus(LocalizeFormat(
+                        "Lang.Android.Status.FastestServer",
+                        DisplayConfigName(fastest.Name),
+                        latency));
+                }
+                else
+                {
+                    RefreshSubscriptions();
+                    SetStatus("Lang.Android.Status.NoReachableServer");
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.CheckSubscription", ex);
+                SetStatus(MapExceptionToStatus(ex));
+            }
+            finally
+            {
+                isCheckWorkerBusy = false;
+                UpdateSubscriptionActionAvailability();
+            }
+        }
+
+        private async Task CheckSubscriptionServerAsync(Config config)
+        {
+            if (isCheckWorkerBusy || config == null)
+                return;
+
+            isCheckWorkerBusy = true;
+            SetStatus(LocalizeFormat("Lang.Android.Status.CheckingConfig", DisplayConfigName(config.Name)));
+            try
+            {
+                int latency = await Task.Run(() => SubscriptionServerEndpoint.ProbeFile(config.Path));
+                SetConfigAvailability(config.Path, latency);
+                subscriptionProbeUtc = DateTime.MinValue;
+                RefreshSubscriptions();
+                SetStatus(latency >= 0
+                    ? LocalizeFormat("Lang.Android.Status.CheckedConfigSuccess", DisplayConfigName(config.Name), latency)
+                    : LocalizeFormat("Lang.Android.Status.CheckedConfigTimeout", DisplayConfigName(config.Name)));
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.CheckSubscriptionServer", ex);
+                SetStatus(MapExceptionToStatus(ex));
+            }
+            finally
+            {
+                isCheckWorkerBusy = false;
+            }
+        }
+
+        private static string SubscriptionProtocolLine(Config config)
+        {
+            try
+            {
+                if (config == null || string.IsNullOrWhiteSpace(config.Path) || !File.Exists(config.Path))
+                    return null;
+
+                return SubscriptionServerEndpoint.Describe(File.ReadAllText(config.Path));
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         private void OnRunClick(object? sender, RoutedEventArgs e)
         {
             if (!TrySaveSettings(showSuccessMessage: false))
@@ -4232,6 +4634,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     return;
 
                 RefreshBuiltinTorBridgesIfSelected();
+                TryFailoverSubscriptionBlock(epoch);
 
                 if (OpenFluxProfilePaths.IsMarker(settingsHandler.UserSettings.GetCurrentConfigPath()))
                 {
@@ -5547,6 +5950,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 return;
             }
 
+            SubscriptionFetchContext.Previous = SubscriptionMeta.Load(selectedSubscription.Directory.FullName);
             Status status = templateHandler.ConvertLinkToSubscription(
                 selectedSubscription.Directory.Name,
                 selectedSubscription.Url);

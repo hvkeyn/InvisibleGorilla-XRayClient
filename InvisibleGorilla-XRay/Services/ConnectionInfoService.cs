@@ -65,7 +65,9 @@ namespace InvisibleGorillaXRay.Services
             "https://ifconfig.co/json",
             "https://api.ipify.org?format=json",
             "https://ipwho.is/",
-            "https://ipapi.co/json/"
+            "https://ipapi.co/json/",
+            "https://1.1.1.1/cdn-cgi/trace",
+            "http://ip-api.com/json/?fields=status,country,countryCode,city,isp,query"
         };
 
         private const string UserAgent = "InvisibleGorilla-XRay";
@@ -84,7 +86,9 @@ namespace InvisibleGorillaXRay.Services
 
             HttpClient client = new HttpClient(handler)
             {
-                Timeout = TimeSpan.FromSeconds(12)
+                Timeout = TimeSpan.FromSeconds(12),
+                DefaultRequestVersion = HttpVersion.Version11,
+                DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower
             };
             client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
             return client;
@@ -141,9 +145,12 @@ namespace InvisibleGorillaXRay.Services
                     ConnectTimeout = timeout
                 };
 
+                Socks5Http.Attach(handler, proxy);
                 ownedClient = new HttpClient(handler)
                 {
-                    Timeout = timeout
+                    Timeout = timeout,
+                    DefaultRequestVersion = HttpVersion.Version11,
+                    DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower
                 };
                 ownedClient.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
                 client = ownedClient;
@@ -162,6 +169,18 @@ namespace InvisibleGorillaXRay.Services
                 }
 
                 string payload = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                if (TryParseTrace(payload, out ConnectionInfo trace))
+                {
+                    return new ConnectionInfo
+                    {
+                        Ok = true,
+                        Ip = trace.Ip,
+                        CountryCode = trace.CountryCode,
+                        CountryName = trace.CountryName,
+                        LatencyMs = latencyMs
+                    };
+                }
+
                 JObject root = JObject.Parse(payload);
 
                 string ip = FirstNonEmpty(root, "ip", "query");
@@ -201,13 +220,58 @@ namespace InvisibleGorillaXRay.Services
             }
             catch (Exception ex)
             {
-                DiagnosticLog.Write("ConnectionInfo", $"Lookup {url} failed: {ex.Message}");
-                return new ConnectionInfo { Ok = false, Error = ex.Message };
+                DiagnosticLog.Write("ConnectionInfo", $"Lookup failed: {ShortError(ex)}");
+                return new ConnectionInfo { Ok = false, Error = ShortError(ex) };
             }
             finally
             {
                 ownedClient?.Dispose();
             }
+        }
+
+        private static bool TryParseTrace(string payload, out ConnectionInfo info)
+        {
+            info = null;
+            if (string.IsNullOrWhiteSpace(payload) || payload.IndexOf('{') >= 0)
+                return false;
+            if (payload.IndexOf("ip=", StringComparison.OrdinalIgnoreCase) < 0)
+                return false;
+
+            string ip = string.Empty;
+            string country = string.Empty;
+            foreach (string line in payload.Split('\n'))
+            {
+                string trimmed = line.Trim();
+                if (trimmed.StartsWith("ip=", StringComparison.OrdinalIgnoreCase))
+                    ip = trimmed.Substring(3).Trim();
+                else if (trimmed.StartsWith("loc=", StringComparison.OrdinalIgnoreCase))
+                    country = trimmed.Substring(4).Trim();
+            }
+
+            if (string.IsNullOrWhiteSpace(ip))
+                return false;
+
+            info = new ConnectionInfo
+            {
+                Ok = true,
+                Ip = ip,
+                CountryCode = country.Length == 2 ? country : string.Empty,
+                CountryName = CountryDisplay.GetCountryName(country.Length == 2 ? country : string.Empty, string.Empty)
+            };
+            return true;
+        }
+
+        private static string ShortError(Exception ex)
+        {
+            string message = ex?.Message ?? string.Empty;
+            if (message.IndexOf("SSL", StringComparison.OrdinalIgnoreCase) >= 0
+                || message.IndexOf("TLS", StringComparison.OrdinalIgnoreCase) >= 0)
+                return "SSL";
+
+            int line = message.IndexOf('\n');
+            if (line > 0)
+                message = message.Substring(0, line).Trim();
+            return message.Length > 96 ? message.Substring(0, 96) : message;
         }
 
         private static string FirstNonEmpty(JObject root, params string[] keys)

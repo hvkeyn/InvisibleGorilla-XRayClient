@@ -20,6 +20,7 @@
     <system:String x:Key="Lang.ConnectionInfo.Checking">Checking…</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Unknown">Unknown</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Error">Could not reach the check service</system:String>
+    <system:String x:Key="Lang.ConnectionInfo.Switching">Check failed, switching to the next server</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Refresh">Refresh</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Protected">Traffic goes through the VPN</system:String>
     <system:String x:Key="Lang.ConnectionInfo.ProtectedTor">Traffic goes through the Tor bridge</system:String>

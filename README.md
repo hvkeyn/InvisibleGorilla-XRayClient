@@ -52,6 +52,12 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.57
+
+- **The address check no longer stops on an SSL error.** The probe speaks HTTP/1.1 through the local SOCKS listener, then tries another address service if the first one fails.
+- **A subscription server that fails the check is replaced.** The phone and the desktop pick the next server in the group and reconnect, up to four times.
+- **A subscription group can be measured.** The phone shows the protocol on each card and selects the server that answers first.
+
 ## What's new in v3.6.56
 
 - **The working bridge is marked.** When Tor connects, the home screen shows a green "link is up" line with the transport and a short id of the bridge that carried the circuit. The full bridge address stays off the screen.

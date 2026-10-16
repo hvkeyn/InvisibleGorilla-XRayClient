@@ -464,6 +464,16 @@
     <x:String x:Key="Lang.Android.Status.StartCanceled">Запуск отменён.</x:String>
     <x:String x:Key="Lang.Android.Status.RunningProxy">Android VPN/TUN запущен...</x:String>
     <x:String x:Key="Lang.Android.Status.RunningTunnel">Android VPN/TUN запущен...</x:String>
+    <x:String x:Key="Lang.Android.Status.EncryptedSubscription">Подписка зашифрована, ключ провайдера недоступен.</x:String>
+    <x:String x:Key="Lang.Android.Status.NoRealServers">Провайдер прислал сообщение, а не рабочие серверы.</x:String>
+    <x:String x:Key="Lang.Android.Status.BlockCount">Серверы в блоке: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.CheckingBlocks">Проверяю серверы в блоке...</x:String>
+    <x:String x:Key="Lang.Android.Status.CheckingProxy">Проверяю через прокси: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.FastestServer">Самый быстрый: {0}, {1} мс</x:String>
+    <x:String x:Key="Lang.Android.Status.NoReachableServer">Ни один сервер подписки не ответил.</x:String>
+    <x:String x:Key="Lang.Android.Status.CheckWhileConnected">Остановите туннель, затем проверяйте серверы.</x:String>
+    <x:String x:Key="Lang.Android.Status.SwitchedBlock">Блок недоступен, переключился на следующий сервер.</x:String>
+    <x:String x:Key="Lang.Android.Status.SwitchedServer">Проверка не прошла, переключаюсь на {0}</x:String>
     <x:String x:Key="Lang.Android.Status.VpnPermissionDenied">Разрешение на VPN не было выдано.</x:String>
     <x:String x:Key="Lang.Android.Status.VpnStartFailed">Не удалось запустить Android VPN: {0}</x:String>
     <x:String x:Key="Lang.Android.Status.StopRequested">Запрошена остановка...</x:String>

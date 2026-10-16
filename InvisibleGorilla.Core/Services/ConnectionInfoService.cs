@@ -61,7 +61,9 @@ namespace InvisibleGorillaXRay.Services
         private static readonly string[] TunnelLookupEndpoints =
         {
             "https://api.ipify.org?format=json",
-            "https://ipwho.is/"
+            "https://ipwho.is/",
+            "https://1.1.1.1/cdn-cgi/trace",
+            "http://ip-api.com/json/?fields=status,country,countryCode,city,isp,query"
         };
 
         private static readonly SemaphoreSlim LookupGate = new(1, 1);
@@ -149,7 +151,9 @@ namespace InvisibleGorillaXRay.Services
 
             using HttpClient client = new HttpClient(handler, disposeHandler: true)
             {
-                Timeout = timeout
+                Timeout = timeout,
+                DefaultRequestVersion = HttpVersion.Version11,
+                DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower
             };
             client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
 
@@ -160,6 +164,9 @@ namespace InvisibleGorillaXRay.Services
                     return new ConnectionInfo { Ok = false, Error = $"HTTP {(int)response.StatusCode}" };
 
                 string payload = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                if (TryParseTrace(payload, out ConnectionInfo trace))
+                    return trace;
+
                 JObject root = JObject.Parse(payload);
                 string ip = FirstNonEmpty(root, "ip", "query");
                 if (string.IsNullOrWhiteSpace(ip))
@@ -192,8 +199,53 @@ namespace InvisibleGorillaXRay.Services
             }
             catch (Exception ex)
             {
-                return new ConnectionInfo { Ok = false, Error = ex.Message };
+                return new ConnectionInfo { Ok = false, Error = ShortError(ex) };
             }
+        }
+
+        private static bool TryParseTrace(string payload, out ConnectionInfo info)
+        {
+            info = null;
+            if (string.IsNullOrWhiteSpace(payload) || payload.IndexOf('{') >= 0)
+                return false;
+            if (payload.IndexOf("ip=", StringComparison.OrdinalIgnoreCase) < 0)
+                return false;
+
+            string ip = string.Empty;
+            string country = string.Empty;
+            foreach (string line in payload.Split('\n'))
+            {
+                string trimmed = line.Trim();
+                if (trimmed.StartsWith("ip=", StringComparison.OrdinalIgnoreCase))
+                    ip = trimmed.Substring(3).Trim();
+                else if (trimmed.StartsWith("loc=", StringComparison.OrdinalIgnoreCase))
+                    country = trimmed.Substring(4).Trim();
+            }
+
+            if (string.IsNullOrWhiteSpace(ip))
+                return false;
+
+            info = new ConnectionInfo
+            {
+                Ok = true,
+                Ip = ip,
+                CountryCode = country.Length == 2 ? country : string.Empty,
+                CountryName = CountryDisplay.GetCountryName(country.Length == 2 ? country : string.Empty, string.Empty)
+            };
+            return true;
+        }
+
+        private static string ShortError(Exception ex)
+        {
+            string message = ex?.Message ?? string.Empty;
+            if (message.IndexOf("SSL", StringComparison.OrdinalIgnoreCase) >= 0
+                || message.IndexOf("TLS", StringComparison.OrdinalIgnoreCase) >= 0)
+                return "SSL";
+
+            int line = message.IndexOf('\n');
+            if (line > 0)
+                message = message.Substring(0, line).Trim();
+            return message.Length > 96 ? message.Substring(0, 96) : message;
         }
 
         private static bool HasGeo(ConnectionInfo info)

@@ -1,0 +1,102 @@
+using System;
+using Newtonsoft.Json.Linq;
+
+namespace InvisibleGorillaXRay.Services
+{
+    /// <summary>
+    /// Reads the first proxy address from a saved Xray config so a block can be probed.
+    /// </summary>
+    public static class SubscriptionServerEndpoint
+    {
+        public static string Read(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+                return null;
+
+            try
+            {
+                JObject root = JObject.Parse(json);
+                JArray outbounds = root["outbounds"] as JArray;
+                if (outbounds == null)
+                    return null;
+
+                foreach (JToken outbound in outbounds)
+                {
+                    string protocol = outbound.Value<string>("protocol");
+                    if (protocol == "freedom" || protocol == "blackhole" || protocol == "dns")
+                        continue;
+
+                    JToken vnext = outbound["settings"]?["vnext"]?.First;
+                    string fromVnext = Format(vnext?["address"]?.ToString(), vnext?["port"]?.ToString());
+                    if (fromVnext != null)
+                        return fromVnext;
+
+                    JToken server = outbound["settings"]?["servers"]?.First;
+                    string fromServer = Format(server?["address"]?.ToString(), server?["port"]?.ToString());
+                    if (fromServer != null)
+                        return fromServer;
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
+        public static bool IsPlaceholderLink(string link)
+        {
+            if (string.IsNullOrWhiteSpace(link))
+                return true;
+
+            if (link.IndexOf("00000000-0000-0000-0000-000000000000", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+
+            int at = link.LastIndexOf('@');
+            if (at < 0 || at + 1 >= link.Length)
+                return false;
+
+            string rest = link.Substring(at + 1);
+            int cut = rest.IndexOfAny(new[] { '?', '#' });
+            if (cut >= 0)
+                rest = rest.Substring(0, cut);
+
+            int colon = rest.LastIndexOf(':');
+            if (colon <= 0)
+                return false;
+
+            string host = rest.Substring(0, colon).Trim().Trim('[', ']');
+            if (!int.TryParse(rest.Substring(colon + 1).Trim(), out int port))
+                return false;
+
+            return port <= 1
+                || host == "0.0.0.0"
+                || host == "127.0.0.1"
+                || host.Equals("localhost", StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool IsPlaceholderJson(string json)
+        {
+            string endpoint = Read(json);
+            if (string.IsNullOrWhiteSpace(endpoint))
+                return false;
+
+            int colon = endpoint.LastIndexOf(':');
+            if (colon <= 0)
+                return false;
+
+            string host = endpoint.Substring(0, colon);
+            string port = endpoint.Substring(colon + 1);
+            return port == "0" || port == "1" || host == "0.0.0.0" || host == "127.0.0.1";
+        }
+
+        private static string Format(string address, string port)
+        {
+            if (string.IsNullOrWhiteSpace(address) || string.IsNullOrWhiteSpace(port))
+                return null;
+            if (!int.TryParse(port, out int parsed) || parsed < 1 || parsed > 65535)
+                return null;
+            return address.Trim() + ":" + parsed;
+        }
+    }
+}

@@ -87,6 +87,8 @@ namespace InvisibleGorillaXRay
         private Action onBugReportingClick;
         private Action<string> onCustomLinkClick;
         private Func<bool> onTunnelBroken;
+        private Func<bool> trySwitchLiveServer;
+        private int liveServerSwitchSteps;
         private bool openFluxApplyBusy;
         private string pendingOpenFluxUrl;
         private bool isApplyingOpenFluxUi;
@@ -424,6 +426,7 @@ namespace InvisibleGorillaXRay
             Action<string> onCustomLinkClick,
             Func<GoidaMainPresentation> getGoidaPresentation = null,
             Func<bool> onTunnelBroken = null,
+            Func<bool> trySwitchLiveServer = null,
             Action<OpenFluxProfile> onSaveOpenFlux = null,
             Func<string, Status> onApplyOpenFluxUrl = null,
             Func<OpenFluxManager> getOpenFluxManager = null,
@@ -458,6 +461,7 @@ namespace InvisibleGorillaXRay
             this.onBugReportingClick = onBugReportingClick;
             this.onCustomLinkClick = onCustomLinkClick;
             this.onTunnelBroken = onTunnelBroken;
+            this.trySwitchLiveServer = trySwitchLiveServer;
 
             EnsureOpenFluxTransportCombo();
             HookOpenFluxStatus();
@@ -1139,6 +1143,20 @@ namespace InvisibleGorillaXRay
                     return;
                 }
 
+                if (connected
+                    && liveServerSwitchSteps < 4
+                    && trySwitchLiveServer != null
+                    && trySwitchLiveServer())
+                {
+                    liveServerSwitchSteps++;
+                    connectionInfoFailureRetries = 0;
+                    textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Switching");
+                    textInfoVerdict.Foreground = Brushes.Gray;
+                    infoStatusDot.Fill = Brushes.Gray;
+                    ApplyGoidaSummary();
+                    return;
+                }
+
                 textInfoIp.Text = Loc("Lang.ConnectionInfo.Unknown");
                 ClearConnectionInfoDetails();
                 textInfoVerdict.Text = string.IsNullOrWhiteSpace(info.Error)
@@ -1151,6 +1169,7 @@ namespace InvisibleGorillaXRay
             }
 
             connectionInfoFailureRetries = 0;
+            liveServerSwitchSteps = 0;
 
             textInfoIp.Text = info.LatencyMs > 0
                 ? $"{info.Ip}  ·  {info.LatencyMs} ms"

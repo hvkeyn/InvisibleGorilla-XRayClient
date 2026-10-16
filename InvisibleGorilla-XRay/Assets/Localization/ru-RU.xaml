@@ -20,6 +20,7 @@
     <system:String x:Key="Lang.ConnectionInfo.Checking">Проверка…</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Unknown">Неизвестно</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Error">Сервис проверки недоступен</system:String>
+    <system:String x:Key="Lang.ConnectionInfo.Switching">Проверка не прошла, переключаюсь на следующий сервер</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Refresh">Обновить</system:String>
     <system:String x:Key="Lang.ConnectionInfo.Protected">Трафик идёт через VPN</system:String>
     <system:String x:Key="Lang.ConnectionInfo.ProtectedTor">Трафик идёт через Tor-мост</system:String>

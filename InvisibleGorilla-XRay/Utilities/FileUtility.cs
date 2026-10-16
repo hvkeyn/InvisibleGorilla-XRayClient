@@ -20,11 +20,11 @@ namespace InvisibleGorillaXRay.Utilities
 
             string AllowJustAsciiCharacters(string name)
             {
-                return System.Text.RegularExpressions.Regex.Replace(
-                    input: name, 
-                    pattern: @"[^\u0000-\u007F]+", 
-                    replacement: string.Empty
-                ).Trim();
+                string cleaned = System.Text.RegularExpressions.Regex.Replace(
+                    name,
+                    @"[^\p{L}\p{N} ._()|\-]+",
+                    " ");
+                return System.Text.RegularExpressions.Regex.Replace(cleaned, @"\s+", " ").Trim();
             }
         }
 

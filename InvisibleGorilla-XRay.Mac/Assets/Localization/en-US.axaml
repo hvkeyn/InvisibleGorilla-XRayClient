@@ -465,6 +465,16 @@
     <x:String x:Key="Lang.Android.Status.StartCanceled">Start canceled.</x:String>
     <x:String x:Key="Lang.Android.Status.RunningProxy">Running Android VPN/TUN...</x:String>
     <x:String x:Key="Lang.Android.Status.RunningTunnel">Running Android VPN/TUN...</x:String>
+    <x:String x:Key="Lang.Android.Status.EncryptedSubscription">This subscription is encrypted. The provider key is not available.</x:String>
+    <x:String x:Key="Lang.Android.Status.NoRealServers">The provider sent a notice, not working servers.</x:String>
+    <x:String x:Key="Lang.Android.Status.BlockCount">Servers in this block: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.CheckingBlocks">Checking servers in the block...</x:String>
+    <x:String x:Key="Lang.Android.Status.CheckingProxy">Checking through the proxy: {0}</x:String>
+    <x:String x:Key="Lang.Android.Status.FastestServer">Fastest server: {0}, {1} ms</x:String>
+    <x:String x:Key="Lang.Android.Status.NoReachableServer">No subscription server answered.</x:String>
+    <x:String x:Key="Lang.Android.Status.CheckWhileConnected">Stop the tunnel before checking servers.</x:String>
+    <x:String x:Key="Lang.Android.Status.SwitchedBlock">Block is down, switched to the next server.</x:String>
+    <x:String x:Key="Lang.Android.Status.SwitchedServer">Check failed, switching to {0}</x:String>
     <x:String x:Key="Lang.Android.Status.VpnPermissionDenied">VPN permission was denied.</x:String>
     <x:String x:Key="Lang.Android.Status.VpnStartFailed">Failed to start Android VPN: {0}</x:String>
     <x:String x:Key="Lang.Android.Status.StopRequested">Stop requested...</x:String>

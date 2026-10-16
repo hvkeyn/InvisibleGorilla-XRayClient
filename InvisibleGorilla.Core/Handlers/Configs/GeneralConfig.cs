@@ -51,7 +51,7 @@ namespace InvisibleGorillaXRay.Handlers.Configs
             if (!directoryInfo.Exists)
                 return;
 
-            FileInfo[] files = directoryInfo.GetFiles().OrderBy(file => file.CreationTime).ToArray();
+            FileInfo[] files = directoryInfo.GetFiles("*.json").OrderBy(file => file.CreationTime).ToArray();
             foreach(FileInfo file in files)
             {
                 AddConfigToList(CreateConfigModel(file.FullName));

@@ -34,6 +34,14 @@ namespace InvisibleGorillaXRay.Android
     [IntentFilter(
         new[] { Intent.ActionView },
         Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable },
+        DataScheme = "incy")]
+    [IntentFilter(
+        new[] { Intent.ActionView },
+        Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable },
+        DataScheme = "happ")]
+    [IntentFilter(
+        new[] { Intent.ActionView },
+        Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable },
         DataScheme = "vless")]
     [IntentFilter(
         new[] { Intent.ActionView },
