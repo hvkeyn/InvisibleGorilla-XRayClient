@@ -39,8 +39,13 @@ namespace InvisibleGorillaXRay.Models.Templates.Subscriptions
             {
                 try
                 {
+                    string compact = (str ?? string.Empty).Replace('-', '+').Replace('_', '/');
+                    int padding = compact.Length % 4;
+                    if (padding > 0)
+                        compact += new string('=', 4 - padding);
+
                     return Encoding.UTF8.GetString(
-                        bytes: System.Convert.FromBase64String(str)
+                        bytes: System.Convert.FromBase64String(compact)
                     );
                 }
                 catch

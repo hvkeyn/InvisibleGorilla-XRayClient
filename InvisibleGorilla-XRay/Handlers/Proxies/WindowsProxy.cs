@@ -33,6 +33,114 @@ namespace InvisibleGorillaXRay.Handlers.Proxies
 
         public static string ExtraBypass = "";
 
+        private const string SNAPSHOT_FILE = "proxy-backup.json";
+
+        /// <summary>
+        /// WinINET state captured before the first change of a session. Without it the app
+        /// cannot tell its own proxy from the user's corporate proxy/PAC configuration.
+        /// </summary>
+        private sealed class ProxySnapshot
+        {
+            public int ProxyEnable;
+            public string ProxyServer;
+            public string ProxyOverride;
+            public string AutoConfigUrl;
+            public string DefaultConnectionSettings;
+        }
+
+        private static string SnapshotPath => System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "InvisibleGorillaXRay",
+            SNAPSHOT_FILE);
+
+        private void SaveSnapshot()
+        {
+            try
+            {
+                if (System.IO.File.Exists(SnapshotPath))
+                    return; // keep the oldest copy: it is the user's original state
+
+                ProxySnapshot snapshot = new ProxySnapshot();
+                using (RegistryKey registry = Registry.CurrentUser.OpenSubKey(INTERNET_SETTINGS, false))
+                {
+                    if (registry == null)
+                        return;
+
+                    snapshot.ProxyEnable = registry.GetValue("ProxyEnable") is int enabled ? enabled : 0;
+                    snapshot.ProxyServer = registry.GetValue("ProxyServer") as string;
+                    snapshot.ProxyOverride = registry.GetValue("ProxyOverride") as string;
+                    snapshot.AutoConfigUrl = registry.GetValue("AutoConfigURL") as string;
+                }
+
+                using (RegistryKey connections = Registry.CurrentUser.OpenSubKey(
+                    INTERNET_SETTINGS + @"\Connections", false))
+                {
+                    if (connections?.GetValue("DefaultConnectionSettings") is byte[] blob)
+                        snapshot.DefaultConnectionSettings = Convert.ToBase64String(blob);
+                }
+
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(SnapshotPath));
+                System.IO.File.WriteAllText(
+                    SnapshotPath,
+                    Newtonsoft.Json.JsonConvert.SerializeObject(snapshot));
+                DiagnosticLog.Write("WindowsProxy", "Saved WinINET snapshot before applying the proxy");
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("WindowsProxy.SaveSnapshot", ex);
+            }
+        }
+
+        private void RestoreSnapshot()
+        {
+            try
+            {
+                ProxySnapshot snapshot = Newtonsoft.Json.JsonConvert.DeserializeObject<ProxySnapshot>(
+                    System.IO.File.ReadAllText(SnapshotPath));
+
+                if (snapshot != null)
+                {
+                    using (RegistryKey registry = GetInternetSettingsRegistry())
+                    {
+                        if (registry != null)
+                        {
+                            registry.SetValue("ProxyEnable", snapshot.ProxyEnable, RegistryValueKind.DWord);
+                            SetOrDelete(registry, "ProxyServer", snapshot.ProxyServer);
+                            SetOrDelete(registry, "ProxyOverride", snapshot.ProxyOverride);
+                            SetOrDelete(registry, "AutoConfigURL", snapshot.AutoConfigUrl);
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(snapshot.DefaultConnectionSettings))
+                    {
+                        using RegistryKey connections = Registry.CurrentUser.OpenSubKey(
+                            INTERNET_SETTINGS + @"\Connections", true);
+                        connections?.SetValue(
+                            "DefaultConnectionSettings",
+                            Convert.FromBase64String(snapshot.DefaultConnectionSettings),
+                            RegistryValueKind.Binary);
+                    }
+
+                    NotifyProxyChanged();
+                    DiagnosticLog.Write("WindowsProxy", "Restored the previous WinINET configuration");
+                }
+
+                System.IO.File.Delete(SnapshotPath);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("WindowsProxy.RestoreSnapshot", ex);
+            }
+        }
+
+        private static void SetOrDelete(RegistryKey registry, string name, string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                registry.DeleteValue(name, false);
+            else
+                registry.SetValue(name, value, RegistryValueKind.String);
+        }
+
         private static readonly IntPtr HWND_BROADCAST = new IntPtr(0xFFFF);
         private const int WM_SETTINGCHANGE = 0x001A;
 
@@ -81,6 +189,9 @@ namespace InvisibleGorillaXRay.Handlers.Proxies
                     : PROXY_BYPASS + ";" + ExtraBypass;
                 string proxyServer = $"{address}:{port}";
 
+                // Remember what the user had before we touch anything.
+                SaveSnapshot();
+
                 // Set via per-connection options (updates the DefaultConnectionSettings blob)
                 bool perConnResult = SetPerConnectionProxy(proxyServer, bypass);
                 DiagnosticLog.Write("WindowsProxy", $"SetPerConnectionProxy result: {perConnResult}");
@@ -90,7 +201,11 @@ namespace InvisibleGorillaXRay.Handlers.Proxies
 
                 if (isCanceled)
                 {
-                    DiagnosticLog.Write("WindowsProxy", "Canceled during Enable");
+                    // The proxy is already in the registry at this point: rolling back is the
+                    // only way to keep a canceled start from leaving the system pointing at a
+                    // listener that is about to be torn down.
+                    DiagnosticLog.Write("WindowsProxy", "Canceled during Enable; rolling the proxy back");
+                    Disable();
                     return CancelStatus();
                 }
 
@@ -98,6 +213,20 @@ namespace InvisibleGorillaXRay.Handlers.Proxies
                 NotifyProxyChanged();
 
                 VerifyState();
+
+                // InternetSetOption fails under some policies/ACLs while the registry write
+                // still succeeds; report an error only when neither path applied the proxy.
+                if (!perConnResult && !IsProxyConfigured(proxyServer))
+                {
+                    DiagnosticLog.Write(
+                        "WindowsProxy",
+                        "Enable was not applied: per-connection option failed and the registry does not show the proxy");
+                    return new Status(
+                        code: Code.ERROR,
+                        subCode: SubCode.CANT_PROXY,
+                        content: LocalizationService.GetTerm(Localization.CANT_PROXY_SYSTEM)
+                    );
+                }
 
                 return new Status(
                     code: Code.SUCCESS,
@@ -120,22 +249,17 @@ namespace InvisibleGorillaXRay.Handlers.Proxies
         {
             DiagnosticLog.Write("WindowsProxy", "Disable called");
             isCanceled = false;
-            try
-            {
-                // Set via per-connection options (updates the DefaultConnectionSettings blob)
-                bool perConnResult = ClearPerConnectionProxy();
-                DiagnosticLog.Write("WindowsProxy", $"ClearPerConnectionProxy result: {perConnResult}");
 
-                // Also clear legacy registry values
-                ClearRegistryValues();
-
-                // Notify all applications
-                NotifyProxyChanged();
-            }
-            catch (Exception ex)
+            // Restore what Enable captured. With no snapshot the proxy was not applied by this
+            // app — the previous unconditional "DIRECT only + delete ProxyOverride" write wiped
+            // the user's corporate proxy/PAC configuration on every application start.
+            if (System.IO.File.Exists(SnapshotPath))
             {
-                DiagnosticLog.WriteException("WindowsProxy.Disable", ex);
+                RestoreSnapshot();
+                return;
             }
+
+            DiagnosticLog.Write("WindowsProxy", "No WinINET snapshot; leaving the system proxy untouched");
         }
 
         public void Cancel()
@@ -258,6 +382,33 @@ namespace InvisibleGorillaXRay.Handlers.Proxies
                     registry.DeleteValue("ProxyOverride", false);
                     DiagnosticLog.Write("WindowsProxy", "Registry cleared: ProxyEnable=0");
                 }
+            }
+        }
+
+        /// <summary>
+        /// Reads back the effective WinINET state. Used to decide whether Enable actually
+        /// applied the proxy when InternetSetOption reported a failure.
+        /// </summary>
+        private bool IsProxyConfigured(string proxyServer)
+        {
+            try
+            {
+                using (RegistryKey registry = Registry.CurrentUser.OpenSubKey(INTERNET_SETTINGS, false))
+                {
+                    if (registry == null)
+                        return false;
+
+                    object enabled = registry.GetValue("ProxyEnable");
+                    object server = registry.GetValue("ProxyServer");
+
+                    bool isEnabled = enabled is int value && value != 0;
+                    return isEnabled && string.Equals(server as string, proxyServer, StringComparison.OrdinalIgnoreCase);
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("WindowsProxy.IsProxyConfigured", ex);
+                return false;
             }
         }
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Windows;
 using System.Collections.Generic;
@@ -89,7 +89,10 @@ namespace InvisibleGorillaXRay
             {
                 OpenFileDialog fileDialog = new OpenFileDialog();
                 fileDialog.Title = "Add configuration";
-                fileDialog.Filter = "Config files|*.json;*.toml;*.yaml;*.yml|All files|*.*";
+                // Only JSON is a real Xray config: .toml/.yaml were offered by the dialog but
+                // the loader (and the core) cannot read them, so the imported file silently
+                // never appeared in the list.
+                fileDialog.Filter = "Config files|*.json|All files|*.*";
 
                 return fileDialog;
             }

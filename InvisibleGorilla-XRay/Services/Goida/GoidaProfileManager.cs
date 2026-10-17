@@ -244,6 +244,10 @@ namespace InvisibleGorillaXRay.Services.Goida
 
                 HashSet<int> enabledLists = GetEnabledListSet(settings);
 
+                // Lists parsed successfully in this run: only their node files may be treated
+                // as orphans (files of other lists stay untouched).
+                HashSet<int> parsedListIds = new HashSet<int>();
+
                 IReadOnlyDictionary<int, string> listData = await fetcher
                     .FetchListsAsync(fetchListIds, cancellationToken)
                     .ConfigureAwait(false);
@@ -272,6 +276,7 @@ namespace InvisibleGorillaXRay.Services.Goida
                         }
 
                         List<GoidaNode> parsed = parser.ParseList(pair.Key, pair.Value, store.NodesDirectory);
+                        parsedListIds.Add(pair.Key);
                         List<string> staleIds = mergedById
                             .Where(entry => entry.Value.ListId == pair.Key)
                             .Select(entry => entry.Key)
@@ -312,6 +317,8 @@ namespace InvisibleGorillaXRay.Services.Goida
                 TryEnsureActiveNode();
 
                 GoidaProfileSettings latest = getSettings().Clone();
+                RemapSavedNodeIds(latest, existing, mergedById);
+                CleanupOrphanNodeFiles(parsedListIds, mergedById);
                 latest.LastRefreshUtc = DateTime.UtcNow;
                 saveSettings(latest);
 
@@ -326,6 +333,126 @@ namespace InvisibleGorillaXRay.Services.Goida
             finally
             {
                 Interlocked.Exchange(ref refreshInProgress, 0);
+            }
+        }
+
+        /// <summary>
+        /// Node ids are hashes of the whole config, so a subscription that rotates a UUID or a
+        /// port produces "new" nodes and every saved reference (active, pinned, manual pool)
+        /// silently dies. Re-point those references through the endpoint identity, which
+        /// survives credential rotation.
+        /// </summary>
+        private static void RemapSavedNodeIds(
+            GoidaProfileSettings settings,
+            IReadOnlyDictionary<string, GoidaNode> previousNodes,
+            IReadOnlyDictionary<string, GoidaNode> currentNodes)
+        {
+            if (settings == null)
+                return;
+
+            HashSet<string> savedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(settings.ActiveNodeId))
+                savedIds.Add(settings.ActiveNodeId);
+            if (!string.IsNullOrWhiteSpace(settings.PinnedNodeId))
+                savedIds.Add(settings.PinnedNodeId);
+            if (settings.ManualPoolNodeIds != null)
+            {
+                foreach (string id in settings.ManualPoolNodeIds)
+                {
+                    if (!string.IsNullOrWhiteSpace(id))
+                        savedIds.Add(id);
+                }
+            }
+
+            Dictionary<string, string> remap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string id in savedIds)
+            {
+                if (currentNodes.ContainsKey(id))
+                    continue;
+
+                if (!previousNodes.TryGetValue(id, out GoidaNode previous)
+                    || string.IsNullOrWhiteSpace(previous.Endpoint))
+                {
+                    continue;
+                }
+
+                GoidaNode match = currentNodes.Values.FirstOrDefault(node =>
+                    node.ListId == previous.ListId
+                    && string.Equals(node.Endpoint, previous.Endpoint, StringComparison.OrdinalIgnoreCase));
+
+                if (match != null)
+                    remap[id] = match.Id;
+            }
+
+            if (remap.Count == 0)
+                return;
+
+            settings.ActiveNodeId = Remap(settings.ActiveNodeId);
+            settings.PinnedNodeId = Remap(settings.PinnedNodeId);
+
+            if (settings.ManualPoolNodeIds != null)
+            {
+                for (int i = 0; i < settings.ManualPoolNodeIds.Count; i++)
+                    settings.ManualPoolNodeIds[i] = Remap(settings.ManualPoolNodeIds[i]);
+            }
+
+            DiagnosticLog.Write("Goida.Remap", $"Re-pointed {remap.Count} saved node id(s) after refresh");
+
+            string Remap(string id)
+            {
+                return !string.IsNullOrWhiteSpace(id) && remap.TryGetValue(id, out string mapped)
+                    ? mapped
+                    : id;
+            }
+        }
+
+        /// <summary>
+        /// Deletes node files of freshly parsed lists that the new store does not reference.
+        /// Without this every credential rotation leaves another copy behind (one real profile
+        /// had ~343k orphaned files, ~469 MB).
+        /// </summary>
+        private void CleanupOrphanNodeFiles(
+            HashSet<int> parsedListIds,
+            IReadOnlyDictionary<string, GoidaNode> currentNodes)
+        {
+            try
+            {
+                if (parsedListIds.Count == 0)
+                    return;
+
+                HashSet<string> keep = new HashSet<string>(
+                    currentNodes.Values.Select(node => System.IO.Path.GetFileName(node.ConfigPath)),
+                    StringComparer.OrdinalIgnoreCase);
+
+                int removed = 0;
+                foreach (string file in System.IO.Directory.EnumerateFiles(store.NodesDirectory, "*.json"))
+                {
+                    string name = System.IO.Path.GetFileName(file);
+                    int separator = name.IndexOf('_');
+                    if (separator <= 0
+                        || !int.TryParse(name.Substring(0, separator), out int listId)
+                        || !parsedListIds.Contains(listId)
+                        || keep.Contains(name))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        System.IO.File.Delete(file);
+                        removed++;
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                if (removed > 0)
+                    DiagnosticLog.Write("Goida.Cleanup", $"Removed {removed} orphaned node file(s)");
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("Goida.Cleanup", ex);
             }
         }
 

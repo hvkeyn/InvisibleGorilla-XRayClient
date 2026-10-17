@@ -119,7 +119,28 @@ namespace InvisibleGorillaXRay
             broadcastWorker.RunWorkerAsync();
 
             InitializeConnectionInfoTimer();
+            InitializeNetworkMonitoring();
             LoadHomeLog();
+
+            void InitializeNetworkMonitoring()
+            {
+                networkChangeDebounce = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+                networkChangeDebounce.Tick += (sender, e) =>
+                {
+                    networkChangeDebounce.Stop();
+                    if (shutdownRequested || !runWorker.IsBusy)
+                        return;
+
+                    // Wi-Fi/Ethernet switch or a wake-up: the live session usually keeps
+                    // pointing at a dead route, and the app had no reaction at all before.
+                    DiagnosticLog.Write("Network", "Network change detected; restarting the session.");
+                    TryRerun();
+                };
+
+                NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
+                NetworkChange.NetworkAvailabilityChanged += OnNetworkAvailabilityChanged;
+                Closed += OnMainWindowClosed;
+            }
 
             void InitializeConnectionInfoTimer()
             {
@@ -613,6 +634,35 @@ namespace InvisibleGorillaXRay
             }
 
             base.OnClosing(e);
+        }
+
+        private DispatcherTimer networkChangeDebounce;
+
+        private void OnMainWindowClosed(object sender, EventArgs e)
+        {
+            NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
+            NetworkChange.NetworkAvailabilityChanged -= OnNetworkAvailabilityChanged;
+            networkChangeDebounce?.Stop();
+        }
+
+        private void OnNetworkAddressChanged(object sender, EventArgs e) => ScheduleNetworkRestart();
+
+        private void OnNetworkAvailabilityChanged(object sender, NetworkAvailabilityEventArgs e) => ScheduleNetworkRestart();
+
+        private void ScheduleNetworkRestart()
+        {
+            if (shutdownRequested || networkChangeDebounce == null)
+                return;
+
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(ScheduleNetworkRestart));
+                return;
+            }
+
+            // One change raises several events; collapse them into a single restart.
+            networkChangeDebounce.Stop();
+            networkChangeDebounce.Start();
         }
 
         public void TryRerun()
@@ -1129,10 +1179,13 @@ namespace InvisibleGorillaXRay
 
             if (!info.Ok)
             {
-                // A failed lookup (SSL timeout, ipinfo down, etc.) is not proof the tunnel
-                // is broken. Retry with backoff; never tear down a live session for this.
+                // "HTTP 429" means the exit answered us: the tunnel works and only the lookup
+                // service is throttling. SSL/timeout/all-endpoints-failed is the opposite —
+                // the probe cannot reach the exit through the tunnel at all.
                 bool hardProbeFailure = string.Equals(info.Error, "SSL", StringComparison.OrdinalIgnoreCase)
-                    || (info.Error != null && info.Error.StartsWith("HTTP", StringComparison.OrdinalIgnoreCase));
+                    || string.Equals(info.Error, "timeout", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(info.Error, "all endpoints failed", StringComparison.OrdinalIgnoreCase);
+
                 if (!hardProbeFailure
                     && connected
                     && !string.Equals(info.Error, "canceled", StringComparison.OrdinalIgnoreCase)
@@ -1147,18 +1200,27 @@ namespace InvisibleGorillaXRay
                     return;
                 }
 
-                if (connected
-                    && liveServerSwitchSteps < 4
-                    && trySwitchLiveServer != null
-                    && trySwitchLiveServer())
+                if (connected && hardProbeFailure)
                 {
-                    liveServerSwitchSteps++;
-                    connectionInfoFailureRetries = 0;
-                    textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Switching");
-                    textInfoVerdict.Foreground = Brushes.Gray;
-                    infoStatusDot.Fill = Brushes.Gray;
-                    ApplyGoidaSummary();
-                    return;
+                    // Subscription with several servers: switch to the next one first.
+                    if (liveServerSwitchSteps < 4
+                        && trySwitchLiveServer != null
+                        && trySwitchLiveServer())
+                    {
+                        liveServerSwitchSteps++;
+                        connectionInfoFailureRetries = 0;
+                        textInfoVerdict.Text = Loc("Lang.ConnectionInfo.Switching");
+                        textInfoVerdict.Foreground = Brushes.Gray;
+                        infoStatusDot.Fill = Brushes.Gray;
+                        ApplyGoidaSummary();
+                        return;
+                    }
+
+                    // Otherwise let the failover logic decide (Goida applies its own
+                    // threshold and grace window). The counter used to be bumped only after a
+                    // *successful* probe with a leaked IP, so a blocked node — the most common
+                    // failure — could never trigger a switch.
+                    RegisterTunnelFailure();
                 }
 
                 textInfoIp.Text = Loc("Lang.ConnectionInfo.Unknown");

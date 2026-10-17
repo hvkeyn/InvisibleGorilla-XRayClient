@@ -43,6 +43,24 @@ namespace InvisibleGorillaXRay.Core
         private readonly OpenFluxHttpBridge openFluxHttpBridge = new OpenFluxHttpBridge();
         private string currentRuntimeConfig;
 
+        // True while WinINET points at our local listener. The "use system proxy" setting can
+        // be switched off while a session is live, so the setting alone must not decide
+        // whether the proxy is released: otherwise WinINET keeps pointing at a dead port and
+        // the whole system loses Internet access until it is fixed by hand.
+        private bool systemProxyApplied;
+
+        // Incremented on every Run. A fire-and-forget stop from a rerun captures the id of the
+        // session it was asked to stop; if a newer session has already started, the rest of the
+        // stop sequence (tor, OpenFlux, TUN, proxy) must not touch that new session.
+        private int activeRunId;
+
+        // Set by Cancel/Stop so a long startup (Moat, tor bootstrap) can abort instead of
+        // starting a phantom session after the user already pressed CANCEL.
+        private volatile bool cancelRequested;
+
+        private bool IsSuperseded(int runId) =>
+            runId != 0 && runId != Volatile.Read(ref activeRunId);
+
         private LocalizationService LocalizationService => ServiceLocator.Get<LocalizationService>();
         private AnalyticsService AnalyticsService => ServiceLocator.Get<AnalyticsService>();
 
@@ -153,6 +171,12 @@ namespace InvisibleGorillaXRay.Core
 
         public void DisableMode()
         {
+            if (IsSuperseded(Volatile.Read(ref activeRunId)))
+            {
+                DiagnosticLog.Write("DisableMode", "Skipped: a newer session has already started.");
+                return;
+            }
+
             DisableProxy();
             DisableTunnel();
         }
@@ -160,6 +184,9 @@ namespace InvisibleGorillaXRay.Core
         public void Run(string config, Action? onReady = null)
         {
             DiagnosticLog.Clear();
+            cancelRequested = false;
+            int runId = Interlocked.Increment(ref activeRunId);
+            DiagnosticLog.Write("Run", $"Session {runId} starting.");
 
             if (IsOpenFluxProfile())
             {
@@ -185,6 +212,17 @@ namespace InvisibleGorillaXRay.Core
                 {
                     DiagnosticLog.Write("Run", $"Tor failed to start: {torStatus.Content}");
                     throw new InvalidOperationException(torStatus.Content?.ToString() ?? "Tor failed to start.");
+                }
+
+                // Moat/Tor startup can take minutes and does not check cancellation: a CANCEL
+                // pressed meanwhile used to be ignored and a phantom session was started.
+                if (cancelRequested)
+                {
+                    DiagnosticLog.Write("Run", "Cancel requested during tor startup; aborting the session.");
+                    torManager.Stop();
+                    ActiveTunnelSession.Clear();
+                    currentRuntimeConfig = null;
+                    return;
                 }
 
                 config = BuildTorRuntimeConfig(torSettings);
@@ -250,7 +288,13 @@ namespace InvisibleGorillaXRay.Core
             {
                 DiagnosticLog.Write("Run", $"Server thread threw exception, aborting: {serverException.Message}");
                 if (torEnabled) torManager.Stop();
-                return;
+                ActiveTunnelSession.Clear();
+                currentRuntimeConfig = null;
+                throw new InvalidOperationException(
+                    mode == Mode.TUN
+                        ? LocalizationService.GetTerm(Localization.CANT_TUNNEL_SYSTEM)
+                        : LocalizationService.GetTerm(Localization.CANT_PROXY_SYSTEM),
+                    serverException);
             }
 
             if (!serverThread.IsAlive)
@@ -258,7 +302,12 @@ namespace InvisibleGorillaXRay.Core
                 DiagnosticLog.Write("Run", "WARNING: Server thread is no longer alive! xray-core likely failed to start.");
                 DiagnosticLog.Write("Run", "Skipping proxy enable since server is not running.");
                 if (torEnabled) torManager.Stop();
-                return;
+                ActiveTunnelSession.Clear();
+                currentRuntimeConfig = null;
+                throw new InvalidOperationException(
+                    mode == Mode.TUN
+                        ? LocalizationService.GetTerm(Localization.CANT_TUNNEL_SYSTEM)
+                        : LocalizationService.GetTerm(Localization.CANT_PROXY_SYSTEM));
             }
 
             if (!portActive)
@@ -267,9 +316,22 @@ namespace InvisibleGorillaXRay.Core
                 XRayCoreWrapper.StopServer();
                 serverThread.Join(2000);
                 if (torEnabled) torManager.Stop();
+                ActiveTunnelSession.Clear();
+                currentRuntimeConfig = null;
                 throw new InvalidOperationException(mode == Mode.TUN
                     ? LocalizationService.GetTerm(Localization.CANT_TUNNEL_SYSTEM)
                     : LocalizationService.GetTerm(Localization.CANT_PROXY_SYSTEM));
+            }
+
+            if (cancelRequested)
+            {
+                DiagnosticLog.Write("Run", "Cancel requested before the tunnel was enabled; aborting the session.");
+                XRayCoreWrapper.StopServer();
+                serverThread.Join(2000);
+                if (torEnabled) torManager.Stop();
+                ActiveTunnelSession.Clear();
+                currentRuntimeConfig = null;
+                return;
             }
 
             if (mode == Mode.PROXY)
@@ -277,6 +339,32 @@ namespace InvisibleGorillaXRay.Core
                 DiagnosticLog.Write("Run", "Enabling proxy...");
                 Status proxyStatus = EnableProxy();
                 DiagnosticLog.Write("Run", $"EnableProxy result: code={proxyStatus.Code}, subCode={proxyStatus.SubCode}");
+
+                if (proxyStatus.SubCode == SubCode.CANCELED)
+                {
+                    // Cancel during startup is not success: the listener is up, but the user
+                    // asked to stop, so tell the UI and release everything this session owned.
+                    DiagnosticLog.Write("Run", "Proxy enable was canceled; stopping the session.");
+                    XRayCoreWrapper.StopServer();
+                    serverThread.Join(2000);
+                    if (torEnabled) torManager.Stop();
+                    ActiveTunnelSession.Clear();
+                    currentRuntimeConfig = null;
+                    return;
+                }
+
+                if (proxyStatus.Code == Code.ERROR)
+                {
+                    DiagnosticLog.Write("Run", "System proxy could not be applied; stopping the session.");
+                    XRayCoreWrapper.StopServer();
+                    serverThread.Join(2000);
+                    if (torEnabled) torManager.Stop();
+                    ActiveTunnelSession.Clear();
+                    currentRuntimeConfig = null;
+                    throw new InvalidOperationException(
+                        proxyStatus.Content?.ToString()
+                        ?? LocalizationService.GetTerm(Localization.CANT_PROXY_SYSTEM));
+                }
             }
             else
             {
@@ -284,11 +372,24 @@ namespace InvisibleGorillaXRay.Core
                 Status tunnelStatus = EnableTunnel(localProxyCredentials);
                 DiagnosticLog.Write("Run", $"EnableTunnel result: code={tunnelStatus.Code}, subCode={tunnelStatus.SubCode}");
 
+                if (tunnelStatus.SubCode == SubCode.CANCELED)
+                {
+                    DiagnosticLog.Write("Run", "Tunnel enable was canceled; stopping the session.");
+                    XRayCoreWrapper.StopServer();
+                    serverThread.Join(2000);
+                    if (torEnabled) torManager.Stop();
+                    ActiveTunnelSession.Clear();
+                    currentRuntimeConfig = null;
+                    return;
+                }
+
                 if (tunnelStatus.Code == Code.ERROR)
                 {
                     XRayCoreWrapper.StopServer();
                     serverThread.Join(2000);
                     if (torEnabled) torManager.Stop();
+                    ActiveTunnelSession.Clear();
+                    currentRuntimeConfig = null;
                     throw new InvalidOperationException(
                         tunnelStatus.Content?.ToString()
                         ?? LocalizationService.GetTerm(Localization.CANT_TUNNEL_SYSTEM));
@@ -564,8 +665,23 @@ namespace InvisibleGorillaXRay.Core
 
         public void Stop()
         {
+            cancelRequested = true;
+            int runId = Volatile.Read(ref activeRunId);
             DiagnosticLog.Write("Stop", "Stop requested: calling XRayCoreWrapper.StopServer()...");
             XRayCoreWrapper.StopServer();
+
+            // StopServer is what unblocks the session thread, so it must always run. Everything
+            // after it belongs to the session that was live when Stop was called: if the worker
+            // already restarted, the new session owns tor/OpenFlux/TUN/proxy now.
+            if (IsSuperseded(runId))
+            {
+                DiagnosticLog.Write("Stop", "A newer session has already started; skipping the rest of the stop sequence.");
+                return;
+            }
+
+            // Release WinINET even when the user switched "use system proxy" off during the
+            // session: otherwise the system keeps pointing at a listener that is now gone.
+            DisableProxy();
             DiagnosticLog.Write("Stop", "StopServer returned, stopping Tor/OpenFlux (if any)...");
             torManager.Stop();
             openFluxManager.Stop();
@@ -577,8 +693,17 @@ namespace InvisibleGorillaXRay.Core
 
         public void Cancel()
         {
+            cancelRequested = true;
+            int runId = Volatile.Read(ref activeRunId);
             CancelProxy();
             CancelTunnel();
+
+            if (IsSuperseded(runId))
+            {
+                DiagnosticLog.Write("Cancel", "A newer session has already started; skipping the rest of the cancel sequence.");
+                return;
+            }
+
             torManager.Stop();
             openFluxManager.Stop();
         }
@@ -604,10 +729,13 @@ namespace InvisibleGorillaXRay.Core
 
             IProxy proxy = getProxy.Invoke();
 
-            return proxy.Enable(
+            Status status = proxy.Enable(
                 address: GetProxyAddress(),
                 port: GetProxyPort()
             );
+
+            systemProxyApplied = status.Code == Code.SUCCESS;
+            return status;
 
             int GetProxyPort()
             {
@@ -632,11 +760,24 @@ namespace InvisibleGorillaXRay.Core
 
         private void DisableProxy()
         {
-            if (!ShouldChangeSystemProxy())
+            // Release the proxy when it was actually applied, even if the user has just
+            // switched the setting off (the setting is read live from the same object).
+            if (!systemProxyApplied && !ShouldChangeSystemProxy())
                 return;
-            
-            IProxy proxy = getProxy.Invoke();
-            proxy.Disable();
+
+            try
+            {
+                IProxy proxy = getProxy.Invoke();
+                proxy.Disable();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("DisableProxy", ex);
+            }
+            finally
+            {
+                systemProxyApplied = false;
+            }
         }
 
         private Status EnableOpenFluxTunnel(int socksPort)
@@ -779,6 +920,11 @@ namespace InvisibleGorillaXRay.Core
         {
             ITunnel tunnel = getTunnel.Invoke();
             tunnel.Disable();
+
+            // The helper listens on the configured TUN port; its own fallback uses the
+            // hardcoded default, which misses a custom port and can leave an elevated
+            // InvisibleGorilla-TUN.exe (and its WinTun adapter) behind.
+            WindowsStaleTunCleanup.TryDisableStaleTunnel(getTunPort.Invoke());
         }
 
         private void CancelProxy()

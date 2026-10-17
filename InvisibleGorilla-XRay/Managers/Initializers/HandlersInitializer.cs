@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows;
 
 namespace InvisibleGorillaXRay.Managers.Initializers
@@ -371,11 +371,15 @@ namespace InvisibleGorillaXRay.Managers.Initializers
                 bool IsVpnSessionActive() => InvokeOnUi(
                     () => windowFactory.GetMainWindow()?.IsServerRunning ?? false);
 
-                bool PauseNativeForGoidaProbe() => InvokeOnUi(() =>
+                // TryPauseForNativeTest must run on the caller's (background) thread: it stops
+                // the live session and waits for the worker to finish. Marshalling it to the
+                // UI thread made its own Dispatcher.CheckAccess() guard reject every call, so
+                // the native test always ran in parallel with a live xray server.
+                bool PauseNativeForGoidaProbe()
                 {
                     MainWindow? mainWindow = windowFactory.GetMainWindow();
                     return mainWindow?.TryPauseForNativeTest() ?? false;
-                });
+                }
 
                 void ResumeNativeAfterGoidaProbe() => InvokeOnUi(() =>
                 {

@@ -247,9 +247,15 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
             DiagnosticLog.Write("WindowsTunnel", "Disable requested");
             isCanceled = false;
             Status status = ExecuteCommand(command: $"-command=disable");
-            if (status.Code == Code.ERROR)
+
+            // Execute returns INFO/CANCELED when the helper socket is not connected (a start
+            // that failed before Connect), so any non-success result has to trigger the
+            // fallback; checking for ERROR only made the fallback unreachable in practice.
+            if (status.Code != Code.SUCCESS)
             {
-                DiagnosticLog.Write("WindowsTunnel", "Primary disable command failed; trying stale TUN cleanup fallback.");
+                DiagnosticLog.Write(
+                    "WindowsTunnel",
+                    $"Primary disable command failed (code={status.Code}, subCode={status.SubCode}); trying stale TUN cleanup fallback.");
                 WindowsStaleTunCleanup.TryDisableStaleTunnel();
             }
         }

@@ -96,7 +96,31 @@ namespace InvisibleGorillaXRay.Handlers.Tor
         {
             if (string.IsNullOrEmpty(value))
                 return "\"\"";
-            return "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+            return "\"" + SanitizeConfValue(value).Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+        }
+
+        /// <summary>
+        /// A control-port command is a single line. A bridge line pasted from a panel (or an
+        /// answer from Moat) must not be able to inject further commands or torrc directives,
+        /// so everything after the first line break is dropped and control characters are
+        /// removed. The same rule protects torrc generation: a bridge line is one line too.
+        /// </summary>
+        public static string SanitizeConfValue(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return string.Empty;
+
+            int breakIndex = value.IndexOfAny(new[] { '\r', '\n' });
+            string head = breakIndex >= 0 ? value.Substring(0, breakIndex) : value;
+
+            StringBuilder sb = new StringBuilder(head.Length);
+            foreach (char c in head)
+            {
+                if (!char.IsControl(c))
+                    sb.Append(c);
+            }
+
+            return sb.ToString().Trim();
         }
 
         private static void AppendBridges(StringBuilder sb, BridgeType bridgeType, IEnumerable<string> bridgeLines)
@@ -120,8 +144,9 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             {
                 foreach (string line in bridgeLines)
                 {
-                    if (!string.IsNullOrWhiteSpace(line))
-                        lines.Add(line.Trim());
+                    string cleaned = SanitizeConfValue(line);
+                    if (cleaned.Length > 0)
+                        lines.Add(cleaned);
                 }
             }
 

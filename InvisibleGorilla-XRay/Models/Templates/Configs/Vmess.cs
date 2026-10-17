@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Text;
 using Newtonsoft.Json;
@@ -58,9 +58,19 @@ namespace InvisibleGorillaXRay.Models.Templates.Configs
 
             string DecodeBase64Link()
             {
-                string base64String = link.Replace("vmess://", "");
+                string base64String = (link ?? string.Empty).Trim();
+                if (base64String.StartsWith("vmess://", StringComparison.OrdinalIgnoreCase))
+                    base64String = base64String.Substring("vmess://".Length);
+
+                // Panels emit base64url without padding; the old Convert.FromBase64String
+                // rejected such links.
+                base64String = base64String.Replace('-', '+').Replace('_', '/');
+                int padding = base64String.Length % 4;
+                if (padding > 0)
+                    base64String += new string('=', 4 - padding);
+
                 byte[] dataBytes = Convert.FromBase64String(base64String);
-                
+
                 return Encoding.UTF8.GetString(dataBytes);
             }
 
@@ -69,18 +79,31 @@ namespace InvisibleGorillaXRay.Models.Templates.Configs
                  data = JsonConvert.DeserializeObject<Data>(decodedString);
             }
 
-            bool IsInvalidLink() => data == null;
+            // "{}" is valid JSON and used to pass: the Adapter then did int.Parse("") and
+            // threw while the config was being built, outside this try/catch.
+            bool IsInvalidLink() =>
+                data == null
+                || string.IsNullOrWhiteSpace(data.add)
+                || string.IsNullOrWhiteSpace(data.id)
+                || !int.TryParse((data.port ?? string.Empty).Trim(), out int port)
+                || port <= 0
+                || port > 65535;
+        }
+
+        private static int SafeInt(string value)
+        {
+            return int.TryParse((value ?? string.Empty).Trim(), out int parsed) ? parsed : 0;
         }
 
         protected override Adapter Adapter => new Adapter() {
             type = "vmess",
             headerType = data.type,
-            version = !string.IsNullOrEmpty(data.v) ? int.Parse(data.v) : 0,
+            version = SafeInt(data.v),
             remark = data.ps,
             address = data.add,
-            port = !string.IsNullOrEmpty(data.port)? int.Parse(data.port) : 0,
+            port = SafeInt(data.port),
             id = data.id,
-            alterId = !string.IsNullOrEmpty(data.aid) ? int.Parse(data.aid) : 0,
+            alterId = SafeInt(data.aid),
             security = validSecurity.Contains(data.scy) ? data.scy : Global.DEFAULT_SECURITY,
             requestHost = data.host,
             path = data.path,

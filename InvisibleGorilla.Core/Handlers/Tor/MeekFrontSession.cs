@@ -226,7 +226,9 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             }
 
             try { process?.Dispose(); } catch { }
-            ready.Dispose();
+
+            // The stdout reader may still call ready.Set() after dispose. ManualResetEventSlim
+            // does not need disposal unless its WaitHandle was touched.
         }
 
         private sealed class OwnedTcpStream : Stream

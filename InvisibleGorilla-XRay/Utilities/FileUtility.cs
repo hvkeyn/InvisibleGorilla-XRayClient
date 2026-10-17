@@ -4,12 +4,34 @@ namespace InvisibleGorillaXRay.Utilities
 {
     public static class FileUtility
     {
+        private static readonly string[] WindowsReservedNames =
+        {
+            "CON", "PRN", "AUX", "NUL",
+            "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+            "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+        };
+
         public static string GetValidFileName(string fileName)
         {
             if (string.IsNullOrEmpty(fileName))
                 return string.Empty;
 
-            return AllowJustAsciiCharacters(RemoveInvalidFileCharacters());
+            string cleaned = AllowJustAsciiCharacters(RemoveInvalidFileCharacters());
+
+            // Windows silently drops trailing dots and spaces, so ".." and "name." would both
+            // survive the character filter while still meaning "parent directory" afterwards.
+            cleaned = cleaned.Trim().TrimEnd('.', ' ');
+
+            if (cleaned.Length == 0 || cleaned == "." || cleaned == "..")
+                return string.Empty;
+
+            foreach (string reserved in WindowsReservedNames)
+            {
+                if (string.Equals(cleaned, reserved, StringComparison.OrdinalIgnoreCase))
+                    return "_" + cleaned;
+            }
+
+            return cleaned;
 
             string RemoveInvalidFileCharacters()
             {
@@ -20,11 +42,11 @@ namespace InvisibleGorillaXRay.Utilities
 
             string AllowJustAsciiCharacters(string name)
             {
-                string cleaned = System.Text.RegularExpressions.Regex.Replace(
+                string cleanedName = System.Text.RegularExpressions.Regex.Replace(
                     name,
                     @"[^\p{L}\p{N} ._()|\-]+",
                     " ");
-                return System.Text.RegularExpressions.Regex.Replace(cleaned, @"\s+", " ").Trim();
+                return System.Text.RegularExpressions.Regex.Replace(cleanedName, @"\s+", " ").Trim();
             }
         }
 

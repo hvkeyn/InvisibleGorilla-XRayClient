@@ -93,10 +93,13 @@ namespace InvisibleGorillaXRay.Handlers.Tor
 
             int socksPort = settings.GetSocksPort();
             int controlPort = settings.GetControlPort();
-            string dataDir = System.IO.Path.Combine(Directory.TOR_DATA, "session");
+            // tor resolves relative paths against its WorkingDirectory (the Tor folder), so
+            // "./Tor/Data/torrc" became "<app>\Tor\Tor\Data\torrc" and tor refused to start.
+            string torDataRoot = System.IO.Path.GetFullPath(Directory.TOR_DATA);
+            string dataDir = System.IO.Path.Combine(torDataRoot, "session");
             string cookieFile = System.IO.Path.Combine(dataDir, "control_auth_cookie");
-            string torrcPath = System.IO.Path.Combine(Directory.TOR_DATA, "torrc");
-            string logFile = System.IO.Path.Combine(Directory.TOR_DATA, "tor.log");
+            string torrcPath = System.IO.Path.Combine(torDataRoot, "torrc");
+            string logFile = System.IO.Path.Combine(torDataRoot, "tor.log");
 
             try
             {
@@ -168,9 +171,9 @@ namespace InvisibleGorillaXRay.Handlers.Tor
         {
             var startInfo = new ProcessStartInfo
             {
-                FileName = Path.TOR_EXE,
+                FileName = System.IO.Path.GetFullPath(Path.TOR_EXE),
                 Arguments = $"-f \"{torrcPath}\"",
-                WorkingDirectory = Directory.TOR,
+                WorkingDirectory = System.IO.Path.GetFullPath(Directory.TOR_DATA),
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -388,6 +391,12 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 }
             }
 
+            // Bare "ip:port cert=…" lines (and lines prefixed with "Bridge ") used to leave
+            // the type at NONE, so torrc was written without UseBridges and tor connected
+            // directly while the UI still showed bridges. Such lines are obfs4-style.
+            if (type == BridgeType.NONE && lines.Count > 0)
+                type = BridgeType.OBFS4;
+
             copy.BridgeType = type;
             copy.BridgeLines = lines ?? new List<string>();
             return copy;
@@ -423,14 +432,18 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 return BridgeType.NONE;
             foreach (string line in lines)
             {
-                string trimmed = (line ?? string.Empty).TrimStart();
-                if (trimmed.StartsWith("snowflake ", StringComparison.Ordinal))
+                string trimmed = (line ?? string.Empty).Trim();
+                // Users and panels often paste the torrc form "Bridge obfs4 ...".
+                if (trimmed.StartsWith("Bridge ", StringComparison.OrdinalIgnoreCase))
+                    trimmed = trimmed.Substring("Bridge ".Length).TrimStart();
+
+                if (trimmed.StartsWith("snowflake ", StringComparison.OrdinalIgnoreCase))
                     return BridgeType.SNOWFLAKE;
-                if (trimmed.StartsWith("meek", StringComparison.Ordinal))
+                if (trimmed.StartsWith("meek", StringComparison.OrdinalIgnoreCase))
                     return BridgeType.MEEK_AZURE;
-                if (trimmed.StartsWith("webtunnel ", StringComparison.Ordinal))
+                if (trimmed.StartsWith("webtunnel ", StringComparison.OrdinalIgnoreCase))
                     return BridgeType.WEBTUNNEL;
-                if (trimmed.StartsWith("obfs4 ", StringComparison.Ordinal))
+                if (trimmed.StartsWith("obfs4 ", StringComparison.OrdinalIgnoreCase))
                     return BridgeType.OBFS4;
             }
             return BridgeType.NONE;
@@ -554,6 +567,9 @@ namespace InvisibleGorillaXRay.Handlers.Tor
 
                 if (!control.SetConf(out string setReply, args.ToArray()))
                 {
+                    // RESETCONF already dropped the old bridges: without this guard tor would
+                    // bootstrap directly and the caller would report a successful connection.
+                    control.SetConf(out _, "DisableNetwork=1");
                     DiagnosticLog.Write(Tag, "Smart connect SETCONF failed: " + setReply);
                     return false;
                 }
@@ -589,10 +605,14 @@ namespace InvisibleGorillaXRay.Handlers.Tor
 
             int socksPort = FindFreePort(19250);
             int controlPort = FindFreePort(socksPort + 1);
-            string dataDir = System.IO.Path.Combine(Directory.TOR_DATA, "check");
+            string torDataRoot = System.IO.Path.GetFullPath(Directory.TOR_DATA);
+            // A shared "check" directory made two concurrent checks fight over the same
+            // torrc/cookie; every check now gets its own scratch folder.
+            string checkId = Guid.NewGuid().ToString("N").Substring(0, 8);
+            string dataDir = System.IO.Path.Combine(torDataRoot, "check", checkId);
             string cookieFile = System.IO.Path.Combine(dataDir, "control_auth_cookie");
-            string torrcPath = System.IO.Path.Combine(Directory.TOR_DATA, "torrc.check");
-            string logFile = System.IO.Path.Combine(Directory.TOR_DATA, "tor-check.log");
+            string torrcPath = System.IO.Path.Combine(dataDir, "torrc.check");
+            string logFile = System.IO.Path.Combine(dataDir, "tor-check.log");
 
             Process check = null;
             try
@@ -622,15 +642,16 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 List<string> lines = chain[0].Lines;
                 int stallMs = 0;
                 int lastPercent = -1;
+                int checkPercent = 0;
 
                 string torrc = TorrcBuilder.Build(socksPort, controlPort, dataDir, cookieFile, logFile, bridgeType, lines);
                 File.WriteAllText(torrcPath, torrc);
 
                 var startInfo = new ProcessStartInfo
                 {
-                    FileName = Path.TOR_EXE,
+                    FileName = System.IO.Path.GetFullPath(Path.TOR_EXE),
                     Arguments = $"-f \"{torrcPath}\"",
-                    WorkingDirectory = Directory.TOR,
+                    WorkingDirectory = torDataRoot,
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
@@ -672,8 +693,9 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                                 {
                                     lastPercent = percent;
                                     stallMs = 0;
-                                    BootstrapPercent = percent;
-                                    StatusSummary = $"{percent}% {bridgeType}";
+                                    // Local state only: a bridge check must not overwrite the
+                                    // live session's BootstrapPercent/StatusSummary.
+                                    checkPercent = percent;
                                 }
                                 else
                                 {
@@ -691,7 +713,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                         stallMs += interval;
                     }
 
-                    int checkStallLimit = BootstrapPercent >= 15 ? 120000 : 30000;
+                    int checkStallLimit = checkPercent >= 15 ? 120000 : 30000;
                     if (stallMs >= checkStallLimit && attempt + 1 < chain.Count)
                     {
                         BridgeAttempt next = chain[attempt + 1];
@@ -702,8 +724,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                             lines = next.Lines;
                             lastPercent = -1;
                             stallMs = 0;
-                            BootstrapPercent = 0;
-                            StatusSummary = $"Switching to {bridgeType}";
+                            checkPercent = 0;
                             DiagnosticLog.Write(Tag, "Bridge check switching to " + bridgeType);
                         }
                         else
@@ -717,7 +738,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                     elapsed += interval;
                 }
 
-                return BridgeCheckResult.Fail($"Bridge did not connect within {timeoutMs / 1000}s ({BootstrapPercent}% {bridgeType}).");
+                return BridgeCheckResult.Fail($"Bridge did not connect within {timeoutMs / 1000}s ({checkPercent}% {bridgeType}).");
             }
             catch (Exception ex)
             {
@@ -733,6 +754,13 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                         check.WaitForExit(3000);
                     }
                     check?.Dispose();
+                }
+                catch { }
+
+                try
+                {
+                    if (System.IO.Directory.Exists(dataDir))
+                        System.IO.Directory.Delete(dataDir, true);
                 }
                 catch { }
             }

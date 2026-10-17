@@ -226,7 +226,12 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             }
 
             try { process?.Dispose(); } catch { }
-            ready.Dispose();
+
+            // The stdout reader thread may still call ready.Set() after a startup timeout
+            // disposed the session; disposing the event here raced with it and threw
+            // ObjectDisposedException on a background thread. ManualResetEventSlim does not
+            // need disposal unless its WaitHandle was touched, so it is intentionally left
+            // to the GC.
         }
 
         private sealed class OwnedTcpStream : Stream

@@ -348,23 +348,40 @@ namespace InvisibleGorillaXRay
             buttonCheckBridge.IsEnabled = false;
             textBlockTorStatus.Text = Localize("Lang.Tor.Status.Checking");
 
-            BridgeCheckResult result = await Task.Run(() => torManager.CheckBridge(type, lines, 150000));
+            // CheckBridge creates/deletes temp directories and starts a tor process: any I/O
+            // failure used to escape an async void handler (unhandled exception = crash) and
+            // left the button disabled forever. Both are handled here.
+            try
+            {
+                BridgeCheckResult result = await Task.Run(() => torManager.CheckBridge(type, lines, 150000));
 
-            if (result.Success && result.UsedLines != null && result.UsedLines.Count > 0)
-            {
-                BridgeType used = result.UsedType == BridgeType.NONE ? type : result.UsedType;
-                string status = string.IsNullOrWhiteSpace(result.LinkLabel)
-                    ? string.Format(Localize("Lang.Tor.Status.CheckOk"), result.LatencyMs)
-                    : string.Format(Localize("Lang.Tor.Link.Badge"), result.LinkLabel);
-                ApplyBridgeLines(used, result.UsedLines, status);
+                if (result.Success && result.UsedLines != null && result.UsedLines.Count > 0)
+                {
+                    BridgeType used = result.UsedType == BridgeType.NONE ? type : result.UsedType;
+                    string status = string.IsNullOrWhiteSpace(result.LinkLabel)
+                        ? string.Format(Localize("Lang.Tor.Status.CheckOk"), result.LatencyMs)
+                        : string.Format(Localize("Lang.Tor.Link.Badge"), result.LinkLabel);
+                    ApplyBridgeLines(used, result.UsedLines, status);
+                }
+                else
+                {
+                    textBlockTorStatus.Text = result.Success
+                        ? string.Format(Localize("Lang.Tor.Status.CheckOk"), result.LatencyMs)
+                        : string.Format(Localize("Lang.Tor.Status.CheckFail"), result.Message);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                textBlockTorStatus.Text = result.Success
-                    ? string.Format(Localize("Lang.Tor.Status.CheckOk"), result.LatencyMs)
-                    : string.Format(Localize("Lang.Tor.Status.CheckFail"), result.Message);
+                Core.DiagnosticLog.WriteException("SettingsWindow.CheckBridge", ex);
+                textBlockTorStatus.Text = string.Format(
+                    Localize("Lang.Tor.Status.CheckFail"),
+                    ex.GetBaseException().Message);
             }
-            buttonCheckBridge.IsEnabled = true;
+            finally
+            {
+                if (IsLoaded)
+                    buttonCheckBridge.IsEnabled = true;
+            }
         }
 
         private async void OnAskTorClick(object sender, RoutedEventArgs e)
@@ -801,6 +818,16 @@ namespace InvisibleGorillaXRay
 
         private void OnConfirmButtonClick(object sender, RoutedEventArgs e)
         {
+            // Ports used to go straight into int.Parse: an empty field threw inside the
+            // dispatcher handler (silently swallowed, CONFIRM looked dead) and a value like
+            // 70000 wrapped to 4464 in the native core.
+            if (!TryReadPort(textBoxProxyPort))
+                return;
+            if (!TryReadPort(textBoxTunPort))
+                return;
+            if (!TryReadPort(textBoxTestPort))
+                return;
+
             UserSettings currentSettings = getUserSettings.Invoke();
             UserSettings userSettings = new UserSettings(
                 language: comboBoxLanguage.SelectedValue.ToString(),
@@ -813,9 +840,9 @@ namespace InvisibleGorillaXRay
                 isStartHidden: checkBoxStartHidden.IsChecked.Value,
                 isAutoConnect: checkBoxAutoConnect.IsChecked.Value,
                 isSendingAnalytics: checkBoxSendAnalytics.IsChecked.Value,
-                proxyPort: int.Parse(textBoxProxyPort.Text),
-                tunPort: int.Parse(textBoxTunPort.Text),
-                testPort: int.Parse(textBoxTestPort.Text),
+                proxyPort: ReadPort(textBoxProxyPort),
+                tunPort: ReadPort(textBoxTunPort),
+                testPort: ReadPort(textBoxTestPort),
                 tunIp: textBoxTunDeviceIp.Text,
                 dns: textBoxTunDns.Text,
                 logPath: textBoxLogPath.Text,
@@ -867,6 +894,30 @@ namespace InvisibleGorillaXRay
                     return getSendingAnalyticsEnabled.Invoke() != checkBoxSendAnalytics.IsChecked.Value;
                 }
             }
+        }
+
+        private bool TryReadPort(TextBox box)
+        {
+            if (TryParsePort(box?.Text, out _))
+                return true;
+
+            MessageBox.Show(
+                this,
+                string.Format("{0}: 1-65535", Localize("Lang.Window.Settings.Tab.Port")),
+                Localize("Lang.Window.Settings.WindowTitle"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+
+            box?.Focus();
+            box?.SelectAll();
+            return false;
+        }
+
+        private static int ReadPort(TextBox box) => TryParsePort(box?.Text, out int port) ? port : 0;
+
+        private static bool TryParsePort(string text, out int port)
+        {
+            return int.TryParse((text ?? string.Empty).Trim(), out port) && port >= 1 && port <= 65535;
         }
 
         private void OnCancelButtonClick(object sender, RoutedEventArgs e)

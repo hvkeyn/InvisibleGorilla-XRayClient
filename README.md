@@ -52,6 +52,13 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.59
+
+- **A subscription name cannot delete the application folder.** A profile title such as `..` is rejected, and a refresh writes the new server list beside the old one before swapping them.
+- **The Windows system proxy is put back.** Turning the option off or closing the app restores the previous WinINET settings, including a corporate proxy or PAC script.
+- **Tor starts from the real data folder.** Bridge lines are one line each, a pasted `Bridge obfs4` line is used as obfs4, and a failed transport switch does not leave Tor without bridges.
+- **A blocked server can be replaced.** An address check that times out or fails TLS counts as a tunnel failure, so the desktop can move to another server in the group.
+
 ## What's new in v3.6.58
 
 - **App exceptions belong to the whole subscription.** The phone and the desktop attach the same application list to every server in the group, and a live switch keeps that list.

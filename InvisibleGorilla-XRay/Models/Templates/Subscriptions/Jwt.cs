@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Net;
 using System.Linq;
 using System.Text;
@@ -39,8 +39,15 @@ namespace InvisibleGorillaXRay.Models.Templates.Subscriptions
             {
                 try
                 {
+                    // JWT parts are base64url and usually have no padding, so a raw
+                    // Convert.FromBase64String threw and the JWT template never matched.
+                    string compact = (str ?? string.Empty).Replace('-', '+').Replace('_', '/');
+                    int padding = compact.Length % 4;
+                    if (padding > 0)
+                        compact += new string('=', 4 - padding);
+
                     return Encoding.UTF8.GetString(
-                        bytes: System.Convert.FromBase64String(str)
+                        bytes: System.Convert.FromBase64String(compact)
                     );
                 }
                 catch

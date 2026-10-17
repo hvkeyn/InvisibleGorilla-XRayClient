@@ -126,13 +126,35 @@ namespace InvisibleGorillaXRay.Services
                 string downloads = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
                 string downloadDir = System.IO.Path.Combine(downloads, "Downloads", DownloadFolderName);
                 System.IO.Directory.CreateDirectory(downloadDir);
-                string destination = System.IO.Path.Combine(downloadDir, asset.Name);
+
+                // The asset name comes from the release JSON: never let it carry a path
+                // (e.g. "..\\..\\x.exe") outside the download folder.
+                string safeName = System.IO.Path.GetFileName(asset.Name ?? string.Empty);
+                if (string.IsNullOrWhiteSpace(safeName))
+                    return string.Empty;
+
+                string destination = System.IO.Path.Combine(downloadDir, safeName);
 
                 bool ok = await updateHandler.ReleaseService
                     .DownloadAssetAsync(asset, destination)
                     .ConfigureAwait(true);
 
-                return ok ? destination : string.Empty;
+                if (!ok)
+                    return string.Empty;
+
+                // A truncated or empty download must never be executed. GitHub publishes the
+                // exact asset size, so compare it and drop the file on mismatch.
+                long actual = new System.IO.FileInfo(destination).Length;
+                if (actual == 0 || (asset.Size > 0 && actual != asset.Size))
+                {
+                    DiagnosticLog.Write(
+                        "WindowsAutoUpdateService",
+                        $"Downloaded asset rejected: expected={asset.Size}, actual={actual}, name={safeName}");
+                    try { System.IO.File.Delete(destination); } catch { }
+                    return string.Empty;
+                }
+
+                return destination;
             }
             catch (Exception ex)
             {

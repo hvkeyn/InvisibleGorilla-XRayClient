@@ -45,10 +45,12 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                     sb.AppendLine($"Log notice file {logPath}");
             }
 
+            // tor is started with WorkingDirectory = Tor data folder, so every path in the
+            // file has to be absolute: a relative "./Tor/geoip" resolved to "<app>\Tor\Tor\geoip".
             if (File.Exists(Path.TOR_GEOIP))
-                sb.AppendLine($"GeoIPFile {Quote(Path.TOR_GEOIP)}");
+                sb.AppendLine($"GeoIPFile {Quote(System.IO.Path.GetFullPath(Path.TOR_GEOIP))}");
             if (File.Exists(Path.TOR_GEOIP6))
-                sb.AppendLine($"GeoIPv6File {Quote(Path.TOR_GEOIP6)}");
+                sb.AppendLine($"GeoIPv6File {Quote(System.IO.Path.GetFullPath(Path.TOR_GEOIP6))}");
 
             AppendBridges(sb, bridgeType, bridgeLines);
 
@@ -96,7 +98,31 @@ namespace InvisibleGorillaXRay.Handlers.Tor
         {
             if (string.IsNullOrEmpty(value))
                 return "\"\"";
-            return "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+            return "\"" + SanitizeConfValue(value).Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+        }
+
+        /// <summary>
+        /// A control-port command is a single line. A bridge line pasted from a panel (or an
+        /// answer from Moat) must not be able to inject further commands or torrc directives,
+        /// so everything after the first line break is dropped and control characters are
+        /// removed. The same rule protects torrc generation: a bridge line is one line too.
+        /// </summary>
+        public static string SanitizeConfValue(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return string.Empty;
+
+            int breakIndex = value.IndexOfAny(new[] { '\r', '\n' });
+            string head = breakIndex >= 0 ? value.Substring(0, breakIndex) : value;
+
+            StringBuilder sb = new StringBuilder(head.Length);
+            foreach (char c in head)
+            {
+                if (!char.IsControl(c))
+                    sb.Append(c);
+            }
+
+            return sb.ToString().Trim();
         }
 
         private static void AppendBridges(StringBuilder sb, BridgeType bridgeType, IEnumerable<string> bridgeLines)
@@ -120,8 +146,9 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             {
                 foreach (string line in bridgeLines)
                 {
-                    if (!string.IsNullOrWhiteSpace(line))
-                        lines.Add(line.Trim());
+                    string cleaned = SanitizeConfValue(line);
+                    if (cleaned.Length > 0)
+                        lines.Add(cleaned);
                 }
             }
 
@@ -175,11 +202,46 @@ namespace InvisibleGorillaXRay.Handlers.Tor
 
         private static string ExecPath(string path)
         {
-            string normalized = path?.Replace("\\", "/") ?? string.Empty;
-            if (normalized.IndexOf(' ') >= 0)
-                return Quote(normalized);
-            return normalized;
+            if (string.IsNullOrWhiteSpace(path))
+                return string.Empty;
+
+            string full = System.IO.Path.GetFullPath(path).Replace("\\", "/");
+            if (full.IndexOf(' ') < 0)
+                return full;
+
+            // tor does not strip quotes inside ClientTransportPlugin: a quoted path reaches
+            // CreateProcess with the quote characters and the PT aborts (0xC0000409).
+            // A space-free 8.3 short path is the only form tor accepts when the application
+            // folder contains spaces.
+            string shortPath = TryGetShortPath(full);
+            return string.IsNullOrEmpty(shortPath) ? full : shortPath.Replace("\\", "/");
         }
+
+        private static string TryGetShortPath(string path)
+        {
+            if (!System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                    System.Runtime.InteropServices.OSPlatform.Windows))
+            {
+                return null;
+            }
+
+            try
+            {
+                var buffer = new StringBuilder(1024);
+                int length = GetShortPathName(path, buffer, buffer.Capacity);
+                return length > 0 ? buffer.ToString() : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        [System.Runtime.InteropServices.DllImport(
+            "kernel32.dll",
+            CharSet = System.Runtime.InteropServices.CharSet.Unicode,
+            SetLastError = true)]
+        private static extern int GetShortPathName(string longPath, StringBuilder shortPath, int bufferLength);
 
         private static string Quote(string path) => $"\"{path?.Replace("\\", "/")}\"";
     }

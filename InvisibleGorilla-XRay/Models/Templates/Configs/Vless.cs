@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Web;
 using System.Collections.Specialized;
 
@@ -129,30 +129,35 @@ namespace InvisibleGorillaXRay.Models.Templates.Configs
         {
             get
             {
-                if (Adapter.streamSecurity == "reality")
+                // Adapter is a computed property: every access returns a new object, so the
+                // old `Adapter.flow = …` defaults were written to a throw-away instance and
+                // lost. Compute the effective flow once and use it below.
+                Adapter adapter = Adapter;
+                string flow = adapter.flow;
+
+                if (adapter.streamSecurity == "reality")
                 {
-                    if (string.IsNullOrEmpty(Adapter.flow))
-                        Adapter.flow = "xtls-rprx-vision";
+                    if (string.IsNullOrEmpty(flow))
+                        flow = "xtls-rprx-vision";
                 }
-                else if (Adapter.streamSecurity == "xtls")
+                else if (adapter.streamSecurity == "xtls")
                 {
-                    if (string.IsNullOrEmpty(Adapter.flow))
-                        Adapter.flow = "xtls-rprx-origin";
-                    else
-                        Adapter.flow = Adapter.flow.Replace("splice", "direct");
+                    flow = string.IsNullOrEmpty(flow)
+                        ? "xtls-rprx-origin"
+                        : flow.Replace("splice", "direct");
                 }
 
                 return new V2Ray.Outbound.Settings() {
                     vnext = new V2Ray.Outbound.Settings.Vnext[] {
                         new V2Ray.Outbound.Settings.Vnext() {
-                            address = Adapter.address,
-                            port = Adapter.port,
+                            address = adapter.address,
+                            port = adapter.port,
                             users = new V2Ray.Outbound.Settings.Vnext.User[] {
                                 new V2Ray.Outbound.Settings.Vnext.User() {
-                                    id = Adapter.id,
-                                    flow = Adapter.flow,
+                                    id = adapter.id,
+                                    flow = flow,
                                     email = Global.DEFAULT_EMAIL,
-                                    encryption = Adapter.security
+                                    encryption = adapter.security
                                 }
                             }
                         }

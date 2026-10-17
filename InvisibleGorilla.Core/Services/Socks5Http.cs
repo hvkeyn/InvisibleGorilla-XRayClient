@@ -107,7 +107,7 @@ namespace InvisibleGorillaXRay.Services
                     client.ConnectAsync(proxyHost, proxyPort, cts.Token).AsTask().GetAwaiter().GetResult();
                     using NetworkStream raw = new NetworkStream(client.Client, ownsSocket: false);
                     HandshakeAsync(raw, destHost, 443, null, null, cts.Token).GetAwaiter().GetResult();
-                    using SslStream ssl = new SslStream(raw, leaveInnerStreamOpen: true, static (_, _, _, _) => true);
+                    using SslStream ssl = new SslStream(raw, leaveInnerStreamOpen: true);
                     ssl.AuthenticateAsClient(destHost);
                     string request = "GET " + (string.IsNullOrWhiteSpace(path) ? "/" : path) +
                         " HTTP/1.1\r\nHost: " + destHost +

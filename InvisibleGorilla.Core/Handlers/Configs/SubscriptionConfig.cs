@@ -34,7 +34,8 @@ namespace InvisibleGorillaXRay.Handlers.Configs
                 return;
             
             DirectoryInfo[] directories = directoryInfo.GetDirectories().Where(
-                directory => directory.GetFiles().Any(file => file.Name == "info.dat") &&
+                directory => !IsStagingDirectory(directory.Name) &&
+                    directory.GetFiles().Any(file => file.Name == "info.dat") &&
                     directory.GetFiles().Count() > 1
             ).OrderBy(
                 directory => directory.CreationTime
@@ -51,10 +52,27 @@ namespace InvisibleGorillaXRay.Handlers.Configs
             return groups;
         }
 
+        private static bool IsStagingDirectory(string name) =>
+            name.EndsWith(".new", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".bak", StringComparison.OrdinalIgnoreCase);
+
         public void CreateSubscription(string remark, string url, string data)
         {
-            remark = string.IsNullOrWhiteSpace(remark) ? "subscription" : remark.Trim();
-            string destinationDirectory = $"{Directory.CONFIGS}/{remark}";
+            remark = FileUtility.GetValidFileName(remark);
+            if (string.IsNullOrWhiteSpace(remark))
+                remark = "subscription";
+
+            string destinationDirectory = System.IO.Path.Combine(Directory.CONFIGS, remark);
+            string configsRoot = System.IO.Path.GetFullPath(Directory.CONFIGS);
+            string destinationFullPath = System.IO.Path.GetFullPath(destinationDirectory);
+            if (!destinationFullPath.StartsWith(configsRoot + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                InvisibleGorillaXRay.Core.DiagnosticLog.Write(
+                    "SubscriptionConfig",
+                    "Refusing unsafe subscription directory.");
+                return;
+            }
+
             List<string[]> configs = ReadServers(data, out Models.SubscriptionMeta meta);
             string storedUrl = !string.IsNullOrWhiteSpace(meta?.NewUrl) && meta.NewUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)
                 ? meta.NewUrl
@@ -63,26 +81,52 @@ namespace InvisibleGorillaXRay.Handlers.Configs
             if (!IsAnyConfigExists() && string.IsNullOrWhiteSpace(meta?.Notice) && string.IsNullOrWhiteSpace(meta?.Announce))
                 return;
 
-            if (System.IO.Directory.Exists(destinationDirectory))
-                System.IO.Directory.Delete(destinationDirectory, true);
+            string stagingDirectory = destinationFullPath + ".new";
+            string backupDirectory = destinationFullPath + ".bak";
+            var writtenNames = new List<string>();
 
-            var usedRemarks = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            CreateInfoFile();
-            foreach(string[] config in configs)
+            try
             {
-                CreateConfigFile(
-                    remark: UniqueRemark(GetConfigRemark(config), usedRemarks), 
-                    data: GetConfigData(config)
-                );
+                TryDelete(stagingDirectory);
+                System.IO.Directory.CreateDirectory(stagingDirectory);
+
+                var usedRemarks = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                CreateInfoFile();
+                foreach (string[] config in configs)
+                {
+                    CreateConfigFile(
+                        remark: UniqueRemark(GetConfigRemark(config), usedRemarks),
+                        data: GetConfigData(config)
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("SubscriptionConfig.Stage", ex);
+                TryDelete(stagingDirectory);
+                return;
+            }
+
+            if (!TrySwap(stagingDirectory, backupDirectory, destinationFullPath))
+                return;
+
+            foreach (string name in writtenNames)
+            {
+                string finalPath = System.IO.Path.Combine(destinationFullPath, name + ".json");
+                if (!System.IO.File.Exists(finalPath))
+                    continue;
+
+                FileUtility.SetFileTimeToNow(finalPath);
+                AddConfigToList(CreateConfigModel(finalPath));
             }
 
             bool IsAnyConfigExists() => configs.Count > 0;
 
             void CreateInfoFile()
             {
-                string destinationPath = $"{destinationDirectory}/info.dat";
+                string destinationPath = System.IO.Path.Combine(stagingDirectory, "info.dat");
                 SaveToDirectory(destinationPath, storedUrl);
-                meta?.Save(destinationDirectory);
+                meta?.Save(stagingDirectory);
             }
 
             List<string[]> ReadServers(string payload, out Models.SubscriptionMeta parsedMeta)
@@ -100,21 +144,68 @@ namespace InvisibleGorillaXRay.Handlers.Configs
 
             void CreateConfigFile(string remark, string data)
             {
-                string destinationPath = $"{destinationDirectory}/{remark}.json";
-                // Strip api/stats/policy/inbounds from subscription payloads as well,
-                // so a remote config can never reintroduce a localhost Xray gRPC API.
-                SaveToDirectory(destinationPath, JsonUtility.SanitizeRuntimeManagedSections(data));
-                SetFileTime(destinationPath);
-                AddConfigToList(CreateConfigModel(destinationPath));
+                string safeRemark = FileUtility.GetValidFileName(remark);
+                if (string.IsNullOrWhiteSpace(safeRemark))
+                    safeRemark = "server";
 
-                void SetFileTime(string path) => FileUtility.SetFileTimeToNow(path);
+                string destinationPath = System.IO.Path.Combine(stagingDirectory, safeRemark + ".json");
+                SaveToDirectory(destinationPath, JsonUtility.SanitizeRuntimeManagedSections(data));
+                writtenNames.Add(safeRemark);
             }
 
             void SaveToDirectory(string destinationPath, string data)
             {
-                FileUtility.CreateDirectory(destinationDirectory);
-                FileUtility.SetDirectoryTimeToNow(destinationDirectory);
+                FileUtility.SetDirectoryTimeToNow(stagingDirectory);
                 File.WriteAllText(destinationPath, data);
+            }
+
+            bool TrySwap(string staging, string backup, string target)
+            {
+                try
+                {
+                    TryDelete(backup);
+
+                    bool hadPrevious = System.IO.Directory.Exists(target);
+                    if (hadPrevious)
+                        System.IO.Directory.Move(target, backup);
+
+                    try
+                    {
+                        System.IO.Directory.Move(staging, target);
+                    }
+                    catch
+                    {
+                        if (hadPrevious
+                            && !System.IO.Directory.Exists(target)
+                            && System.IO.Directory.Exists(backup))
+                        {
+                            System.IO.Directory.Move(backup, target);
+                        }
+
+                        throw;
+                    }
+
+                    TryDelete(backup);
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("SubscriptionConfig.Swap", ex);
+                    TryDelete(staging);
+                    return false;
+                }
+            }
+
+            static void TryDelete(string path)
+            {
+                try
+                {
+                    if (System.IO.Directory.Exists(path))
+                        System.IO.Directory.Delete(path, true);
+                }
+                catch
+                {
+                }
             }
 
             string UniqueRemark(string name, System.Collections.Generic.HashSet<string> used)

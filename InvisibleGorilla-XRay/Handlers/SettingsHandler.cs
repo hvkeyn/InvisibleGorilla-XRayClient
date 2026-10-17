@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
@@ -81,14 +82,42 @@ namespace InvisibleGorillaXRay.Handlers
 
         private UserSettings LoadUserSettings()
         {
-            if (!File.Exists(Path.USER_SETTINGS))
-                return NormalizeRules(new UserSettings());
+            UserSettings? loaded = TryLoad(Path.USER_SETTINGS);
+            if (loaded != null)
+                return NormalizeRules(loaded);
 
-            string rawSettings = File.ReadAllText(Path.USER_SETTINGS);
-            if (!JsonUtility.IsJsonValid(rawSettings))
-                return NormalizeRules(new UserSettings());
+            // A truncated or hand-edited Settings.json used to reset every setting silently.
+            // The backup written by the last successful save is a better starting point.
+            UserSettings? backup = TryLoad(Path.USER_SETTINGS + ".bak");
+            if (backup != null)
+            {
+                Core.DiagnosticLog.Write("Settings", "Settings.json is unreadable; restored from Settings.json.bak");
+                return NormalizeRules(backup);
+            }
 
-            return NormalizeRules(JsonConvert.DeserializeObject<UserSettings>(rawSettings));
+            return NormalizeRules(new UserSettings());
+
+            UserSettings? TryLoad(string path)
+            {
+                try
+                {
+                    if (!File.Exists(path))
+                        return null;
+
+                    string rawSettings = File.ReadAllText(path);
+                    if (!JsonUtility.IsJsonValid(rawSettings))
+                        return null;
+
+                    // Any valid JSON (null, 123, {"Mode":"TUNNEL"}) passes IsJsonValid, so the
+                    // deserializer has to be guarded as well.
+                    return JsonConvert.DeserializeObject<UserSettings>(rawSettings);
+                }
+                catch (Exception ex)
+                {
+                    Core.DiagnosticLog.WriteException("Settings.Load", ex);
+                    return null;
+                }
+            }
 
             UserSettings NormalizeRules(UserSettings settings)
             {
@@ -108,8 +137,40 @@ namespace InvisibleGorillaXRay.Handlers
 
         private void SaveUserSettings()
         {
-            string rawSettings = JsonConvert.SerializeObject(userSettings);
-            File.WriteAllText(Path.USER_SETTINGS, rawSettings);
+            try
+            {
+                string rawSettings = JsonConvert.SerializeObject(userSettings);
+                string target = Path.USER_SETTINGS;
+                string temp = target + ".tmp";
+
+                File.WriteAllText(temp, rawSettings);
+
+                if (!File.Exists(target))
+                {
+                    File.Move(temp, target);
+                    return;
+                }
+
+                // Keep the previous good copy, then swap in place: a crash, a locked file or
+                // a full disk must not leave a half-written Settings.json behind.
+                try { File.Copy(target, target + ".bak", true); }
+                catch (Exception ex) { Core.DiagnosticLog.WriteException("Settings.Backup", ex); }
+
+                try
+                {
+                    File.Replace(temp, target, null, ignoreMetadataErrors: true);
+                }
+                catch (Exception ex)
+                {
+                    Core.DiagnosticLog.WriteException("Settings.Replace", ex);
+                    File.Copy(temp, target, true);
+                    try { File.Delete(temp); } catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                Core.DiagnosticLog.WriteException("Settings.Save", ex);
+            }
         }
 
         private static System.Collections.Generic.List<AppRule> CloneAppRules(System.Collections.Generic.IEnumerable<AppRule>? appRules)

@@ -1,3 +1,4 @@
+using System;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -81,14 +82,35 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 }
             });
 
-            // Route the primary outbound's dialer through Tor.
-            if (outbounds[0] is JObject primary)
+            foreach (JToken token in outbounds)
             {
-                JObject streamSettings = primary["streamSettings"] as JObject;
+                if (!(token is JObject outbound))
+                    continue;
+
+                string protocol = (string)outbound["protocol"] ?? string.Empty;
+                string tag = (string)outbound["tag"] ?? string.Empty;
+
+                if (string.Equals(tag, TorOutboundTag, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(protocol, "freedom", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(protocol, "blackhole", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(protocol, "dns", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(protocol, "loopback", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                ChainThroughTor(outbound);
+            }
+
+            return root.ToString(Formatting.None);
+
+            void ChainThroughTor(JObject outbound)
+            {
+                JObject streamSettings = outbound["streamSettings"] as JObject;
                 if (streamSettings == null)
                 {
                     streamSettings = new JObject();
-                    primary["streamSettings"] = streamSettings;
+                    outbound["streamSettings"] = streamSettings;
                 }
 
                 JObject sockopt = streamSettings["sockopt"] as JObject;
@@ -100,8 +122,6 @@ namespace InvisibleGorillaXRay.Handlers.Tor
 
                 sockopt["dialerProxy"] = TorOutboundTag;
             }
-
-            return root.ToString(Formatting.None);
         }
     }
 }

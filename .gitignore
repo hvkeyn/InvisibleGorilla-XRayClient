@@ -105,3 +105,6 @@ InvisibleGorilla-XRay-Windows-*.zip
 # Happ analysis workspace (installer, APK, decompiled sources) — see .happ-analysis/HAPP-REPORT.md
 /.happ-analysis/
 /happ-win-analysis/
+
+# Code-audit working notes (findings, harness output)
+/.audit/

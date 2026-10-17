@@ -88,14 +88,38 @@ namespace InvisibleGorillaXRay.Handlers
         {
             Values.Directory.EnsureWritableDirectories();
 
-            if (!File.Exists(Path.USER_SETTINGS))
-                return NormalizePaths(new UserSettings());
+            UserSettings loaded = TryLoad(Path.USER_SETTINGS);
+            if (loaded != null)
+                return NormalizePaths(loaded);
 
-            string rawSettings = File.ReadAllText(Path.USER_SETTINGS);
-            if (!JsonUtility.IsJsonValid(rawSettings))
-                return NormalizePaths(new UserSettings());
+            UserSettings backup = TryLoad(Path.USER_SETTINGS + ".bak");
+            if (backup != null)
+            {
+                DiagnosticLog.Write("Settings", "Settings.json is unreadable; restored from Settings.json.bak");
+                return NormalizePaths(backup);
+            }
 
-            return NormalizePaths(JsonConvert.DeserializeObject<UserSettings>(rawSettings));
+            return NormalizePaths(new UserSettings());
+
+            UserSettings TryLoad(string path)
+            {
+                try
+                {
+                    if (!File.Exists(path))
+                        return null;
+
+                    string rawSettings = File.ReadAllText(path);
+                    if (!JsonUtility.IsJsonValid(rawSettings))
+                        return null;
+
+                    return JsonConvert.DeserializeObject<UserSettings>(rawSettings);
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("Settings.Load", ex);
+                    return null;
+                }
+            }
 
             UserSettings NormalizePaths(UserSettings settings)
             {
@@ -122,7 +146,14 @@ namespace InvisibleGorillaXRay.Handlers
             {
                 Values.Directory.EnsureWritableDirectories();
                 string rawSettings = JsonConvert.SerializeObject(userSettings);
-                FileUtility.WriteAllTextAtomic(Path.USER_SETTINGS, rawSettings);
+                string target = Path.USER_SETTINGS;
+                if (File.Exists(target))
+                {
+                    try { File.Copy(target, target + ".bak", true); }
+                    catch (Exception ex) { DiagnosticLog.WriteException("Settings.Backup", ex); }
+                }
+
+                FileUtility.WriteAllTextAtomic(target, rawSettings);
             }
             catch (Exception ex)
             {
