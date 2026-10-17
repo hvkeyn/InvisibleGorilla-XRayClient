@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Net;
@@ -57,6 +58,11 @@ namespace InvisibleGorillaXRay.Core
         // Set by Cancel/Stop so a long startup (Moat, tor bootstrap) can abort instead of
         // starting a phantom session after the user already pressed CANCEL.
         private volatile bool cancelRequested;
+
+        // True while the live session egresses through the local Tor SOCKS port (ONLY_TOR).
+        // Such a session has no upstream server, so the TUN bypass route has nothing to exclude;
+        // without this flag EnableTunnel failed with CANT_TUNNEL because the server address was empty.
+        private volatile bool torOnlySession;
 
         private bool IsSuperseded(int runId) =>
             runId != 0 && runId != Volatile.Read(ref activeRunId);
@@ -185,6 +191,7 @@ namespace InvisibleGorillaXRay.Core
         {
             DiagnosticLog.Clear();
             cancelRequested = false;
+            torOnlySession = false;
             int runId = Interlocked.Increment(ref activeRunId);
             DiagnosticLog.Write("Run", $"Session {runId} starting.");
 
@@ -204,9 +211,35 @@ namespace InvisibleGorillaXRay.Core
             TorSettings torSettings = getTorSettings?.Invoke();
             bool torProfile = Services.Tor.TorProfilePaths.IsMarker(getConfig.Invoke()?.Path);
             bool torEnabled = torProfile || (torSettings != null && torSettings.GetEnabled());
+
+            if (torProfile && torSettings != null
+                && torSettings.GetBridgeType() == BridgeType.NONE
+                && (torSettings.GetBridgeLines() == null || torSettings.GetBridgeLines().Count == 0))
+            {
+                // Selecting the "Tor bridges" profile without configured bridges used to start
+                // direct Tor, which is blocked in many networks: the UI sat on "Opening" for the
+                // full 180 s bootstrap timeout. Snowflake needs no bridge lines and is what the
+                // Android client uses by default.
+                DiagnosticLog.Write(
+                    "Run",
+                    "Tor profile selected without bridge settings; defaulting to Snowflake.");
+
+                torSettings = new TorSettings
+                {
+                    Enabled = true,
+                    Mode = torSettings.GetMode(),
+                    SocksPort = torSettings.GetSocksPort(),
+                    ControlPort = torSettings.GetControlPort(),
+                    BridgeType = BridgeType.SNOWFLAKE,
+                    BridgeLines = new List<string>(),
+                    LastLatencyMs = torSettings.LastLatencyMs
+                };
+            }
+
             if (torEnabled)
             {
                 DiagnosticLog.Write("Run", $"Tor enabled (mode={torSettings.GetMode()}). Starting tor daemon...");
+                torOnlySession = torSettings.GetMode() == TorMode.ONLY_TOR;
                 Status torStatus = torManager.Start(torSettings);
                 if (torStatus.Code != Code.SUCCESS)
                 {
@@ -666,6 +699,7 @@ namespace InvisibleGorillaXRay.Core
         public void Stop()
         {
             cancelRequested = true;
+            torOnlySession = false;
             int runId = Volatile.Read(ref activeRunId);
             DiagnosticLog.Write("Stop", "Stop requested: calling XRayCoreWrapper.StopServer()...");
             XRayCoreWrapper.StopServer();
@@ -694,6 +728,7 @@ namespace InvisibleGorillaXRay.Core
         public void Cancel()
         {
             cancelRequested = true;
+            torOnlySession = false;
             int runId = Volatile.Read(ref activeRunId);
             CancelProxy();
             CancelTunnel();
@@ -834,6 +869,35 @@ namespace InvisibleGorillaXRay.Core
             return "";
         }
 
+        private static string GetDefaultGatewayAddress()
+        {
+            try
+            {
+                foreach (System.Net.NetworkInformation.NetworkInterface nic
+                    in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (nic.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up)
+                        continue;
+
+                    if (nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Loopback)
+                        continue;
+
+                    foreach (System.Net.NetworkInformation.GatewayIPAddressInformation gateway
+                        in nic.GetIPProperties().GatewayAddresses)
+                    {
+                        string address = gateway.Address?.ToString();
+                        if (!string.IsNullOrWhiteSpace(address) && address != "0.0.0.0")
+                            return address;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return string.Empty;
+        }
+
         private Status EnableTunnel(LocalProxyCredentials localProxyCredentials)
         {
             Status configStatus = LoadConfigFile();
@@ -842,6 +906,18 @@ namespace InvisibleGorillaXRay.Core
 
             string server = ResolveTunnelServerAddress(configStatus.Content?.ToString());
             DiagnosticLog.Write("EnableTunnel", $"Resolved bypass server address='{server}'");
+
+            if (string.IsNullOrWhiteSpace(server) && torOnlySession)
+            {
+                // ONLY_TOR has no upstream server to bypass: everything egresses through the
+                // local Tor SOCKS port. The TUN helper still requires an address for its bypass
+                // route, so the default gateway (which must stay direct anyway) is used.
+                server = GetDefaultGatewayAddress();
+                DiagnosticLog.Write(
+                    "EnableTunnel",
+                    $"Tor-only session: using default gateway '{server}' as the TUN bypass address.");
+            }
+
             if (string.IsNullOrWhiteSpace(server))
             {
                 DiagnosticLog.Write("EnableTunnel", "Failed to resolve outbound server address for TUN bypass route.");

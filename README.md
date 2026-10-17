@@ -52,6 +52,12 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.60
+
+- **A TUN session no longer restarts itself.** The app ignores the network event raised by its own adapter, so the channel stays up and the button stays on STOP.
+- **Tor without bridges uses Snowflake.** A Tor-only tunnel can start, and a profile with no bridge lines no longer waits on a direct connection.
+- **The server list shows the TCP round-trip.** A quiet Android channel stays amber; red is kept for a real fault.
+
 ## What's new in v3.6.59
 
 - **A subscription name cannot delete the application folder.** A profile title such as `..` is rejected, and a refresh writes the new server list beside the old one before swapping them.

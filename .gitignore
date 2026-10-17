@@ -108,3 +108,12 @@ InvisibleGorilla-XRay-Windows-*.zip
 
 # Code-audit working notes (findings, harness output)
 /.audit/
+
+# Local runtime test artifacts (screenshots, settings backups)
+/.test/
+
+# Local test builds and versioned release folders
+/InvisibleGorilla-XRay-Windows-win-x64-fixed/
+/release-v3.6.*/
+/tests/**/bin/
+/tests/**/obj/

@@ -76,6 +76,34 @@
 | 32 | `XRAY_OVER_TOR` цеплял через Tor только `outbounds[0]`: остальные outbound (балансеры, резервные серверы) шли напрямую. Теперь через Tor идут все прокси-outbound (кроме `freedom`/`blackhole`/`dns`/`loopback` и самого Tor) | `Handlers/Tor/TorConfigBuilder.cs` | P1 |
 | 33 | `MeekFrontSession.Dispose` освобождал `ManualResetEventSlim`, пока поток чтения ещё мог вызвать `ready.Set()` → `ObjectDisposedException` в фоне | `Handlers/Tor/MeekFrontSession.cs` | P2 |
 
+### Пятый проход (по результатам живого тестирования)
+
+| # | Дефект | Файл | Severity |
+|---|---|---|---|
+| 34 | **Регрессия из аудита**: мониторинг сети принимал создание собственного TUN-адаптера за смену сети и перезапускал только что поднятую сессию. В TUN-режиме это давало цикл «подняли → убили», срывало OpenFlux/Tor и держало UI в «Opening the tunnel». Добавлены окно подавления 30 с после старт/стоп и проверка активного адаптера `InvisibleGorilla*`. Проверено вживую: `Change ignored: it comes from the app's own TUN adapter`, скорость DE стабилизировалась (было 4.3–58.2 Mbps, стало 32–36) | `Windows/MainWindow/MainWindow.xaml.cs` | **P0** |
+| 35 | UI навсегда оставался в состоянии «starting» (кнопка CANCEL), если старт падал без вызова `ShowStopStatus`; RUN игнорировался. Добавлен вотчдог (2 с): если `runWorker` не занят и перезапуск не запрошен — вернуть экран в «Stopped». Проверено: `Stuck 'starting' state healed` | `Windows/MainWindow/MainWindow.xaml.cs` | P1 |
+| 36 | OpenFlux с недоступным Яндекс.Документом ждал до 75 с захвата WebView и падал общим «document», блокируя UI модальным окном. Добавлен preflight `OpenFluxUrlCheck.Inspect` до захвата с точными сообщениями (`BadUrl`/`Login`/`Http`/`Timeout`/`Document`). Проверено: ошибка за ~10 с (`error='http'`), UI вернулся в «Stopped» | `Windows/MainWindow/MainWindow.xaml.cs` | P1 |
+| 37 | Каждый недоступный список Goida писал полный стектрейс (десятки записей за цикл). Теперь одна строка на список: `all mirrors failed: …` | `Services/Goida/GoidaFetcher.cs` | P2 |
+| 38 | Провал bootstrap при `BridgeType=NONE` сообщал «Try different bridges» без подсказки, что прямой Tor, скорее всего, блокируется. Добавлена адресная подсказка | `Handlers/Tor/TorManager.cs` | P2 |
+
+### Шестой проход (после живых прогонов Tor/OpenFlux/метрик)
+
+| # | Дефект | Файл | Severity |
+|---|---|---|---|
+| 39 | **Tor (ONLY_TOR) + TUN не запускался вообще**: у Tor-профиля нет upstream-сервера, `ResolveTunnelServerAddress` возвращал пусто, и `EnableTunnel` падал с `CANT_TUNNEL`. Для Tor-only сессии в качестве bypass-адреса TUN теперь берётся шлюз по умолчанию (он и так должен идти напрямую). Проверено: туннель для Tor-only поднялся, проверка адреса прошла через выход Tor | `Core/InvisibleGorillaXRayCore.cs` | **P1** |
+| 40 | Выбор профиля «Tor bridges» при незаданных мостах запускал **прямой Tor** и 180 с висел на bootstrap (в РФ Tor блокируется). Теперь при `BridgeType=NONE` без строк мостов автоматически используется Snowflake (как в Android). Проверено: `Tor profile selected without bridge settings; defaulting to Snowflake` → bootstrap за 10–20 с | `Core/InvisibleGorillaXRayCore.cs` | P1 |
+| 41 | «Пинг» в списке серверов показывал время полного TLS/VLESS-handshake: DE = 737 ms, JP = 1547 ms при реальных 62–70 / 271–279 ms. Теперь показывается TCP-RTT до сервера (native-тест остаётся проверкой доступности). Проверено: DE = 61 ms, JP = 265 ms — совпадает с прямым замером | `Windows/ServerWindow/ServerWindow.xaml.cs`, `Services/Diagnostics/ConfigEndpointProbe.cs` | P1 (метрика/выбор сервера) |
+| 42 | Проверка конфига в списке передавала в парсер «нативный» JSON (`outbound` + protobuf-поля) вместо исходного файла, из-за чего endpoint не находился. Теперь endpoint читается из самого файла конфига | `Windows/ServerWindow/ServerWindow.xaml.cs` | P1 |
+
+### Седьмой проход (жалоба «сбрасывает соединение» + визуал)
+
+| # | Дефект | Файл | Severity |
+|---|---|---|---|
+| 43 | Домашний журнал соединений не очищался между сессиями: в нём оставались ошибки прошлых попыток («No configurations were found», старые `Starting the channel`), из-за чего экран выглядел как бесконечный перезапуск. Теперь каждый ручной старт начинает журнал с нуля (память + `Logs/home-activity.log`). Проверено: после STOP→RUN в журнале ровно 3 строки текущей сессии, всего 1 `Session … starting` в логе | `Windows/MainWindow/MainWindow.xaml.cs` | P1 (восприятие) |
+| 44 | Диагноз «сбрасывает VLESS каждые ~5 с»: пользователь запускал **старую сборку** из `InvisibleGorilla-XRay-Windows-win-x64` (exe 09:37, без фикса подавления сетевых событий). В логе того прогона нет строк `[Network]`, а в старой сборке собственный TUN-адаптер инициировал рестарт. Исправленная сборка в этой же папке: 1 сессия за 35 с, `Change ignored: it comes from the app's own TUN adapter`, UI `Running` без цикла | обе папки релиза | P0 (эксплуатация) |
+
+Визуальная проверка исправленной сборки: скорость 33.7 / 6.0 KB/s в двух плитках без наложений, журнал из трёх свежих строк, кнопка **STOP** (а не CANCEL) при активном соединении, панель «Your connection» с IP/локацией/провайдером/режимом.
+
 ## 3. Осталось (осознанно отложено)
 
 | Приоритет | Находка | Почему отложено |

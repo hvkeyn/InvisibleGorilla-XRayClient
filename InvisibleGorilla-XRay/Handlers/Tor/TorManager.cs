@@ -311,8 +311,12 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 elapsed += interval;
             }
 
+            string hint = active == BridgeType.NONE
+                ? "Direct Tor looks blocked on this network: pick a bridge in Settings -> Tor (Snowflake or obfs4)."
+                : "Try different bridges.";
+
             return new Status(Code.ERROR, SubCode.CANT_CONNECT,
-                $"Tor did not finish bootstrapping within {maxWaitMs / 1000}s (reached {BootstrapPercent}% on {active}). Try different bridges.");
+                $"Tor did not finish bootstrapping within {maxWaitMs / 1000}s (reached {BootstrapPercent}% on {active}). {hint}");
         }
 
         private sealed class BridgeAttempt

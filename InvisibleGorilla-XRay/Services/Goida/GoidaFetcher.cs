@@ -115,7 +115,13 @@ namespace InvisibleGorillaXRay.Services.Goida
             }
 
             if (lastError != null)
-                DiagnosticLog.WriteException($"Goida.FetchList.{listId}", lastError);
+            {
+                // One compact line: these failures are expected on blocked networks and the
+                // full stack trace only flooded the diagnostic log.
+                DiagnosticLog.Write(
+                    $"Goida.FetchList.{listId}",
+                    $"all mirrors failed: {lastError.GetType().Name}: {lastError.Message}");
+            }
 
             return string.Empty;
         }

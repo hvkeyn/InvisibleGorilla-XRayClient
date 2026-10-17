@@ -131,6 +131,18 @@ namespace InvisibleGorillaXRay
                     if (shutdownRequested || !runWorker.IsBusy)
                         return;
 
+                    if (DateTime.UtcNow < suppressNetworkRestartUntilUtc)
+                    {
+                        DiagnosticLog.Write("Network", "Change ignored: the session was just (re)started.");
+                        return;
+                    }
+
+                    if (HasActiveAppTunnel())
+                    {
+                        DiagnosticLog.Write("Network", "Change ignored: it comes from the app's own TUN adapter.");
+                        return;
+                    }
+
                     // Wi-Fi/Ethernet switch or a wake-up: the live session usually keeps
                     // pointing at a dead route, and the app had no reaction at all before.
                     DiagnosticLog.Write("Network", "Network change detected; restarting the session.");
@@ -140,6 +152,19 @@ namespace InvisibleGorillaXRay
                 NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
                 NetworkChange.NetworkAvailabilityChanged += OnNetworkAvailabilityChanged;
                 Closed += OnMainWindowClosed;
+
+                homeStateWatchdog = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+                homeStateWatchdog.Tick += (sender, e) =>
+                {
+                    if (!homeWaitingForRun || runWorker.IsBusy || isRerunRequest)
+                        return;
+
+                    DiagnosticLog.Write(
+                        "Home",
+                        "Stuck 'starting' state healed: no worker is running, returning to the stopped state.");
+                    ShowStopStatus();
+                };
+                homeStateWatchdog.Start();
             }
 
             void InitializeConnectionInfoTimer()
@@ -247,6 +272,29 @@ namespace InvisibleGorillaXRay
                         if (IsOpenFluxProfileActive())
                         {
                             string docUrl = OpenFluxUrl.Trim(getUserSettings?.Invoke()?.GetOpenFluxProfile()?.DocUrl);
+
+                            // Fail fast with a precise message instead of waiting up to 75 s for
+                            // the WebView capture and then reporting a generic "document" error.
+                            OpenFluxUrlCheckResult preflight = OpenFluxUrlCheck.Inspect(docUrl);
+                            DiagnosticLog.Write(
+                                "OpenFlux.Preflight",
+                                $"format={preflight.FormatOk} reachable={preflight.Reachable} doc={preflight.LooksLikeDocument} error='{preflight.Error}'");
+
+                            if (!preflight.FormatOk)
+                                throw new InvalidOperationException("Lang.OpenFlux.Error.BadUrl");
+
+                            if (string.Equals(preflight.Error, "login", StringComparison.Ordinal))
+                                throw new InvalidOperationException("Lang.OpenFlux.Error.Login");
+
+                            if (string.Equals(preflight.Error, "http", StringComparison.Ordinal))
+                                throw new InvalidOperationException("Lang.OpenFlux.Error.Http");
+
+                            if (string.Equals(preflight.Error, "timeout", StringComparison.Ordinal))
+                                throw new InvalidOperationException("Lang.OpenFlux.Error.Timeout");
+
+                            if (!preflight.LooksLikeDocument)
+                                throw new InvalidOperationException("Lang.OpenFlux.Error.Document");
+
                             Dispatcher.BeginInvoke(new Action(() => SetHomeProgress(40, Loc("Lang.OpenFlux.Status.Opening"))));
                             bool captured = false;
                             try
@@ -638,16 +686,52 @@ namespace InvisibleGorillaXRay
 
         private DispatcherTimer networkChangeDebounce;
 
+        // True while the home screen shows "starting" (the CANCEL button). A failed start path
+        // (e.g. a broken OpenFlux document) used to leave the UI there forever; the watchdog
+        // below returns it to the stopped state when no worker is actually running.
+        private bool homeWaitingForRun;
+
+        private DispatcherTimer homeStateWatchdog;
+
+        // The app's own TUN adapter raises NetworkAddressChanged. Without this guard the
+        // monitor treated that as a real network switch and restarted the session it had
+        // just started, which killed OpenFlux/Tor sessions and kept the UI on "Opening".
+        private DateTime suppressNetworkRestartUntilUtc = DateTime.MinValue;
+
         private void OnMainWindowClosed(object sender, EventArgs e)
         {
             NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
             NetworkChange.NetworkAvailabilityChanged -= OnNetworkAvailabilityChanged;
             networkChangeDebounce?.Stop();
+            homeStateWatchdog?.Stop();
         }
 
         private void OnNetworkAddressChanged(object sender, EventArgs e) => ScheduleNetworkRestart();
 
         private void OnNetworkAvailabilityChanged(object sender, NetworkAvailabilityEventArgs e) => ScheduleNetworkRestart();
+
+        private static bool HasActiveAppTunnel()
+        {
+            try
+            {
+                foreach (NetworkInterface nic in NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (nic.OperationalStatus != OperationalStatus.Up)
+                        continue;
+
+                    if ((nic.Name ?? string.Empty).IndexOf("InvisibleGorilla", StringComparison.OrdinalIgnoreCase) >= 0)
+                        return true;
+
+                    if ((nic.Description ?? string.Empty).IndexOf("InvisibleGorilla", StringComparison.OrdinalIgnoreCase) >= 0)
+                        return true;
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
 
         private void ScheduleNetworkRestart()
         {
@@ -763,8 +847,29 @@ namespace InvisibleGorillaXRay
             }
 
             int token = Interlocked.Increment(ref runGeneration);
+            ResetHomeLog();
             runWorker.RunWorkerAsync(token);
             AnalyticsService.SendEvent(new RunButtonClickedEvent());
+        }
+
+        private void ResetHomeLog()
+        {
+            // The home log persisted across sessions, so errors from a previous attempt
+            // ("No configurations were found", failed OpenFlux document) stayed on screen and
+            // looked like the current connection was resetting. Each manual start begins clean.
+            homeActivityLines.Clear();
+            try
+            {
+                if (File.Exists(HomeLogPath))
+                    File.Delete(HomeLogPath);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("Home.Log.Reset", ex);
+            }
+
+            if (homeActivityLog != null)
+                homeActivityLog.Text = string.Empty;
         }
 
         private void OnStopButtonClick(object sender, RoutedEventArgs e)
@@ -809,6 +914,7 @@ namespace InvisibleGorillaXRay
         private void InvalidateRun()
         {
             Interlocked.Increment(ref runGeneration);
+            suppressNetworkRestartUntilUtc = DateTime.UtcNow.AddSeconds(30);
             if (Dispatcher.CheckAccess())
                 CloseOpenFluxCaptureWindow();
             else
@@ -935,6 +1041,7 @@ namespace InvisibleGorillaXRay
 
         private void ShowRunStatus()
         {
+            homeWaitingForRun = false;
             statusRun.Visibility = Visibility.Visible;
             statusStop.Visibility = Visibility.Hidden;
             statusWaitForRun.Visibility = Visibility.Hidden;
@@ -965,6 +1072,7 @@ namespace InvisibleGorillaXRay
 
         private void ShowStopStatus()
         {
+            homeWaitingForRun = false;
             statusStop.Visibility = Visibility.Visible;
             statusRun.Visibility = Visibility.Hidden;
             statusWaitForRun.Visibility = Visibility.Hidden;
@@ -997,6 +1105,7 @@ namespace InvisibleGorillaXRay
 
         private void ShowWaitForRunStatus()
         {
+            homeWaitingForRun = true;
             statusWaitForRun.Visibility = Visibility.Visible;
             statusStop.Visibility = Visibility.Hidden;
             statusRun.Visibility = Visibility.Hidden;

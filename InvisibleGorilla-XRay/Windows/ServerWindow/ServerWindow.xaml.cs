@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Controls;
 using InvisibleGorillaXRay.Services.Goida;
 using InvisibleGorillaXRay.Services.OpenFlux;
+using InvisibleGorillaXRay.Services.Diagnostics;
 using InvisibleGorillaXRay.Services.Tor;
 using System.Collections.Generic;
 using Microsoft.Win32;
@@ -321,8 +322,29 @@ namespace InvisibleGorillaXRay
                         Status configStatus = loadConfig.Invoke(configPath);
                         if (configStatus.Code == Code.ERROR)
                             return Availability.ERROR;
-                            
-                        return testConnection.Invoke(configStatus.Content.ToString());
+
+                        string configJson = configStatus.Content.ToString();
+                        int handshakeMs = testConnection.Invoke(configJson);
+                        if (handshakeMs < 0)
+                            return handshakeMs;
+
+                        // Report the TCP round-trip as "ping": the native test measures the whole
+                        // TLS/VLESS handshake and showed 737/1547 ms for 99 ms servers. The JSON
+                        // handed back by loadConfig is the native (already converted) form, so the
+                        // endpoint is read from the config file itself.
+                        string rawJson = null;
+                        try
+                        {
+                            if (File.Exists(configPath))
+                                rawJson = File.ReadAllText(configPath);
+                        }
+                        catch (Exception ex)
+                        {
+                            Core.DiagnosticLog.Write("Latency", $"cannot read {configPath}: {ex.Message}");
+                        }
+
+                        int rttMs = rawJson != null ? ConfigEndpointProbe.MeasureTcpRtt(rawJson) : -1;
+                        return rttMs > 0 ? rttMs : handshakeMs;
                     },
                     getLogPath: getLogPath,
                     onEditProfile: () => EditConfig(config)

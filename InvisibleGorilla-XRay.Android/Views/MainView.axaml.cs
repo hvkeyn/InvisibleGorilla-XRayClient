@@ -3254,7 +3254,8 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private static Color SpeedColor(long bytesPerSec)
         {
-            // 8 KiB/s is red, about 90 KiB/s is orange, 1 MiB/s and above is green.
+            // Quiet traffic stays amber. Red is reserved for a fault dot, so a live
+            // slow tunnel does not look like a dropped connection.
             double log2 = Math.Log(Math.Max(bytesPerSec, 1), 2);
             double t = (log2 - 13.0) / 7.0;
             if (t < 0)
@@ -3262,8 +3263,8 @@ namespace InvisibleGorillaXRay.Android.Views
             if (t > 1)
                 t = 1;
 
-            Color slow = Color.Parse("#E24B4B");
-            Color mid = Color.Parse("#F09A3A");
+            Color slow = Color.Parse("#F09A3A");
+            Color mid = Color.Parse("#E6C15A");
             Color fast = Color.Parse("#6DCC8E");
             return t < 0.5
                 ? LerpColor(slow, mid, t / 0.5)

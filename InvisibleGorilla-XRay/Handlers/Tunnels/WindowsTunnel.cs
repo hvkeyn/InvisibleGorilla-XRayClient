@@ -374,6 +374,18 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
             DiagnosticLog.Write(
                 "WindowsTunnel",
                 $"Passing app rules payload with mode={mode} and {appPaths.Length} apps");
+
+            // A missing or malformed template binding silently produced an empty bypass list:
+            // every app, including the user's remote-access tools, went through the tunnel and
+            // the session looked like it "cut the connection". Make that visible.
+            if (appPaths.Length == 0
+                && mode.ToString().IndexOf("BYPASS", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                DiagnosticLog.Write(
+                    "WindowsTunnel",
+                    "WARNING: BYPASS mode resolved to 0 apps; app rules template is missing or not bound to this config.");
+            }
+
             return $" -appRules={payload}";
         }
     }
