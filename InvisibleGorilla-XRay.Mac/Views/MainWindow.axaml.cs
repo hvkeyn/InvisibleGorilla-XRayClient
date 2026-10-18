@@ -132,10 +132,31 @@ namespace InvisibleGorillaXRay.Mac.Views
             UpdateUI();
         }
 
+        private void FitDesktopWindow()
+        {
+            var screen = Screens?.ScreenFromWindow(this) ?? Screens?.Primary;
+            if (screen == null)
+                return;
+
+            double scaling = screen.Scaling <= 0 ? 1 : screen.Scaling;
+            double availWidth = screen.WorkingArea.Width / scaling;
+            double availHeight = screen.WorkingArea.Height / scaling;
+            if (availWidth < 200 || availHeight < 200)
+                return;
+
+            double fittedWidth = Math.Min(Width, Math.Max(320, availWidth - 8));
+            double fittedHeight = Math.Min(Height, Math.Max(420, availHeight - 8));
+            MinWidth = Math.Min(320, fittedWidth);
+            MinHeight = Math.Min(480, fittedHeight);
+            Width = fittedWidth;
+            Height = fittedHeight;
+        }
+
         private void OnWindowOpened(object sender, EventArgs e)
         {
             try
             {
+                FitDesktopWindow();
                 TryOpenPolicyWindow();
                 InitializeConnectionInfoTimer();
                 TryStartHidden();
@@ -633,7 +654,8 @@ namespace InvisibleGorillaXRay.Mac.Views
                     SetModeBadge(connected, modeText);
                 });
 
-                ConnectionInfo info = await connectionInfoService.LookupAsync(probeProxy, token).ConfigureAwait(false);
+                int probeSeconds = connected && settings?.GetTorSettings()?.GetEnabled() == true ? 30 : 0;
+                ConnectionInfo info = await connectionInfoService.LookupAsync(probeProxy, token, probeSeconds).ConfigureAwait(false);
                 if (token.IsCancellationRequested)
                     return;
 

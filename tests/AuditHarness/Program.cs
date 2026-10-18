@@ -99,6 +99,27 @@ namespace AuditHarness
                         "зарезервированное имя Windows должно получить префикс");
                 });
 
+            Check("Build: страна выхода необязательна и принимается только как код из двух букв",
+                () =>
+                {
+                    string any = TorrcBuilder.Build(
+                        9250, 9251, @"C:\tmp\data", @"C:\tmp\data\cookie", @"C:\tmp\tor.log",
+                        BridgeType.NONE, Array.Empty<string>());
+                    Assert(!any.Contains("ExitNodes"), "пустая страна не должна сужать выход");
+                    Assert(!any.Contains("StrictNodes"), "без страны StrictNodes не нужен");
+
+                    string locked = TorrcBuilder.Build(
+                        9250, 9251, @"C:\tmp\data", @"C:\tmp\data\cookie", @"C:\tmp\tor.log",
+                        BridgeType.NONE, Array.Empty<string>(), exitCountry: "KR");
+                    Assert(locked.Contains("ExitNodes {kr}"), "выбранный код должен попасть в ExitNodes");
+                    Assert(locked.Contains("StrictNodes 1"), "явная страна задаётся жёстко");
+
+                    string rejected = TorrcBuilder.Build(
+                        9250, 9251, @"C:\tmp\data", @"C:\tmp\data\cookie", @"C:\tmp\tor.log",
+                        BridgeType.NONE, Array.Empty<string>(), exitCountry: "korea");
+                    Assert(!rejected.Contains("ExitNodes"), "длинное имя страны не должно стать ExitNodes");
+                });
+
             Check("Build: строки мостов с переводом строки не ломают torrc",
                 () =>
                 {

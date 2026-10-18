@@ -104,6 +104,7 @@
     <system:String x:Key="Lang.Tor.HowTo">Выберите «Спросить Tor» или метод моста, нажмите «ПОДТВЕРДИТЬ», затем «ЗАПУСК». Если Горилла уже работает, она переподключится автоматически.</system:String>
     <system:String x:Key="Lang.Tor.Mode">Режим</system:String>
     <system:String x:Key="Lang.Tor.BridgeType">Тип моста</system:String>
+    <system:String x:Key="Lang.Tor.ExitCountry">Страна выхода</system:String>
     <system:String x:Key="Lang.Tor.SocksPort">SOCKS-порт Tor</system:String>
     <system:String x:Key="Lang.Tor.Bridges">Строки мостов</system:String>
     <system:String x:Key="Lang.Tor.UseDefault">Встроенные</system:String>

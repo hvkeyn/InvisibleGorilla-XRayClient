@@ -397,6 +397,18 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Foreground="White"
+                                Text="{DynamicResource Lang.Tor.ExitCountry}"
+                                FontWeight="Normal" FontSize="14" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="comboBoxExitCountry" Grid.Column="1" Height="26"
+                                FontWeight="Normal" FontSize="14"/>
+                        </Grid>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Foreground="White"
                                 Text="{DynamicResource Lang.Tor.SocksPort}"
                                 FontWeight="Normal" FontSize="14" VerticalAlignment="Center"/>
                             <TextBox Grid.Column="1" VerticalContentAlignment="Center"

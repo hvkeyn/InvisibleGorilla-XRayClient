@@ -46,6 +46,7 @@ namespace InvisibleGorillaXRay
         public ServerWindow()
         {
             InitializeComponent();
+            DesktopWindowFit.ClampToWorkArea(this);
             TextSelectionAssist.Attach(this);
             InitializeImportingGroups();
             InitializeGeneralConfigComponents();

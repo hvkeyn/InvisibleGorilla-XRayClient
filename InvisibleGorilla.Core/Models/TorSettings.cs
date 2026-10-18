@@ -54,6 +54,11 @@ namespace InvisibleGorillaXRay.Models
         [DefaultValue(-1)]
         public int LastLatencyMs;
 
+        // Empty means any exit, so the circuit can assemble. A two-letter code
+        // is optional and then Tor may use only that country.
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public string ExitCountry;
+
         public TorSettings()
         {
             Enabled = false;
@@ -63,6 +68,7 @@ namespace InvisibleGorillaXRay.Models
             BridgeType = BridgeType.NONE;
             BridgeLines = new List<string>();
             LastLatencyMs = -1;
+            ExitCountry = "";
         }
 
         public bool GetEnabled() => Enabled;
@@ -74,6 +80,18 @@ namespace InvisibleGorillaXRay.Models
         public int GetControlPort() => ControlPort > 0 ? ControlPort : 9251;
 
         public BridgeType GetBridgeType() => BridgeType;
+
+        public string GetExitCountry()
+        {
+            if (string.IsNullOrWhiteSpace(ExitCountry))
+                return string.Empty;
+
+            string code = ExitCountry.Trim().ToLowerInvariant();
+            if (code.Length == 2 && code[0] >= 'a' && code[0] <= 'z' && code[1] >= 'a' && code[1] <= 'z')
+                return code;
+
+            return string.Empty;
+        }
 
         public List<string> GetBridgeLines()
         {
@@ -96,7 +114,8 @@ namespace InvisibleGorillaXRay.Models
                 ControlPort = GetControlPort(),
                 BridgeType = BridgeType,
                 BridgeLines = GetBridgeLines(),
-                LastLatencyMs = LastLatencyMs
+                LastLatencyMs = LastLatencyMs,
+                ExitCountry = GetExitCountry()
             };
         }
     }

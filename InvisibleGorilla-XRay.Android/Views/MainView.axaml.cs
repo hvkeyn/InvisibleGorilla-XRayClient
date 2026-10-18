@@ -428,6 +428,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private CheckBox TorEnabledToggle => GetRequiredControl<CheckBox>("TorEnabledCheckBox");
         private ComboBox TorModeSelector => GetRequiredControl<ComboBox>("TorModeComboBox");
         private ComboBox BridgeTypeSelector => GetRequiredControl<ComboBox>("BridgeTypeComboBox");
+        private ComboBox ExitCountrySelector => GetRequiredControl<ComboBox>("ExitCountryComboBox");
         private TextBox TorSocksPortInput => GetRequiredControl<TextBox>("TorSocksPortTextBox");
         private TextBox BridgesInput => GetRequiredControl<TextBox>("BridgesTextBox");
         private Button UseDefaultBridgesActionButton => GetRequiredControl<Button>("UseDefaultBridgesButton");
@@ -452,6 +453,24 @@ namespace InvisibleGorillaXRay.Android.Views
             { BridgeType.SNOWFLAKE, "Snowflake" },
             { BridgeType.MEEK_AZURE, "meek-azure" },
             { BridgeType.WEBTUNNEL, "WebTunnel" }
+        };
+
+        private static readonly Dictionary<string, string> ExitCountryOptions = new()
+        {
+            { "", "Any exit" },
+            { "de", "Germany (DE)" },
+            { "nl", "Netherlands (NL)" },
+            { "fr", "France (FR)" },
+            { "us", "United States (US)" },
+            { "gb", "United Kingdom (GB)" },
+            { "se", "Sweden (SE)" },
+            { "ch", "Switzerland (CH)" },
+            { "fi", "Finland (FI)" },
+            { "ro", "Romania (RO)" },
+            { "pl", "Poland (PL)" },
+            { "jp", "Japan (JP)" },
+            { "ca", "Canada (CA)" },
+            { "kr", "Korea (KR)" }
         };
 
         private readonly TorManager torManager = new TorManager();
@@ -592,6 +611,7 @@ namespace InvisibleGorillaXRay.Android.Views
             GetRequiredControl<TextBlock>("TorHowToTextBlock").Text = Localize("Lang.Tor.HowTo.Card");
             GetRequiredControl<TextBlock>("TorModeTitleTextBlock").Text = Localize("Lang.Tor.Mode");
             GetRequiredControl<TextBlock>("BridgeTypeTitleTextBlock").Text = Localize("Lang.Tor.BridgeType");
+            GetRequiredControl<TextBlock>("ExitCountryTitleTextBlock").Text = Localize("Lang.Tor.ExitCountry");
             GetRequiredControl<TextBlock>("TorSocksPortTitleTextBlock").Text = Localize("Lang.Tor.SocksPort");
             GetRequiredControl<TextBlock>("BridgesTitleTextBlock").Text = Localize("Lang.Tor.Bridges");
             GetRequiredControl<TextBlock>("UseDefaultBridgesButtonTextBlock").Text = Localize("Lang.Tor.UseDefault");
@@ -779,13 +799,16 @@ namespace InvisibleGorillaXRay.Android.Views
             ProtocolSelector.ItemsSource = Enum.GetNames(typeof(Protocol));
             TorModeSelector.ItemsSource = TorModeOptions.Values.ToList();
             BridgeTypeSelector.ItemsSource = BridgeTypeOptions.Values.ToList();
+            ExitCountrySelector.ItemsSource = ExitCountryOptions.Values.ToList();
             UsePlainItemsPanel(ProtocolSelector);
             UsePlainItemsPanel(TorModeSelector);
             UsePlainItemsPanel(BridgeTypeSelector);
+            UsePlainItemsPanel(ExitCountrySelector);
             if (!bridgeTypeHooked)
             {
                 BridgeTypeSelector.SelectionChanged += OnBridgeTypeSelectionChanged;
                 TorModeSelector.SelectionChanged += OnTorModeSelectionChanged;
+                ExitCountrySelector.SelectionChanged += OnExitCountrySelectionChanged;
                 bridgeTypeHooked = true;
             }
             isSettingsSectionInitialized = true;
@@ -820,6 +843,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 TorEnabledToggle.IsChecked = tor.GetEnabled();
                 TorModeSelector.SelectedIndex = TorModeOptions.Keys.ToList().IndexOf(tor.GetMode());
                 BridgeTypeSelector.SelectedIndex = BridgeTypeOptions.Keys.ToList().IndexOf(tor.GetBridgeType());
+                ExitCountrySelector.SelectedIndex = Math.Max(0, ExitCountryOptions.Keys.ToList().IndexOf(tor.GetExitCountry()));
                 TorSocksPortInput.Text = tor.GetSocksPort().ToString();
                 BridgesInput.Text = string.Join(Environment.NewLine, tor.GetBridgeLines());
             }
@@ -895,6 +919,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 Enabled = TorEnabledToggle.IsChecked == true,
                 Mode = GetSelectedKey(TorModeOptions, TorModeSelector.SelectedIndex, existing.GetMode()),
                 BridgeType = GetSelectedKey(BridgeTypeOptions, BridgeTypeSelector.SelectedIndex, existing.GetBridgeType()),
+                ExitCountry = GetSelectedKey(ExitCountryOptions, ExitCountrySelector.SelectedIndex, existing.GetExitCountry()),
                 SocksPort = int.TryParse(TorSocksPortInput.Text, out int sp) && sp > 0 ? sp : existing.GetSocksPort(),
                 ControlPort = existing.GetControlPort(),
                 BridgeLines = SplitBridgeLines(BridgesInput.Text),
@@ -957,6 +982,15 @@ namespace InvisibleGorillaXRay.Android.Views
                 defaults.Count > 0
                     ? LocalizeFormat("Lang.Tor.Status.LoadedDefaults", defaults.Count)
                     : LocalizeFormat("Lang.Tor.Status.MethodSelected", type));
+        }
+
+        private void OnExitCountrySelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (isApplyingTorUi || suppressBridgeTypeLoad)
+                return;
+
+            PersistTorEditor();
+            ReconnectTorIfRunning();
         }
 
         private void OnTorModeSelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -3709,8 +3743,9 @@ namespace InvisibleGorillaXRay.Android.Views
             ConnectionInfo info;
             if (connected)
             {
+                int probeSeconds = isConnectionInfoTor ? 30 : 5;
                 ConnectionInfo tunnelInfo = await connectionInfoService
-                    .LookupThroughTunnelAsync(probeProxy!, token)
+                    .LookupThroughTunnelAsync(probeProxy!, token, probeSeconds)
                     .ConfigureAwait(false);
                 if (!StillCurrent() || token.IsCancellationRequested)
                     return;

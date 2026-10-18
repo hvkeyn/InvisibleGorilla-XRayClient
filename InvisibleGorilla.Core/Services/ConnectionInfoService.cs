@@ -70,14 +70,18 @@ namespace InvisibleGorillaXRay.Services
 
         private const string UserAgent = "InvisibleGorilla-XRay";
 
-        public async Task<ConnectionInfo> LookupAsync(IWebProxy proxy = null, CancellationToken token = default)
+        public Task<ConnectionInfo> LookupAsync(IWebProxy proxy = null, CancellationToken token = default)
+            => LookupAsync(proxy, token, timeoutSeconds: 0);
+
+        public async Task<ConnectionInfo> LookupAsync(IWebProxy proxy, CancellationToken token, int timeoutSeconds)
         {
             await LookupGate.WaitAsync(token).ConfigureAwait(false);
             try
             {
                 bool throughTunnel = proxy != null;
                 string[] endpoints = throughTunnel ? TunnelLookupEndpoints : LookupEndpoints;
-                int timeoutSeconds = throughTunnel ? 5 : 12;
+                if (timeoutSeconds <= 0)
+                    timeoutSeconds = throughTunnel ? 5 : 12;
                 ConnectionInfo lastFailure = new ConnectionInfo { Ok = false, Error = "all endpoints failed" };
                 ConnectionInfo ipOnlyFallback = null;
 
@@ -118,6 +122,9 @@ namespace InvisibleGorillaXRay.Services
         /// xray SOCKS proxy. Returns an error instead of falling back to a direct lookup.
         /// </summary>
         public Task<ConnectionInfo> LookupThroughTunnelAsync(IWebProxy proxy, CancellationToken token = default)
+            => LookupThroughTunnelAsync(proxy, token, timeoutSeconds: 0);
+
+        public Task<ConnectionInfo> LookupThroughTunnelAsync(IWebProxy proxy, CancellationToken token, int timeoutSeconds)
         {
             if (proxy == null)
             {
@@ -128,7 +135,9 @@ namespace InvisibleGorillaXRay.Services
                 });
             }
 
-            return LookupAsync(proxy, token);
+            if (timeoutSeconds <= 0)
+                timeoutSeconds = 5;
+            return LookupAsync(proxy, token, timeoutSeconds);
         }
 
         private static async Task<ConnectionInfo> TryLookupAsync(

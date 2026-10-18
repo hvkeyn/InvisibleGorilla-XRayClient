@@ -108,10 +108,11 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 List<string> bridges = settings.GetBridgeLines();
                 string torrc = TorrcBuilder.Build(
                     socksPort, controlPort, dataDir, cookieFile, logFile,
-                    settings.GetBridgeType(), bridges);
+                    settings.GetBridgeType(), bridges, settings.GetExitCountry());
                 File.WriteAllText(torrcPath, torrc);
 
-                DiagnosticLog.Write(Tag, $"Starting tor (socks={socksPort}, control={controlPort}, bridgeType={settings.GetBridgeType()})");
+                string exit = settings.GetExitCountry();
+                DiagnosticLog.Write(Tag, $"Starting tor (socks={socksPort}, control={controlPort}, bridgeType={settings.GetBridgeType()}, exit={(string.IsNullOrEmpty(exit) ? "any" : exit)})");
 
                 if (!StartProcess(torrcPath))
                     return new Status(Code.ERROR, SubCode.CANT_CONNECT, "Failed to launch the tor process.");
@@ -311,8 +312,12 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 elapsed += interval;
             }
 
+            string hint = "Try different bridges.";
+            if (!string.IsNullOrEmpty(settings?.GetExitCountry()))
+                hint += " The selected exit country may have no relay. Choose Any exit to connect.";
+
             return new Status(Code.ERROR, SubCode.CANT_CONNECT,
-                $"Tor did not finish bootstrapping within {maxWaitMs / 1000}s (reached {BootstrapPercent}% on {active}). Try different bridges.");
+                $"Tor did not finish bootstrapping within {maxWaitMs / 1000}s (reached {BootstrapPercent}% on {active}). {hint}");
         }
 
         private sealed class BridgeAttempt

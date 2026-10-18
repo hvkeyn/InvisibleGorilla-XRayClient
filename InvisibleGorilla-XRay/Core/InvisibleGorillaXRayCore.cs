@@ -232,7 +232,8 @@ namespace InvisibleGorillaXRay.Core
                     ControlPort = torSettings.GetControlPort(),
                     BridgeType = BridgeType.SNOWFLAKE,
                     BridgeLines = new List<string>(),
-                    LastLatencyMs = torSettings.LastLatencyMs
+                    LastLatencyMs = torSettings.LastLatencyMs,
+                    ExitCountry = torSettings.GetExitCountry()
                 };
             }
 

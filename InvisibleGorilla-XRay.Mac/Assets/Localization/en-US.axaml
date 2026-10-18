@@ -101,6 +101,7 @@
     <x:String x:Key="Lang.Tor.HowTo.Card">Method for this Tor profile. Changing it reconnects a running tunnel, or checks the bridge if the tunnel is off.</x:String>
     <x:String x:Key="Lang.Tor.Mode">Mode</x:String>
     <x:String x:Key="Lang.Tor.BridgeType">Bridge type</x:String>
+    <x:String x:Key="Lang.Tor.ExitCountry">Exit country</x:String>
     <x:String x:Key="Lang.Tor.SocksPort">Tor SOCKS port</x:String>
     <x:String x:Key="Lang.Tor.Bridges">Bridge lines</x:String>
     <x:String x:Key="Lang.Tor.Bridges.Hint">One bridge per line (obfs4 / webtunnel / meek). Leave empty to use built-in bridges.</x:String>

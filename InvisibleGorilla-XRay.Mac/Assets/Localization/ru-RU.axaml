@@ -101,6 +101,7 @@
     <x:String x:Key="Lang.Tor.HowTo.Card">Метод этого профиля Tor. Смена метода переподключает открытый туннель, а если туннель выключен — сразу проверяет мост.</x:String>
     <x:String x:Key="Lang.Tor.Mode">Режим</x:String>
     <x:String x:Key="Lang.Tor.BridgeType">Тип моста</x:String>
+    <x:String x:Key="Lang.Tor.ExitCountry">Страна выхода</x:String>
     <x:String x:Key="Lang.Tor.SocksPort">SOCKS-порт Tor</x:String>
     <x:String x:Key="Lang.Tor.Bridges">Строки мостов</x:String>
     <x:String x:Key="Lang.Tor.Bridges.Hint">По одному мосту в строке (obfs4 / webtunnel / meek). Пусто — встроенные мосты.</x:String>

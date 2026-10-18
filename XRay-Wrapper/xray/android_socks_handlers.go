@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -252,7 +253,13 @@ func (h *androidSocksTCPHandler) Handle(conn net.Conn, target *net.TCPAddr) erro
 		}
 
 		socksAddr := tcore.ParseTCPAddr(h.proxyHost, h.proxyPort).String()
-		dialer, err := proxy.SOCKS5("tcp", socksAddr, proxyAuth, androidTimedDialer{timeout: 8 * time.Second})
+		// Tor has to build a circuit before the SOCKS reply. Eight seconds drops
+		// a live but slow exit and the browser sees a reset instead of the page.
+		dialTimeout := 8 * time.Second
+		if tunDnsRemoteEnabled() {
+			dialTimeout = 45 * time.Second
+		}
+		dialer, err := proxy.SOCKS5("tcp", socksAddr, proxyAuth, androidTimedDialer{timeout: dialTimeout})
 		if err != nil {
 			log.Errorf("socks dialer: %v", err)
 			conn.Close()
@@ -263,16 +270,25 @@ func (h *androidSocksTCPHandler) Handle(conn net.Conn, target *net.TCPAddr) erro
 		if ip4 := target.IP.To4(); ip4 != nil {
 			dialTarget = &net.TCPAddr{IP: ip4, Port: target.Port}
 		}
+		dialAddr := dialTarget.String()
+		remoteName := lookupTunFakeHost(target.IP)
+		if remoteName != "" {
+			dialAddr = net.JoinHostPort(remoteName, strconv.Itoa(target.Port))
+		}
 
 		if limited {
 			acquireAndroidSocksDial()
 		}
-		upstreamConn, err := dialer.Dial("tcp", dialTarget.String())
+		upstreamConn, err := dialer.Dial("tcp", dialAddr)
 		if limited {
 			releaseAndroidSocksDial()
 		}
 		if err != nil {
-			log.Errorf("socks connect %v: %v", dialTarget, err)
+			if remoteName != "" {
+				log.Errorf("socks connect via tor name: %v", err)
+			} else {
+				log.Errorf("socks connect %v: %v", dialTarget, err)
+			}
 			conn.Close()
 			return
 		}

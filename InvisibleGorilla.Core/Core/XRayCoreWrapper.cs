@@ -214,6 +214,22 @@ namespace InvisibleGorillaXRay.Core
         [DllImport(LIB_NAME, EntryPoint = "SetAndroidSocketProtect", CallingConvention = CallingConvention.Cdecl)]
         private static extern void SetAndroidSocketProtectNative(IntPtr callback);
 
+        public static void SetAndroidTunDnsUpstream(string address)
+        {
+            IntPtr ptr = StringToUtf8Ptr(address ?? string.Empty);
+            try
+            {
+                SetAndroidTunDnsUpstreamNative(ptr);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(ptr);
+            }
+        }
+
+        [DllImport(LIB_NAME, EntryPoint = "SetAndroidTunDnsUpstream", CallingConvention = CallingConvention.Cdecl)]
+        private static extern void SetAndroidTunDnsUpstreamNative(IntPtr address);
+
         public static string? StartAndroidTunnel(
             int fileDescriptor,
             int proxyPort,

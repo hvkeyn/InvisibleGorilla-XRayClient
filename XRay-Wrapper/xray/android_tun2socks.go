@@ -90,9 +90,9 @@ func StartAndroidTun2Socks(fd C.int, proxyPort C.int, isUdpEnabled C.bool, usern
 	lwip := tcore.NewLWIPStack()
 	bridge := &androidTunBridge{
 		tunFd: tunFd,
-		lwip:    lwip,
-		done:    make(chan struct{}),
-		stop:    make(chan struct{}),
+		lwip:  lwip,
+		done:  make(chan struct{}),
+		stop:  make(chan struct{}),
 	}
 
 	tcore.RegisterTCPConnHandler(newAndroidTCPHandler("127.0.0.1", uint16(proxyPort), auth))
@@ -353,14 +353,22 @@ func tryAnswerTunDns(bridge *androidTunBridge, packet []byte) bool {
 	srcCopy := append(net.IP(nil), src...)
 	dstCopy := append(net.IP(nil), dst...)
 	go func() {
-		resp := lookupTunDnsCached(pkt)
-		if len(resp) == 0 {
-			var err error
-			resp, err = queryUpstreamDns(pkt)
-			if err != nil || len(resp) == 0 {
+		var resp []byte
+		if tunDnsRemoteEnabled() {
+			resp = answerTunRemoteDns(pkt)
+			if len(resp) == 0 {
 				return
 			}
-			storeTunDnsCache(pkt, resp)
+		} else {
+			resp = lookupTunDnsCached(pkt)
+			if len(resp) == 0 {
+				var err error
+				resp, err = queryUpstreamDns(pkt)
+				if err != nil || len(resp) == 0 {
+					return
+				}
+				storeTunDnsCache(pkt, resp)
+			}
 		}
 		reply := buildIPv4UdpPacket(dstCopy, srcCopy, 53, srcPort, resp)
 		if len(reply) == 0 {
@@ -514,9 +522,38 @@ func storeTunDnsCache(query, resp []byte) {
 	tunDnsCacheMu.Unlock()
 }
 
+var tunDnsUpstreams = []string{"1.1.1.1:53", "8.8.8.8:53"}
+var tunDnsUpstreamMu sync.Mutex
+
+//export SetAndroidTunDnsUpstream
+func SetAndroidTunDnsUpstream(addr *C.char) {
+	value := strings.TrimSpace(C.GoString(addr))
+	tunDnsUpstreamMu.Lock()
+	if value == tunDnsRemoteMarker {
+		tunDnsUpstreams = []string{"1.1.1.1:53", "8.8.8.8:53"}
+	} else if value == "" {
+		tunDnsUpstreams = []string{"1.1.1.1:53", "8.8.8.8:53"}
+	} else {
+		tunDnsUpstreams = []string{value}
+	}
+	tunDnsUpstreamMu.Unlock()
+	setTunDnsRemote(value == tunDnsRemoteMarker)
+	tunDnsCacheMu.Lock()
+	tunDnsCache = map[string]tunDnsCacheEntry{}
+	tunDnsCacheMu.Unlock()
+}
+
+func currentTunDnsUpstreams() []string {
+	tunDnsUpstreamMu.Lock()
+	defer tunDnsUpstreamMu.Unlock()
+	out := make([]string, len(tunDnsUpstreams))
+	copy(out, tunDnsUpstreams)
+	return out
+}
+
 func queryUpstreamDns(query []byte) ([]byte, error) {
 	var last error
-	for _, server := range []string{"1.1.1.1:53", "8.8.8.8:53"} {
+	for _, server := range currentTunDnsUpstreams() {
 		raddr, err := net.ResolveUDPAddr("udp4", server)
 		if err != nil {
 			last = err

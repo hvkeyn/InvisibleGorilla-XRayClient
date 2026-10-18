@@ -104,6 +104,7 @@
     <system:String x:Key="Lang.Tor.HowTo">Choose Ask Tor or a bridge method, press CONFIRM, then press RUN. If Gorilla is already running, it reconnects automatically.</system:String>
     <system:String x:Key="Lang.Tor.Mode">Mode</system:String>
     <system:String x:Key="Lang.Tor.BridgeType">Bridge type</system:String>
+    <system:String x:Key="Lang.Tor.ExitCountry">Exit country</system:String>
     <system:String x:Key="Lang.Tor.SocksPort">Tor SOCKS port</system:String>
     <system:String x:Key="Lang.Tor.Bridges">Bridge lines</system:String>
     <system:String x:Key="Lang.Tor.UseDefault">Use built-in</system:String>

@@ -36,6 +36,7 @@ namespace InvisibleGorillaXRay.Android.Services
         private const string ExtraEnableIpv6 = "enable_ipv6";
         private const string ExtraTunAddress = "tun_address";
         private const string ExtraDns = "dns";
+        private const string ExtraDnsUpstream = "dns_upstream";
         private const string ExtraBypassServer = "bypass_server";
         private const string ExtraSessionName = "session_name";
         private const string ExtraAppRulesMode = "app_rules_mode";
@@ -68,6 +69,7 @@ namespace InvisibleGorillaXRay.Android.Services
             intent.PutExtra(ExtraEnableIpv6, options.EnableIpv6);
             intent.PutExtra(ExtraTunAddress, options.TunAddress);
             intent.PutExtra(ExtraDns, options.Dns);
+            intent.PutExtra(ExtraDnsUpstream, options.DnsUpstream ?? string.Empty);
             intent.PutExtra(ExtraBypassServer, options.BypassServer ?? string.Empty);
             intent.PutExtra(ExtraSessionName, options.SessionName);
             intent.PutExtra(ExtraAppRulesMode, (int)options.AppRulesMode);
@@ -286,7 +288,7 @@ namespace InvisibleGorillaXRay.Android.Services
             if (enableIpv6)
                 TryEnableIpv6(builder);
             else
-                DiagnosticLog.Write("AndroidVpnService", "IPv6 TUN routes skipped (OpenFlux / IPv4-only)");
+                DiagnosticLog.Write("AndroidVpnService", "IPv6 TUN routes skipped");
 
             bool ownProcessExcluded = ApplyApplicationRules(builder, appRulesMode, appPackages);
 
@@ -363,6 +365,7 @@ namespace InvisibleGorillaXRay.Android.Services
                     DiagnosticLog.Write("AndroidVpnService", "Socket protect callback bound (own process is inside the TUN)");
                 }
 
+                XRayCoreWrapper.SetAndroidTunDnsUpstream(intent.GetStringExtra(ExtraDnsUpstream) ?? string.Empty);
                 string? bridgeError = XRayCoreWrapper.StartAndroidTunnel(
                     tunFd,
                     proxyPort,

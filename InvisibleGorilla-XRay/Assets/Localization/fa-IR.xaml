@@ -98,6 +98,7 @@
     <system:String x:Key="Lang.Tor.HowTo">Ask Tor یا یک روش پل را انتخاب کنید، CONFIRM را بزنید، سپس RUN را بزنید. اگر Gorilla در حال اجرا باشد، خودکار دوباره وصل می‌شود.</system:String>
     <system:String x:Key="Lang.Tor.Mode">حالت</system:String>
     <system:String x:Key="Lang.Tor.BridgeType">نوع پل</system:String>
+    <system:String x:Key="Lang.Tor.ExitCountry">کشور خروج</system:String>
     <system:String x:Key="Lang.Tor.SocksPort">پورت SOCKS تور</system:String>
     <system:String x:Key="Lang.Tor.Bridges">خطوط پل</system:String>
     <system:String x:Key="Lang.Tor.UseDefault">داخلی</system:String>

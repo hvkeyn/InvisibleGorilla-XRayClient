@@ -10,6 +10,7 @@ namespace InvisibleGorillaXRay.Android.Handlers.Tunnels
     using InvisibleGorillaXRay.Handlers.Tunnels;
     using InvisibleGorillaXRay.Models;
     using InvisibleGorillaXRay.Services;
+    using InvisibleGorillaXRay.Services.Tor;
     using InvisibleGorillaXRay.Services.OpenFlux;
     using InvisibleGorillaXRay.Handlers.OpenFlux;
     using InvisibleGorillaXRay.Values;
@@ -22,27 +23,44 @@ namespace InvisibleGorillaXRay.Android.Handlers.Tunnels
 
         public Status Enable(string ip, int port, string address, string server, string dns, LocalProxyCredentials localProxyCredentials)
         {
-            DiagnosticLog.Write(
-                "AndroidTunnel",
-                $"TUN mode requested for proxy={ip}:{port}, address={address}, server={server}, dns={dns}, authEnabled={localProxyCredentials?.HasValue == true}");
-
             (AppRulesMode appRulesMode, string[] appPackages) = GetAppRulePackages();
             bool openFlux = IsOpenFluxConfig();
+            bool torOnly = IsTorOnlyConfig() && !openFlux;
+            int proxyPort = port;
+            string proxyUser = localProxyCredentials?.Username ?? string.Empty;
+            string proxyPassword = localProxyCredentials?.Password ?? string.Empty;
+            string dnsUpstream = string.Empty;
             if (openFlux)
             {
                 DiagnosticLog.Write(
                     "AndroidTunnel",
                     "OpenFlux TUN: IPv4-only, UDP associate disabled, no VpnService HTTP proxy (Chrome PAC to 10.0.236.10:18080 never hits the TUN fd)");
             }
+            else if (torOnly)
+            {
+                // Names stay inside the Tor circuit: the tunnel answers DNS with a stand-in
+                // address and the SOCKS request to the local tor daemon carries the hostname.
+                // Dialing tor directly avoids a second hop that would look the name up outside.
+                proxyPort = new SettingsHandler(() => new AndroidStartup()).UserSettings.GetTorSettings().GetSocksPort();
+                proxyUser = string.Empty;
+                proxyPassword = string.Empty;
+                dnsUpstream = "tor-remote";
+                DiagnosticLog.Write("AndroidTunnel", "Tor-only TUN keeps names on the Tor circuit.");
+            }
+
+            DiagnosticLog.Write(
+                "AndroidTunnel",
+                $"TUN proxy={ip}:{proxyPort}, address={address}, dns={dns}, authEnabled={!string.IsNullOrEmpty(proxyUser)}, torNames={torOnly}");
 
             Status startStatus = AndroidVpnServiceController.Start(new AndroidVpnStartOptions
             {
-                ProxyPort = port,
+                ProxyPort = proxyPort,
                 HttpProxyPort = 0,
-                ProxyUsername = localProxyCredentials?.Username ?? string.Empty,
-                ProxyPassword = localProxyCredentials?.Password ?? string.Empty,
+                ProxyUsername = proxyUser,
+                ProxyPassword = proxyPassword,
                 UdpEnabled = !openFlux,
-                EnableIpv6 = !openFlux,
+                EnableIpv6 = !openFlux && !torOnly,
+                DnsUpstream = dnsUpstream,
                 LimitMux = openFlux,
                 TunAddress = address,
                 BypassServer = server,
@@ -95,6 +113,27 @@ namespace InvisibleGorillaXRay.Android.Handlers.Tunnels
             DiagnosticLog.Write("AndroidTunnel", "Cancel requested");
             try { OpenFluxHttpBridge.Shared.Stop(); } catch { }
             AndroidVpnServiceController.Stop();
+        }
+
+        private static bool IsTorOnlyConfig()
+        {
+            try
+            {
+                SettingsHandler settingsHandler = new(() => new AndroidStartup());
+                UserSettings settings = settingsHandler.UserSettings;
+                TorSettings tor = settings.GetTorSettings();
+                if (tor.GetMode() != TorMode.ONLY_TOR)
+                    return false;
+
+                string path = settings.GetCurrentConfigPath();
+                return tor.GetEnabled()
+                    || TorProfilePaths.IsMarker(path)
+                    || settings.FindTorProfileByPath(path) != null;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static bool IsOpenFluxConfig()

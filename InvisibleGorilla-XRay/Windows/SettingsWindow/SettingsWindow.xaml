@@ -439,6 +439,18 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
+                            <Label Grid.Column="0" Foreground="White" Content="{DynamicResource Lang.Tor.ExitCountry}"
+                                FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14"/>
+                            <ComboBox x:Name="comboBoxExitCountry" Grid.Column="1" Height="26"
+                                SelectedValuePath="Key" DisplayMemberPath="Value"
+                                FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14"/>
+                        </Grid>
+
+                        <Grid Margin="0 5 0 0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
                             <Label Grid.Column="0" Foreground="White" Content="{DynamicResource Lang.Tor.SocksPort}"
                                 FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14"/>
                             <TextBox Grid.Column="1" VerticalContentAlignment="Center"

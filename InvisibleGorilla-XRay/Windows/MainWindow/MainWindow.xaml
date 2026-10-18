@@ -7,16 +7,17 @@
         xmlns:Controls="clr-namespace:InvisibleGorillaXRay.Components"
         mc:Ignorable="d"
         Title="Invisible Gorilla XRay"
-        Height="780" MinHeight="760"
-        Width="400" 
-        WindowStartupLocation="CenterScreen" 
+        Height="780" MinHeight="480"
+        Width="400" MinWidth="320"
+        WindowStartupLocation="Manual"
         ResizeMode="CanMinimize">
 
     <Window.Background>
         <StaticResource ResourceKey="Color.DarkGray"/>
     </Window.Background>
 
-    <Grid>
+    <Viewbox x:Name="DesktopScale" Stretch="Uniform" StretchDirection="DownOnly">
+    <Grid x:Name="DesktopDesign" Width="400" Height="720">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="72"/>
@@ -117,7 +118,8 @@
                     </StackPanel>
 
                     <StackPanel x:Name="panelHomeProgress" HorizontalAlignment="Center" Margin="24,12,24,0" Visibility="Collapsed">
-                        <ProgressBar x:Name="homeConnectProgress" Width="280" Height="4"
+                        <ProgressBar x:Name="homeConnectProgress" Width="320" Height="4"
+                                     HorizontalAlignment="Stretch"
                                      Minimum="0" Maximum="100" Value="0"
                                      Foreground="#6DCC8E" Background="#2E2E2E" BorderThickness="0"/>
                         <TextBlock x:Name="homeConnectStep" Width="320" Margin="0,8,0,0"
@@ -157,8 +159,8 @@
                                 </StackPanel>
                             </Border>
                         </Grid>
-                        <StackPanel x:Name="homeSpeedTrace" Width="320" Margin="0,8,0,0"
-                                    Orientation="Horizontal" HorizontalAlignment="Center" Visibility="Collapsed"/>
+                        <Grid x:Name="homeSpeedTrace" Width="320" Height="12" Margin="0,8,0,0"
+                              HorizontalAlignment="Stretch" Visibility="Collapsed"/>
                         <TextBlock x:Name="homeTrafficText" Visibility="Collapsed"/>
                         <Border Width="320" Margin="0,12,0,0" Padding="12,8" CornerRadius="8"
                                 Background="#232323" BorderBrush="#3A3A3A" BorderThickness="1">
@@ -528,4 +530,5 @@
             </StackPanel>
         </Grid>
     </Grid>
+    </Viewbox>
 </Window>

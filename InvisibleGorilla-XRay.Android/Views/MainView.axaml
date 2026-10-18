@@ -987,6 +987,11 @@
                         <ComboBox x:Name="BridgeTypeComboBox"
                                   HorizontalAlignment="Stretch" />
 
+                        <TextBlock x:Name="ExitCountryTitleTextBlock"
+                                   Text="Exit country" />
+                        <ComboBox x:Name="ExitCountryComboBox"
+                                  HorizontalAlignment="Stretch" />
+
                         <TextBlock x:Name="TorSocksPortTitleTextBlock" IsVisible="False"
                                    Text="Tor SOCKS port" />
                         <TextBox x:Name="TorSocksPortTextBox" IsVisible="False" />

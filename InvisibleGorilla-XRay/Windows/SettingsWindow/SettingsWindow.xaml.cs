@@ -54,6 +54,23 @@ namespace InvisibleGorillaXRay
             { BridgeType.WEBTUNNEL, "WebTunnel" }
         };
 
+        private static readonly Dictionary<string, string> ExitCountries = new Dictionary<string, string>() {
+            { "", "Any exit" },
+            { "de", "Germany (DE)" },
+            { "nl", "Netherlands (NL)" },
+            { "fr", "France (FR)" },
+            { "us", "United States (US)" },
+            { "gb", "United Kingdom (GB)" },
+            { "se", "Sweden (SE)" },
+            { "ch", "Switzerland (CH)" },
+            { "fi", "Finland (FI)" },
+            { "ro", "Romania (RO)" },
+            { "pl", "Poland (PL)" },
+            { "jp", "Japan (JP)" },
+            { "ca", "Canada (CA)" },
+            { "kr", "Korea (KR)" }
+        };
+
         private readonly TorManager torManager = new TorManager();
         private MoatChallenge activeMoatChallenge;
         private bool suppressBridgeTypeLoad;
@@ -90,6 +107,7 @@ namespace InvisibleGorillaXRay
         public SettingsWindow()
         {
             InitializeComponent();
+            DesktopWindowFit.ClampToWorkArea(this);
             TextSelectionAssist.Attach(this);
             InitializeItems();
 
@@ -113,6 +131,7 @@ namespace InvisibleGorillaXRay
                 {
                     comboBoxTorMode.ItemsSource = TorModes;
                     comboBoxBridgeType.ItemsSource = BridgeTypes;
+                    comboBoxExitCountry.ItemsSource = ExitCountries;
                 }
             }
         }
@@ -217,6 +236,7 @@ namespace InvisibleGorillaXRay
             checkBoxTorEnabled.IsChecked = tor.GetEnabled();
             comboBoxTorMode.SelectedValue = tor.GetMode();
             comboBoxBridgeType.SelectedValue = tor.GetBridgeType();
+            comboBoxExitCountry.SelectedValue = tor.GetExitCountry() ?? "";
             textBoxTorSocksPort.Text = tor.GetSocksPort().ToString();
             textBoxBridges.Text = string.Join(Environment.NewLine, tor.GetBridgeLines());
             suppressBridgeTypeLoad = false;
@@ -238,6 +258,7 @@ namespace InvisibleGorillaXRay
                 Enabled = checkBoxTorEnabled.IsChecked == true,
                 Mode = GetSelectedValue(comboBoxTorMode, existing.GetMode()),
                 BridgeType = GetSelectedValue(comboBoxBridgeType, existing.GetBridgeType()),
+                ExitCountry = GetSelectedValue(comboBoxExitCountry, existing.GetExitCountry() ?? ""),
                 SocksPort = int.TryParse(textBoxTorSocksPort.Text, out int sp) && sp > 0 ? sp : existing.GetSocksPort(),
                 ControlPort = existing.GetControlPort(),
                 BridgeLines = SplitBridgeLines(textBoxBridges.Text)

@@ -21,7 +21,8 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             string cookieFile,
             string logFile,
             BridgeType bridgeType,
-            IEnumerable<string> bridgeLines)
+            IEnumerable<string> bridgeLines,
+            string exitCountry = null)
         {
             StringBuilder sb = new StringBuilder();
 
@@ -49,6 +50,13 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 sb.AppendLine($"GeoIPFile {Quote(Path.TOR_GEOIP)}");
             if (File.Exists(Path.TOR_GEOIP6))
                 sb.AppendLine($"GeoIPv6File {Quote(Path.TOR_GEOIP6)}");
+
+            string exit = NormalizeExitCountry(exitCountry);
+            if (exit != null)
+            {
+                sb.AppendLine($"ExitNodes {{{exit}}}");
+                sb.AppendLine("StrictNodes 1");
+            }
 
             AppendBridges(sb, bridgeType, bridgeLines);
 
@@ -121,6 +129,18 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             }
 
             return sb.ToString().Trim();
+        }
+
+        private static string NormalizeExitCountry(string country)
+        {
+            if (string.IsNullOrWhiteSpace(country))
+                return null;
+
+            string code = country.Trim().ToLowerInvariant();
+            if (code.Length == 2 && code[0] >= 'a' && code[0] <= 'z' && code[1] >= 'a' && code[1] <= 'z')
+                return code;
+
+            return null;
         }
 
         private static void AppendBridges(StringBuilder sb, BridgeType bridgeType, IEnumerable<string> bridgeLines)

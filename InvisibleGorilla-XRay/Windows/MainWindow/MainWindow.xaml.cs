@@ -107,6 +107,7 @@ namespace InvisibleGorillaXRay
         public MainWindow()
         {
             InitializeComponent();
+            FitDesktopWindow();
             TextSelectionAssist.Attach(this);
 #if DEBUG
             Title = "Invisible Gorilla XRay · debug";
@@ -1250,7 +1251,8 @@ namespace InvisibleGorillaXRay
             SetModeBadge(connected, modeText);
 
             bool openFluxProbe = connected && ActiveTunnelSession.IsOpenFlux;
-            TimeSpan requestTimeout = TimeSpan.FromSeconds(openFluxProbe ? 30 : 12);
+            bool torProbe = connected && settings?.GetTorSettings()?.GetEnabled() == true;
+            TimeSpan requestTimeout = TimeSpan.FromSeconds(openFluxProbe || torProbe ? 30 : 12);
 
             ConnectionInfo info;
             connectionInfoInFlight = true;
@@ -2232,24 +2234,55 @@ namespace InvisibleGorillaXRay
             PushHomeSpeedSample(down + up, false);
         }
 
+        private void FitDesktopWindow()
+        {
+            Rect area = SystemParameters.WorkArea;
+            Thickness frame = SystemParameters.WindowNonClientFrameThickness;
+            const double designWidth = 400;
+            const double designHeight = 720;
+            double maxWidth = Math.Max(320, area.Width - 8);
+            double maxHeight = Math.Max(420, area.Height - 8);
+            double outerWidth = designWidth + frame.Left + frame.Right;
+            double outerHeight = designHeight + frame.Top + frame.Bottom;
+            double scale = Math.Min(1, Math.Min(maxWidth / outerWidth, maxHeight / outerHeight));
+            MinWidth = 0;
+            MinHeight = 0;
+            Width = outerWidth * scale;
+            Height = outerHeight * scale;
+            MinWidth = Math.Min(320, Width);
+            MinHeight = Math.Min(420, Height);
+            Left = area.Left + Math.Max(0, (area.Width - Width) / 2);
+            Top = area.Top + Math.Max(0, (area.Height - Height) / 2);
+        }
+
         private void EnsureHomeSpeedDots()
         {
             if (homeSpeedTrace == null || homeSpeedDots != null)
                 return;
 
             homeSpeedDots = new Border[HomeSpeedSlotCount];
+            homeSpeedTrace.ColumnDefinitions.Clear();
             homeSpeedTrace.Children.Clear();
             for (int i = 0; i < HomeSpeedSlotCount; i++)
             {
+                homeSpeedTrace.ColumnDefinitions.Add(new ColumnDefinition
+                {
+                    Width = new GridLength(1, GridUnitType.Star)
+                });
                 var dot = new Border
                 {
                     Width = 8,
                     Height = 8,
-                    Margin = new Thickness(i == 0 ? 0 : 4, 0, 0, 0),
                     CornerRadius = new CornerRadius(2),
                     Background = new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x3A)),
+                    HorizontalAlignment = i == 0
+                        ? HorizontalAlignment.Left
+                        : i == HomeSpeedSlotCount - 1
+                            ? HorizontalAlignment.Right
+                            : HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center
                 };
+                Grid.SetColumn(dot, i);
                 homeSpeedDots[i] = dot;
                 homeSpeedTrace.Children.Add(dot);
             }
