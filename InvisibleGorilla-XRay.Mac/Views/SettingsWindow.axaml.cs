@@ -546,6 +546,52 @@ namespace InvisibleGorillaXRay.Mac.Views
             panelLog.IsVisible = true;
         }
 
+        private async void OnBridgeTypeChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (suppressSetLoad)
+                return;
+
+            BridgeType type = GetComboBoxSelectedKey<BridgeType>(comboBoxBridgeType);
+            if (type == BridgeType.NONE)
+            {
+                textBoxBridges.Text = string.Empty;
+                textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.MethodSelected"), type);
+                return;
+            }
+
+            List<string> existing = SplitBridgeLines(textBoxBridges.Text);
+            if (existing.Count > 0 && TorrcBuilder.InferBridgeType(existing) == type)
+            {
+                textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.MethodSelected"), type);
+                return;
+            }
+
+            List<string> defaults = DefaultBridges.ForType(type);
+            if (defaults.Count > 0)
+            {
+                textBoxBridges.Text = string.Join(Environment.NewLine, defaults);
+                textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.LoadedDefaults"), defaults.Count);
+                return;
+            }
+
+            if (type == BridgeType.WEBTUNNEL)
+            {
+                textBoxBridges.Text = string.Empty;
+                textBlockTorStatus.Text = Localize("Lang.Tor.Status.AskingTor");
+                MoatResult result = await new MoatClient().GetCircumventionSettingsAsync(null, "webtunnel");
+                if (GetComboBoxSelectedKey<BridgeType>(comboBoxBridgeType) != BridgeType.WEBTUNNEL)
+                    return;
+                if (result.Success && result.Bridges.Count > 0)
+                {
+                    textBoxBridges.Text = string.Join(Environment.NewLine, result.Bridges);
+                    textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.AskTorOk"), result.Bridges.Count, type);
+                    return;
+                }
+
+                textBlockTorStatus.Text = Localize("Lang.Tor.Status.WebTunnelEmpty");
+            }
+        }
+
         private void OnUseDefaultBridgesClick(object sender, RoutedEventArgs e)
         {
             BridgeType type = GetComboBoxSelectedKey<BridgeType>(comboBoxBridgeType);

@@ -388,7 +388,8 @@
                                 Text="{DynamicResource Lang.Tor.BridgeType}"
                                 FontWeight="Normal" FontSize="14" VerticalAlignment="Center"/>
                             <ComboBox x:Name="comboBoxBridgeType" Grid.Column="1" Height="26"
-                                FontWeight="Normal" FontSize="14"/>
+                                FontWeight="Normal" FontSize="14"
+                                SelectionChanged="OnBridgeTypeChanged"/>
                         </Grid>
 
                         <Grid>

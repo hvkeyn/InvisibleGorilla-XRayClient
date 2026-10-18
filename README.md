@@ -52,6 +52,10 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.64
+
+- **WebTunnel and obfs4 keep their own addresses.** Changing the method loads that method's list. A start uses the transport in the saved lines, and a failed method stops instead of retrying forever.
+
 ## What's new in v3.6.63
 
 - **Tor keeps several saved address sets.** Each set has its own list, including more than one set of the same bridge type. A new set leaves the previous addresses in the list. A start and a check use the set that is selected.

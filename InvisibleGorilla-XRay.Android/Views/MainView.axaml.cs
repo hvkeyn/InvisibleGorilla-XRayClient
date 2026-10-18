@@ -1087,7 +1087,8 @@ namespace InvisibleGorillaXRay.Android.Views
                 return;
             }
 
-            if (SplitBridgeLines(BridgesInput?.Text).Count > 0)
+            List<string> existing = SplitBridgeLines(BridgesInput?.Text);
+            if (existing.Count > 0 && TorrcBuilder.InferBridgeType(existing) == type)
             {
                 PersistTorEditor();
                 if (TorStatusText != null)

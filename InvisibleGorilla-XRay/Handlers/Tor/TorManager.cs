@@ -106,6 +106,8 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 System.IO.Directory.CreateDirectory(dataDir);
                 if (File.Exists(cookieFile))
                     File.Delete(cookieFile);
+                ClearSessionLock(dataDir);
+                try { File.WriteAllText(logFile, string.Empty); } catch { }
 
                 List<string> bridges = settings.GetBridgeLines();
                 string torrc = TorrcBuilder.Build(
@@ -162,6 +164,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 }
             }
 
+            ClearSessionLock(System.IO.Path.Combine(System.IO.Path.GetFullPath(Directory.TOR_DATA), "session"));
             BootstrapPercent = 0;
             StatusSummary = "Off";
             ActiveLinkLabel = "";
@@ -180,6 +183,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 RedirectStandardError = true,
                 CreateNoWindow = true
             };
+            ApplyPtEnvironment(startInfo);
 
             var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
             process.OutputDataReceived += (s, e) => { if (!string.IsNullOrEmpty(e.Data)) DiagnosticLog.Write(Tag + ".out", e.Data); };
@@ -204,13 +208,14 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             const int interval = 1000;
             const int stallLimitMs = 30000;
 
-            // Phase 1: wait for the control port + cookie file to appear.
+            // Phase 1: wait for the cookie. A raw TCP probe of the control port
+            // opens an unauthenticated session every second and tor then exits.
             while (elapsed < maxWaitMs)
             {
                 if (!IsRunning)
                     return new Status(Code.ERROR, SubCode.CANT_CONNECT, "Tor process exited during startup. Check tor.log.");
 
-                if (IsPortActive(controlPort) && File.Exists(cookieFile))
+                if (File.Exists(cookieFile))
                     break;
 
                 Thread.Sleep(interval);
@@ -303,9 +308,19 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                         }
                         else
                         {
-                            stallMs = stallLimitMs;
+                            DiagnosticLog.Write(Tag, $"Smart connect could not switch to {next.Type}.");
+                            activeIndex = nextIndex;
+                            if (activeIndex + 1 >= chain.Count)
+                                chainExhausted = true;
+                            stallMs = 0;
                         }
                     }
+                }
+
+                if (chainExhausted && stallMs >= stallLimit && BootstrapPercent < 15)
+                {
+                    return new Status(Code.ERROR, SubCode.CANT_CONNECT,
+                        $"{active} did not connect ({BootstrapPercent}%). The saved addresses for this method did not answer.");
                 }
 
                 Thread.Sleep(interval);
@@ -344,6 +359,9 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 return chain;
 
             AddAttempt(chain, seen, type, lines);
+            if (HasLines(lines))
+                return chain;
+
             foreach (BridgeCatalog.BridgeCandidate candidate in BridgeCatalog.ReadPlan())
                 AddAttempt(chain, seen, MapTransport(candidate.Transport), candidate.Lines);
             AddAttempt(chain, seen, BridgeType.SNOWFLAKE, null);
@@ -381,7 +399,10 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             TorSettings copy = settings.Clone();
             List<string> lines = copy.GetBridgeLines();
             BridgeType type = copy.GetBridgeType();
-            if (type == BridgeType.NONE && lines.Count > 0)
+            BridgeType inferred = InferBridgeType(lines);
+            if (inferred != BridgeType.NONE)
+                type = inferred;
+            else if (type == BridgeType.NONE && lines.Count > 0)
                 type = InferBridgeType(lines);
 
             if (type != BridgeType.NONE && BridgeCatalog.ReadPlan().Count == 0)
@@ -435,25 +456,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
 
         private static BridgeType InferBridgeType(IList<string> lines)
         {
-            if (lines == null)
-                return BridgeType.NONE;
-            foreach (string line in lines)
-            {
-                string trimmed = (line ?? string.Empty).Trim();
-                // Users and panels often paste the torrc form "Bridge obfs4 ...".
-                if (trimmed.StartsWith("Bridge ", StringComparison.OrdinalIgnoreCase))
-                    trimmed = trimmed.Substring("Bridge ".Length).TrimStart();
-
-                if (trimmed.StartsWith("snowflake ", StringComparison.OrdinalIgnoreCase))
-                    return BridgeType.SNOWFLAKE;
-                if (trimmed.StartsWith("meek", StringComparison.OrdinalIgnoreCase))
-                    return BridgeType.MEEK_AZURE;
-                if (trimmed.StartsWith("webtunnel ", StringComparison.OrdinalIgnoreCase))
-                    return BridgeType.WEBTUNNEL;
-                if (trimmed.StartsWith("obfs4 ", StringComparison.OrdinalIgnoreCase))
-                    return BridgeType.OBFS4;
-            }
-            return BridgeType.NONE;
+            return TorrcBuilder.InferBridgeType(lines);
         }
 
         private static BridgeType MapTransport(string transport)
@@ -664,6 +667,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                     RedirectStandardError = true,
                     CreateNoWindow = true
                 };
+                ApplyPtEnvironment(startInfo);
                 check = new Process { StartInfo = startInfo };
                 check.OutputDataReceived += (s, e) => { };
                 check.ErrorDataReceived += (s, e) => { };
@@ -681,7 +685,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                     if (check.HasExited)
                         return BridgeCheckResult.Fail("Tor exited before reaching the bridge.");
 
-                    if (IsPortActive(controlPort) && File.Exists(cookieFile))
+                    if (File.Exists(cookieFile))
                     {
                         using (var control = new TorControlClient())
                         {
@@ -770,6 +774,41 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                         System.IO.Directory.Delete(dataDir, true);
                 }
                 catch { }
+            }
+        }
+
+        private static void ApplyPtEnvironment(ProcessStartInfo startInfo)
+        {
+            try
+            {
+                string[] certDirs =
+                {
+                    "/apex/com.android.conscrypt/cacerts",
+                    "/system/etc/security/cacerts"
+                };
+                foreach (string dir in certDirs)
+                {
+                    if (!System.IO.Directory.Exists(dir))
+                        continue;
+                    startInfo.EnvironmentVariables["SSL_CERT_DIR"] = dir;
+                    break;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private static void ClearSessionLock(string dataDir)
+        {
+            try
+            {
+                string lockFile = System.IO.Path.Combine(dataDir, "lock");
+                if (File.Exists(lockFile))
+                    File.Delete(lockFile);
+            }
+            catch
+            {
             }
         }
 

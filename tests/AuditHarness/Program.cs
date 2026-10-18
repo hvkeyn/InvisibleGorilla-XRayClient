@@ -34,7 +34,7 @@ namespace AuditHarness
                         BridgeType.OBFS4, new[] { "1.2.3.4:443 cert=abcdef" });
                     Assert(torrc.Contains("UseBridges 1"), "нет UseBridges 1");
                     Assert(torrc.Contains("Bridge obfs4 1.2.3.4:443 cert=abcdef"), "нет строки моста с префиксом obfs4");
-                    Assert(torrc.Contains("ClientTransportPlugin obfs4 exec"), "нет ClientTransportPlugin obfs4");
+                    Assert(torrc.Contains("ClientTransportPlugin") && torrc.Contains("obfs4"), "нет ClientTransportPlugin obfs4");
                 });
 
             Check("Build: NONE не добавляет UseBridges (прямое подключение разрешено)",

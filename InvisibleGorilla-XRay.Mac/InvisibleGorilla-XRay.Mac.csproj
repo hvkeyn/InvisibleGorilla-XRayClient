@@ -3,8 +3,8 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net7.0</TargetFramework>
-    <Version>3.6.63.0</Version>
-    <AssemblyVersion>3.6.63.0</AssemblyVersion>
+    <Version>3.6.64.0</Version>
+    <AssemblyVersion>3.6.64.0</AssemblyVersion>
     <RootNamespace>InvisibleGorillaXRay.Mac</RootNamespace>
     <AssemblyName>InvisibleGorilla-XRay.Mac</AssemblyName>
     <Nullable>enable</Nullable>

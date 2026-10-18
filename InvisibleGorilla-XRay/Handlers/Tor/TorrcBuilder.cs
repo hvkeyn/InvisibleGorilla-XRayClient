@@ -177,26 +177,49 @@ namespace InvisibleGorillaXRay.Handlers.Tor
             return lines;
         }
 
+        /// <summary>
+        /// Lyrebird speaks every bundled transport. Registering only the UI type made a
+        /// webtunnel or obfs4 line hang when the selected method was still snowflake.
+        /// </summary>
         private static string PluginBody(BridgeType bridgeType)
         {
-            string pt = ExecPath(Path.PLUGGABLE_TRANSPORT_EXE);
-            // Tor Expert Bundle 14.5+ has no snowflake-client. Lyrebird speaks the
-            // snowflake transport when the plugin name is "snowflake", not "obfs4".
-            string snowflake = File.Exists(Path.SNOWFLAKE_EXE) ? ExecPath(Path.SNOWFLAKE_EXE) : pt;
+            if (bridgeType == BridgeType.NONE)
+                return null;
 
-            switch (bridgeType)
+            string pt = ExecPath(Path.PLUGGABLE_TRANSPORT_EXE);
+            string snowflake = File.Exists(Path.SNOWFLAKE_EXE) ? ExecPath(Path.SNOWFLAKE_EXE) : pt;
+            if (!string.Equals(snowflake, pt, StringComparison.OrdinalIgnoreCase))
             {
-                case BridgeType.OBFS4:
-                    return $"obfs4 exec {pt}";
-                case BridgeType.MEEK_AZURE:
-                    return $"meek_lite exec {pt}";
-                case BridgeType.WEBTUNNEL:
-                    return $"webtunnel exec {pt}";
-                case BridgeType.SNOWFLAKE:
+                if (bridgeType == BridgeType.SNOWFLAKE)
                     return $"snowflake exec {snowflake}";
-                default:
-                    return null;
+                return $"obfs4,meek_lite,webtunnel exec {pt}";
             }
+
+            return $"obfs4,meek_lite,webtunnel,snowflake exec {pt}";
+        }
+
+        public static BridgeType InferBridgeType(IEnumerable<string> bridgeLines)
+        {
+            if (bridgeLines == null)
+                return BridgeType.NONE;
+
+            foreach (string line in bridgeLines)
+            {
+                string trimmed = SanitizeConfValue(line);
+                if (trimmed.StartsWith("Bridge ", StringComparison.OrdinalIgnoreCase))
+                    trimmed = trimmed.Substring("Bridge ".Length).TrimStart();
+
+                if (trimmed.StartsWith("snowflake ", StringComparison.OrdinalIgnoreCase))
+                    return BridgeType.SNOWFLAKE;
+                if (trimmed.StartsWith("meek", StringComparison.OrdinalIgnoreCase))
+                    return BridgeType.MEEK_AZURE;
+                if (trimmed.StartsWith("webtunnel ", StringComparison.OrdinalIgnoreCase))
+                    return BridgeType.WEBTUNNEL;
+                if (trimmed.StartsWith("obfs4 ", StringComparison.OrdinalIgnoreCase))
+                    return BridgeType.OBFS4;
+            }
+
+            return BridgeType.NONE;
         }
 
         private static string NormalizeBridgeLine(BridgeType bridgeType, string line)
@@ -210,14 +233,25 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 _ => string.Empty
             };
 
+            if (line.StartsWith("Bridge ", StringComparison.OrdinalIgnoreCase))
+                line = line.Substring("Bridge ".Length).TrimStart();
+
+            if (HasTransportPrefix(line))
+                return line;
+
             if (string.IsNullOrEmpty(transport))
                 return line;
 
-            // If the line already begins with the transport keyword, keep it as-is.
-            if (line.StartsWith(transport + " ") || line.StartsWith("Bridge "))
-                return line.StartsWith("Bridge ") ? line.Substring("Bridge ".Length) : line;
-
             return $"{transport} {line}";
+        }
+
+        private static bool HasTransportPrefix(string line)
+        {
+            return line.StartsWith("obfs4 ", StringComparison.OrdinalIgnoreCase)
+                || line.StartsWith("webtunnel ", StringComparison.OrdinalIgnoreCase)
+                || line.StartsWith("snowflake ", StringComparison.OrdinalIgnoreCase)
+                || line.StartsWith("meek_lite ", StringComparison.OrdinalIgnoreCase)
+                || line.StartsWith("meek ", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string ExecPath(string path)

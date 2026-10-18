@@ -410,7 +410,8 @@ namespace InvisibleGorillaXRay
                 return;
             }
 
-            if (SplitBridgeLines(textBoxBridges.Text).Count > 0)
+            List<string> existing = SplitBridgeLines(textBoxBridges.Text);
+            if (existing.Count > 0 && TorrcBuilder.InferBridgeType(existing) == type)
             {
                 textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.MethodSelected"), type);
                 PersistTorFromUi();
