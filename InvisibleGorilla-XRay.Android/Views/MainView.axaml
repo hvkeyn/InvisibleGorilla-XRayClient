@@ -1001,7 +1001,9 @@
                         <TextBox x:Name="BridgesTextBox"
                                  AcceptsReturn="True"
                                  TextWrapping="Wrap"
-                                 Height="110"
+                                 MinHeight="140"
+                                 Watermark="One bridge per line"
+                                 LostFocus="OnBridgesLostFocus"
                                  FontSize="11" />
 
                         <StackPanel Orientation="Horizontal" Spacing="8">

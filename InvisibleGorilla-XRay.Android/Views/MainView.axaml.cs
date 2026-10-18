@@ -861,6 +861,11 @@ namespace InvisibleGorillaXRay.Android.Views
         /// The Tor card owns its method, the same way the OpenFlux card owns its document URL.
         /// Writes the editor into <see cref="UserSettings.Tor"/> and into a matching Tor profile.
         /// </summary>
+        private void OnBridgesLostFocus(object? sender, RoutedEventArgs e)
+        {
+            PersistTorEditor();
+        }
+
         private void PersistTorEditor()
         {
             if (isApplyingTorUi)
@@ -962,16 +967,24 @@ namespace InvisibleGorillaXRay.Android.Views
                 return;
 
             BridgeType type = GetSelectedKey(BridgeTypeOptions, BridgeTypeSelector.SelectedIndex, BridgeType.NONE);
+            if (type == BridgeType.NONE)
+            {
+                ApplyBridgeSelection(type, new List<string>(), LocalizeFormat("Lang.Tor.Status.MethodSelected", type), enabled: false);
+                return;
+            }
+
+            if (SplitBridgeLines(BridgesInput?.Text).Count > 0)
+            {
+                PersistTorEditor();
+                if (TorStatusText != null)
+                    TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.MethodSelected", type);
+                return;
+            }
+
             if (type == BridgeType.WEBTUNNEL)
             {
                 BridgesInput.Text = string.Empty;
                 _ = LoadWebTunnelAndSwitchAsync();
-                return;
-            }
-
-            if (type == BridgeType.NONE)
-            {
-                ApplyBridgeSelection(type, new List<string>(), LocalizeFormat("Lang.Tor.Status.MethodSelected", type), enabled: false);
                 return;
             }
 
@@ -2683,7 +2696,13 @@ namespace InvisibleGorillaXRay.Android.Views
                 AppRules = current.GetAppRules(),
                 AppRuleTemplates = current.GetAppRuleTemplates(),
                 AppRuleTemplateBindings = current.GetAppRuleTemplateBindings(),
-                Tor = BuildTorSettingsFromUi(current)
+                ClientId = current.GetClientId(),
+                CurrentConfigPath = current.GetCurrentConfigPath(),
+                Tor = BuildTorSettingsFromUi(current),
+                TorProfiles = current.GetTorProfiles(),
+                Goida = current.GetGoidaSettings().Clone(),
+                OpenFlux = current.GetOpenFluxProfile().Clone(),
+                OpenFluxProfiles = current.GetOpenFluxProfiles()
             });
 
             UpdateCurrentConfigSummary();
@@ -4060,8 +4079,8 @@ namespace InvisibleGorillaXRay.Android.Views
         }
 
         /// <summary>
-        /// The Tor list card is the built-in bridge set. Rewrite it on every start so a line saved
-        /// by an older build (a space inside cert=) cannot keep failing after the app is updated.
+        /// The Tor card with no saved addresses gets the built-in snowflake line.
+        /// Addresses the user already saved, including several of them, stay as they are.
         /// </summary>
         private void RefreshBuiltinTorBridgesIfSelected()
         {
@@ -4069,12 +4088,11 @@ namespace InvisibleGorillaXRay.Android.Views
             if (!TorProfilePaths.IsMarker(path))
                 return;
 
-            // RUN happens off the UI thread. Only the saved profile object is touched here.
             UserSettings current = settingsHandler.UserSettings;
             TorSettings tor = current.GetTorSettings();
             tor.Enabled = true;
             tor.Mode = TorMode.ONLY_TOR;
-            if (NeedsBuiltinTorBridges(tor))
+            if (tor.GetBridgeType() == BridgeType.NONE || tor.GetBridgeLines().Count == 0)
             {
                 tor.BridgeType = BridgeType.SNOWFLAKE;
                 tor.BridgeLines = DefaultBridges.ForType(BridgeType.SNOWFLAKE);
@@ -4098,7 +4116,7 @@ namespace InvisibleGorillaXRay.Android.Views
             {
                 tor.Enabled = true;
                 tor.Mode = TorMode.ONLY_TOR;
-                if (NeedsBuiltinTorBridges(tor))
+                if (tor.GetBridgeType() == BridgeType.NONE || tor.GetBridgeLines().Count == 0)
                 {
                     tor.BridgeType = BridgeType.SNOWFLAKE;
                     tor.BridgeLines = DefaultBridges.ForType(BridgeType.SNOWFLAKE);
@@ -4125,37 +4143,6 @@ namespace InvisibleGorillaXRay.Android.Views
             current.Tor = tor;
             settingsHandler.UpdateUserSettings(current);
             ApplyTorEditorPanel();
-        }
-
-        private static bool NeedsBuiltinTorBridges(TorSettings tor)
-        {
-            List<string> lines = tor.GetBridgeLines();
-            if (tor.GetBridgeType() == BridgeType.NONE || lines.Count == 0)
-                return true;
-
-            if (lines.Any(BridgeLineLooksBroken))
-                return true;
-
-            // Orbot's datapacket snowflake pair stalled before the directory. Replace it
-            // with the line that actually bootstraps. AMP and custom lines stay.
-            return tor.GetBridgeType() == BridgeType.SNOWFLAKE
-                && lines.Any(line => line.Contains("datapacket.com", StringComparison.Ordinal));
-        }
-
-        private static bool BridgeLineLooksBroken(string line)
-        {
-            int cert = line.IndexOf("cert=", StringComparison.Ordinal);
-            if (cert < 0)
-                return false;
-
-            int space = line.IndexOf(' ', cert + 5);
-            if (space < 0)
-                return false;
-
-            string rest = line.Substring(space + 1);
-            int nextSpace = rest.IndexOf(' ');
-            string token = nextSpace < 0 ? rest : rest.Substring(0, nextSpace);
-            return token.IndexOf('=') < 0;
         }
 
         /// <summary>
@@ -4304,49 +4291,12 @@ namespace InvisibleGorillaXRay.Android.Views
             UserSettings current = settingsHandler.UserSettings;
             if (result.Success)
             {
-                if (result.UsedLines != null && result.UsedLines.Count > 0 && result.UsedType != BridgeType.NONE)
-                {
-                    suppressBridgeTypeLoad = true;
-                    try
-                    {
-                        int index = BridgeTypeOptions.Keys.ToList().IndexOf(result.UsedType);
-                        if (index >= 0 && BridgeTypeSelector != null)
-                            BridgeTypeSelector.SelectedIndex = index;
-                        if (BridgesInput != null)
-                            BridgesInput.Text = string.Join(Environment.NewLine, result.UsedLines);
-                        if (TorEnabledToggle != null)
-                            TorEnabledToggle.IsChecked = true;
-                    }
-                    finally
-                    {
-                        suppressBridgeTypeLoad = false;
-                    }
-
-                    profile.BridgeType = result.UsedType;
-                    profile.BridgeLines = result.UsedLines;
-                    PersistTorEditor();
-                }
-
                 SetConfigAvailability(profile.ConfigPath, result.LatencyMs);
                 TorProfile? stored = current.FindTorProfileByPath(profile.ConfigPath);
                 if (stored != null)
-                {
                     stored.LastLatencyMs = result.LatencyMs;
-                    if (result.UsedLines != null && result.UsedLines.Count > 0 && result.UsedType != BridgeType.NONE)
-                    {
-                        stored.BridgeType = result.UsedType;
-                        stored.BridgeLines = result.UsedLines;
-                    }
-                }
                 if (TorProfilePaths.IsMarker(profile.ConfigPath))
-                {
                     current.GetTorSettings().LastLatencyMs = result.LatencyMs;
-                    if (result.UsedLines != null && result.UsedLines.Count > 0 && result.UsedType != BridgeType.NONE)
-                    {
-                        current.GetTorSettings().BridgeType = result.UsedType;
-                        current.GetTorSettings().BridgeLines = result.UsedLines;
-                    }
-                }
                 settingsHandler.UpdateUserSettings(current);
                 SetTorCheckStatus(string.IsNullOrWhiteSpace(result.LinkLabel)
                     ? LocalizeFormat("Lang.Tor.Status.CheckOk", result.LatencyMs)

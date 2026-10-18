@@ -487,13 +487,6 @@ namespace InvisibleGorillaXRay.Mac.Views
 
             BridgeCheckResult result = await Task.Run(() => torManager.CheckBridge(type, lines, 150000));
 
-            if (result.Success && result.UsedLines != null && result.UsedLines.Count > 0)
-            {
-                if (result.UsedType != BridgeType.NONE)
-                    SelectComboBoxItem(comboBoxBridgeType, result.UsedType);
-                textBoxBridges.Text = string.Join(Environment.NewLine, result.UsedLines);
-            }
-
             textBlockTorStatus.Text = result.Success
                 ? (string.IsNullOrWhiteSpace(result.LinkLabel)
                     ? string.Format(Localize("Lang.Tor.Status.CheckOk"), result.LatencyMs)
@@ -673,7 +666,13 @@ namespace InvisibleGorillaXRay.Mac.Views
                 appRuleTemplateBindings: currentSettings.GetAppRuleTemplateBindings()
             );
 
+            userSettings.ClientId = currentSettings.GetClientId();
+            userSettings.CurrentConfigPath = currentSettings.GetCurrentConfigPath();
             userSettings.Tor = BuildTorSettingsFromUi();
+            userSettings.TorProfiles = currentSettings.GetTorProfiles();
+            userSettings.Goida = currentSettings.GetGoidaSettings().Clone();
+            userSettings.OpenFlux = currentSettings.GetOpenFluxProfile().Clone();
+            userSettings.OpenFluxProfiles = currentSettings.GetOpenFluxProfiles();
 
             SendRunAtStartupActivationEvent(userSettings);
             ForceSendAnalyticsActivationEvent(userSettings);

@@ -320,6 +320,13 @@ namespace InvisibleGorillaXRay
                 return;
             }
 
+            if (SplitBridgeLines(textBoxBridges.Text).Count > 0)
+            {
+                textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.MethodSelected"), type);
+                PersistTorFromUi();
+                return;
+            }
+
             List<string> defaults = DefaultBridges.ForType(type);
             if (defaults.Count > 0)
             {
@@ -376,19 +383,17 @@ namespace InvisibleGorillaXRay
             {
                 BridgeCheckResult result = await Task.Run(() => torManager.CheckBridge(type, lines, 150000));
 
-                if (result.Success && result.UsedLines != null && result.UsedLines.Count > 0)
+                if (result.Success)
                 {
-                    BridgeType used = result.UsedType == BridgeType.NONE ? type : result.UsedType;
                     string status = string.IsNullOrWhiteSpace(result.LinkLabel)
                         ? string.Format(Localize("Lang.Tor.Status.CheckOk"), result.LatencyMs)
                         : string.Format(Localize("Lang.Tor.Link.Badge"), result.LinkLabel);
-                    ApplyBridgeLines(used, result.UsedLines, status);
+                    textBlockTorStatus.Text = status;
+                    PersistTorFromUi();
                 }
                 else
                 {
-                    textBlockTorStatus.Text = result.Success
-                        ? string.Format(Localize("Lang.Tor.Status.CheckOk"), result.LatencyMs)
-                        : string.Format(Localize("Lang.Tor.Status.CheckFail"), result.Message);
+                    textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.CheckFail"), result.Message);
                 }
             }
             catch (Exception ex)

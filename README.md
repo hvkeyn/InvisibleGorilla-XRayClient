@@ -52,6 +52,10 @@ Android support is **experimental**.
 - The Android mobile tunnel bridge is **not bundled yet**, so full `VpnService`-backed TUN routing still needs a follow-up native runtime step.
 - `proxy mode` on Android currently means a local listener on `127.0.0.1:<port>` rather than desktop-style global system proxy switching.
 
+## What's new in v3.6.62
+
+- **Several Tor bridge addresses stay saved.** Each address is one line. A check, a start, or a method change keeps the whole list. Saving settings on the phone keeps the other bridge sets too.
+
 ## What's new in v3.6.61
 
 - **Tor exit country is optional.** The default is any exit. A two-letter country locks the circuit to that country, and a failed bootstrap says to choose Any exit.

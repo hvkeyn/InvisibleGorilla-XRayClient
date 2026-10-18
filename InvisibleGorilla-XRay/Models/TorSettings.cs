@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -96,10 +97,21 @@ namespace InvisibleGorillaXRay.Models
             if (BridgeLines == null)
                 return new List<string>();
 
-            return BridgeLines
-                .Where(line => !string.IsNullOrWhiteSpace(line))
-                .Select(line => line.Trim())
-                .ToList();
+            var lines = new List<string>();
+            foreach (string raw in BridgeLines)
+            {
+                if (string.IsNullOrWhiteSpace(raw))
+                    continue;
+
+                foreach (string part in raw.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    string line = part.Trim();
+                    if (line.Length > 0)
+                        lines.Add(line);
+                }
+            }
+
+            return lines;
         }
 
         public TorSettings Clone()

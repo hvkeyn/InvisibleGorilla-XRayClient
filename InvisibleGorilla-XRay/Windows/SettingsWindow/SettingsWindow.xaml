@@ -460,10 +460,11 @@
 
                         <Label Margin="0 6 0 0" Foreground="White" Content="{DynamicResource Lang.Tor.Bridges}"
                             FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14"/>
-                        <TextBox x:Name="textBoxBridges" Height="80"
+                        <TextBox x:Name="textBoxBridges" Height="120"
                             AcceptsReturn="True" TextWrapping="NoWrap"
                             HorizontalScrollBarVisibility="Auto"
                             VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"
+                            ToolTip="One bridge address per line"
                             FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="11"/>
 
                         <WrapPanel Orientation="Horizontal" Margin="0 8 0 0">

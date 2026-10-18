@@ -414,12 +414,6 @@ namespace InvisibleGorillaXRay.Factories
                     return Availability.ERROR;
 
                 tor.LastLatencyMs = result.LatencyMs;
-                if (result.UsedLines != null && result.UsedLines.Count > 0)
-                {
-                    tor.BridgeLines = result.UsedLines;
-                    if (result.UsedType != BridgeType.NONE)
-                        tor.BridgeType = result.UsedType;
-                }
                 settingsHandler.UpdateUserSettings(settingsHandler.UserSettings);
                 return result.LatencyMs;
             }
