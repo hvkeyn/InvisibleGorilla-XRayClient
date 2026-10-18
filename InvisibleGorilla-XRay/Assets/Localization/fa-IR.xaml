@@ -101,6 +101,12 @@
     <system:String x:Key="Lang.Tor.ExitCountry">کشور خروج</system:String>
     <system:String x:Key="Lang.Tor.SocksPort">پورت SOCKS تور</system:String>
     <system:String x:Key="Lang.Tor.Bridges">خطوط پل</system:String>
+    <system:String x:Key="Lang.Tor.Sets">Saved sets</system:String>
+    <system:String x:Key="Lang.Tor.Set.New">New set</system:String>
+    <system:String x:Key="Lang.Tor.Set.Delete">Delete</system:String>
+    <system:String x:Key="Lang.Tor.Set.Item">{0} · {1}</system:String>
+    <system:String x:Key="Lang.Tor.Set.Item.Numbered">{0} · {1} · {2}</system:String>
+    <system:String x:Key="Lang.Tor.Status.SetAdded">New set added. The previous addresses stay in the list.</system:String>
     <system:String x:Key="Lang.Tor.UseDefault">داخلی</system:String>
     <system:String x:Key="Lang.Tor.QuickConnect">اتصال سریع</system:String>
     <system:String x:Key="Lang.Tor.AskTor">از Tor بپرس (خودکار)</system:String>

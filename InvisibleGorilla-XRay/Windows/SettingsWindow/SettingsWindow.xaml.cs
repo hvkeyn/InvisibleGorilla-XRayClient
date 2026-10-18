@@ -75,6 +75,9 @@ namespace InvisibleGorillaXRay
         private MoatChallenge activeMoatChallenge;
         private bool suppressBridgeTypeLoad;
         private bool bridgeTypeHooked;
+        private bool suppressSetLoad;
+        private string loadedSetId = "";
+        private TorSettings bridgeSets;
 
         private Func<string> getLanguage;
         private Func<Mode> getMode;
@@ -232,14 +235,14 @@ namespace InvisibleGorillaXRay
         private void LoadTorSettings()
         {
             TorSettings tor = getUserSettings.Invoke().GetTorSettings();
+            bridgeSets = tor.Clone();
+            bridgeSets.EnsureSets();
             suppressBridgeTypeLoad = true;
             checkBoxTorEnabled.IsChecked = tor.GetEnabled();
             comboBoxTorMode.SelectedValue = tor.GetMode();
-            comboBoxBridgeType.SelectedValue = tor.GetBridgeType();
             comboBoxExitCountry.SelectedValue = tor.GetExitCountry() ?? "";
             textBoxTorSocksPort.Text = tor.GetSocksPort().ToString();
-            textBoxBridges.Text = string.Join(Environment.NewLine, tor.GetBridgeLines());
-            suppressBridgeTypeLoad = false;
+            BindActiveSetToEditor();
             textBlockTorStatus.Text = torManager.IsAvailable
                 ? Localize("Lang.Tor.Status.Ready")
                 : Localize("Lang.Tor.Status.Unavailable");
@@ -253,16 +256,103 @@ namespace InvisibleGorillaXRay
         private TorSettings BuildTorSettingsFromUi()
         {
             TorSettings existing = getUserSettings.Invoke().GetTorSettings();
+            EnsureBridgeSets(existing);
+            FlushEditorInto(string.IsNullOrWhiteSpace(loadedSetId) ? bridgeSets.ActiveSetId : loadedSetId);
             return new TorSettings
             {
                 Enabled = checkBoxTorEnabled.IsChecked == true,
                 Mode = GetSelectedValue(comboBoxTorMode, existing.GetMode()),
-                BridgeType = GetSelectedValue(comboBoxBridgeType, existing.GetBridgeType()),
+                BridgeType = bridgeSets.GetBridgeType(),
                 ExitCountry = GetSelectedValue(comboBoxExitCountry, existing.GetExitCountry() ?? ""),
                 SocksPort = int.TryParse(textBoxTorSocksPort.Text, out int sp) && sp > 0 ? sp : existing.GetSocksPort(),
                 ControlPort = existing.GetControlPort(),
-                BridgeLines = SplitBridgeLines(textBoxBridges.Text)
+                BridgeLines = bridgeSets.GetBridgeLines(),
+                LastLatencyMs = existing.LastLatencyMs,
+                ActiveSetId = bridgeSets.ActiveSetId,
+                Sets = bridgeSets.GetSets().Select(set => set.Clone()).ToList()
             };
+        }
+
+        private void EnsureBridgeSets(TorSettings existing = null)
+        {
+            if (bridgeSets != null)
+                return;
+
+            bridgeSets = (existing ?? getUserSettings.Invoke().GetTorSettings()).Clone();
+            bridgeSets.EnsureSets();
+            loadedSetId = bridgeSets.ActiveSetId;
+        }
+
+        private void FlushEditorInto(string setId)
+        {
+            if (bridgeSets == null || string.IsNullOrWhiteSpace(setId))
+                return;
+
+            BridgeType type = comboBoxBridgeType.SelectedValue is BridgeType selected
+                ? selected
+                : bridgeSets.GetBridgeType();
+            bridgeSets.ApplyToSet(setId, type, SplitBridgeLines(textBoxBridges.Text));
+        }
+
+        private void BindActiveSetToEditor()
+        {
+            suppressSetLoad = true;
+            suppressBridgeTypeLoad = true;
+            comboBoxBridgeSets.ItemsSource = bridgeSets.GetSets()
+                .Select(set => new KeyValuePair<string, string>(set.Id, DescribeSet(set)))
+                .ToList();
+            comboBoxBridgeSets.SelectedValue = bridgeSets.ActiveSetId;
+            loadedSetId = bridgeSets.ActiveSetId;
+            TorBridgeSet active = bridgeSets.GetActiveSet();
+            comboBoxBridgeType.SelectedValue = active.BridgeType;
+            textBoxBridges.Text = string.Join(Environment.NewLine, active.GetBridgeLines());
+            suppressBridgeTypeLoad = false;
+            suppressSetLoad = false;
+        }
+
+        private string DescribeSet(TorBridgeSet set)
+        {
+            string typeName = BridgeTypes.TryGetValue(set.BridgeType, out string name)
+                ? name
+                : set.BridgeType.ToString();
+            int count = set.GetBridgeLines().Count;
+            int ordinal = bridgeSets.SetOrdinal(set);
+            if (ordinal > 0)
+                return string.Format(Localize("Lang.Tor.Set.Item.Numbered"), typeName, count, ordinal);
+            return string.Format(Localize("Lang.Tor.Set.Item"), typeName, count);
+        }
+
+        private void OnBridgeSetChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (suppressSetLoad || bridgeSets == null)
+                return;
+            if (!(comboBoxBridgeSets.SelectedValue is string id) || string.IsNullOrWhiteSpace(id))
+                return;
+            if (string.Equals(id, loadedSetId, StringComparison.Ordinal))
+                return;
+
+            FlushEditorInto(loadedSetId);
+            bridgeSets.SelectSet(id);
+            BindActiveSetToEditor();
+            PersistTorFromUi();
+        }
+
+        private void OnNewBridgeSetClick(object sender, RoutedEventArgs e)
+        {
+            EnsureBridgeSets();
+            FlushEditorInto(loadedSetId);
+            bridgeSets.AddSet(SelectedBridgeType(), new List<string>());
+            BindActiveSetToEditor();
+            textBlockTorStatus.Text = Localize("Lang.Tor.Status.SetAdded");
+            PersistTorFromUi();
+        }
+
+        private void OnDeleteBridgeSetClick(object sender, RoutedEventArgs e)
+        {
+            EnsureBridgeSets();
+            bridgeSets.RemoveActiveSet();
+            BindActiveSetToEditor();
+            PersistTorFromUi();
         }
 
         private static T GetSelectedValue<T>(ComboBox comboBox, T fallback)
@@ -437,7 +527,16 @@ namespace InvisibleGorillaXRay
 
         private void ApplyBuiltinMethod(BridgeType type, string bridgeLine)
         {
-            ApplyBridgeLines(type, new[] { bridgeLine }, string.Format(Localize("Lang.Tor.Status.MethodSelected"), type));
+            EnsureBridgeSets();
+            FlushEditorInto(loadedSetId);
+            string origin = bridgeLine.IndexOf("ampcache=", StringComparison.OrdinalIgnoreCase) >= 0
+                ? "snowflake-amp"
+                : type == BridgeType.MEEK_AZURE ? "meek" : "snowflake";
+            bridgeSets.OpenOrCreateOrigin(origin, type, new[] { bridgeLine });
+            BindActiveSetToEditor();
+            checkBoxTorEnabled.IsChecked = true;
+            textBlockTorStatus.Text = string.Format(Localize("Lang.Tor.Status.MethodSelected"), type);
+            PersistTorFromUi();
         }
 
         private BridgeType SelectedBridgeType()

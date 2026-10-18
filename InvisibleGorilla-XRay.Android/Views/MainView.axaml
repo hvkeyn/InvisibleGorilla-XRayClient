@@ -996,6 +996,28 @@
                                    Text="Tor SOCKS port" />
                         <TextBox x:Name="TorSocksPortTextBox" IsVisible="False" />
 
+                        <TextBlock x:Name="BridgeSetsTitleTextBlock"
+                                   Text="Saved sets" />
+                        <ComboBox x:Name="BridgeSetsComboBox"
+                                  HorizontalAlignment="Stretch"
+                                  SelectionChanged="OnBridgeSetSelectionChanged" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="NewBridgeSetButton"
+                                    Height="34"
+                                    Padding="12,0"
+                                    Theme="{StaticResource GrayActionButton}"
+                                    Click="OnNewBridgeSetClick">
+                                <TextBlock x:Name="NewBridgeSetButtonTextBlock" Text="New set" />
+                            </Button>
+                            <Button x:Name="DeleteBridgeSetButton"
+                                    Height="34"
+                                    Padding="12,0"
+                                    Theme="{StaticResource GrayActionButton}"
+                                    Click="OnDeleteBridgeSetClick">
+                                <TextBlock x:Name="DeleteBridgeSetButtonTextBlock" Text="Delete" />
+                            </Button>
+                        </StackPanel>
+
                         <TextBlock x:Name="BridgesTitleTextBlock"
                                    Text="Bridge lines" />
                         <TextBox x:Name="BridgesTextBox"

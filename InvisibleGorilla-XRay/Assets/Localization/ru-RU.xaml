@@ -107,6 +107,12 @@
     <system:String x:Key="Lang.Tor.ExitCountry">Страна выхода</system:String>
     <system:String x:Key="Lang.Tor.SocksPort">SOCKS-порт Tor</system:String>
     <system:String x:Key="Lang.Tor.Bridges">Строки мостов</system:String>
+    <system:String x:Key="Lang.Tor.Sets">Сохранённые наборы</system:String>
+    <system:String x:Key="Lang.Tor.Set.New">Новый набор</system:String>
+    <system:String x:Key="Lang.Tor.Set.Delete">Удалить</system:String>
+    <system:String x:Key="Lang.Tor.Set.Item">{0} · {1}</system:String>
+    <system:String x:Key="Lang.Tor.Set.Item.Numbered">{0} · {1} · {2}</system:String>
+    <system:String x:Key="Lang.Tor.Status.SetAdded">Новый набор добавлен. Прежние адреса остаются в списке.</system:String>
     <system:String x:Key="Lang.Tor.UseDefault">Встроенные</system:String>
     <system:String x:Key="Lang.Tor.QuickConnect">Быстрое подключение</system:String>
     <system:String x:Key="Lang.Tor.AskTor">Спросить Tor (авто)</system:String>

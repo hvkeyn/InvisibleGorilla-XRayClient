@@ -428,6 +428,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private CheckBox TorEnabledToggle => GetRequiredControl<CheckBox>("TorEnabledCheckBox");
         private ComboBox TorModeSelector => GetRequiredControl<ComboBox>("TorModeComboBox");
         private ComboBox BridgeTypeSelector => GetRequiredControl<ComboBox>("BridgeTypeComboBox");
+        private ComboBox BridgeSetsSelector => GetRequiredControl<ComboBox>("BridgeSetsComboBox");
         private ComboBox ExitCountrySelector => GetRequiredControl<ComboBox>("ExitCountryComboBox");
         private TextBox TorSocksPortInput => GetRequiredControl<TextBox>("TorSocksPortTextBox");
         private TextBox BridgesInput => GetRequiredControl<TextBox>("BridgesTextBox");
@@ -613,6 +614,9 @@ namespace InvisibleGorillaXRay.Android.Views
             GetRequiredControl<TextBlock>("BridgeTypeTitleTextBlock").Text = Localize("Lang.Tor.BridgeType");
             GetRequiredControl<TextBlock>("ExitCountryTitleTextBlock").Text = Localize("Lang.Tor.ExitCountry");
             GetRequiredControl<TextBlock>("TorSocksPortTitleTextBlock").Text = Localize("Lang.Tor.SocksPort");
+            GetRequiredControl<TextBlock>("BridgeSetsTitleTextBlock").Text = Localize("Lang.Tor.Sets");
+            GetRequiredControl<TextBlock>("NewBridgeSetButtonTextBlock").Text = Localize("Lang.Tor.Set.New");
+            GetRequiredControl<TextBlock>("DeleteBridgeSetButtonTextBlock").Text = Localize("Lang.Tor.Set.Delete");
             GetRequiredControl<TextBlock>("BridgesTitleTextBlock").Text = Localize("Lang.Tor.Bridges");
             GetRequiredControl<TextBlock>("UseDefaultBridgesButtonTextBlock").Text = Localize("Lang.Tor.UseDefault");
             GetRequiredControl<TextBlock>("FetchMoatButtonTextBlock").Text = Localize("Lang.Tor.FetchMoat");
@@ -832,6 +836,8 @@ namespace InvisibleGorillaXRay.Android.Views
         private bool isApplyingTorUi;
         private bool suppressBridgeTypeLoad;
         private bool bridgeTypeHooked;
+        private string loadedSetId = "";
+        private TorSettings bridgeSets;
 
         private void LoadTorSettingsIntoControls(UserSettings settings)
         {
@@ -842,10 +848,11 @@ namespace InvisibleGorillaXRay.Android.Views
             {
                 TorEnabledToggle.IsChecked = tor.GetEnabled();
                 TorModeSelector.SelectedIndex = TorModeOptions.Keys.ToList().IndexOf(tor.GetMode());
-                BridgeTypeSelector.SelectedIndex = BridgeTypeOptions.Keys.ToList().IndexOf(tor.GetBridgeType());
                 ExitCountrySelector.SelectedIndex = Math.Max(0, ExitCountryOptions.Keys.ToList().IndexOf(tor.GetExitCountry()));
                 TorSocksPortInput.Text = tor.GetSocksPort().ToString();
-                BridgesInput.Text = string.Join(Environment.NewLine, tor.GetBridgeLines());
+                bridgeSets = tor.Clone();
+                bridgeSets.EnsureSets();
+                FillActiveSetEditor();
             }
             finally
             {
@@ -919,17 +926,124 @@ namespace InvisibleGorillaXRay.Android.Views
         private TorSettings BuildTorSettingsFromUi(UserSettings current)
         {
             TorSettings existing = current.GetTorSettings();
+            EnsureBridgeSets(existing);
+            FlushEditorInto(string.IsNullOrWhiteSpace(loadedSetId) ? bridgeSets.ActiveSetId : loadedSetId);
             return new TorSettings
             {
                 Enabled = TorEnabledToggle.IsChecked == true,
                 Mode = GetSelectedKey(TorModeOptions, TorModeSelector.SelectedIndex, existing.GetMode()),
-                BridgeType = GetSelectedKey(BridgeTypeOptions, BridgeTypeSelector.SelectedIndex, existing.GetBridgeType()),
+                BridgeType = bridgeSets.GetBridgeType(),
                 ExitCountry = GetSelectedKey(ExitCountryOptions, ExitCountrySelector.SelectedIndex, existing.GetExitCountry()),
                 SocksPort = int.TryParse(TorSocksPortInput.Text, out int sp) && sp > 0 ? sp : existing.GetSocksPort(),
                 ControlPort = existing.GetControlPort(),
-                BridgeLines = SplitBridgeLines(BridgesInput.Text),
-                LastLatencyMs = existing.LastLatencyMs
+                BridgeLines = bridgeSets.GetBridgeLines(),
+                LastLatencyMs = existing.LastLatencyMs,
+                ActiveSetId = bridgeSets.ActiveSetId,
+                Sets = bridgeSets.GetSets().Select(set => set.Clone()).ToList()
             };
+        }
+
+        private void EnsureBridgeSets(TorSettings existing)
+        {
+            if (bridgeSets != null)
+                return;
+
+            bridgeSets = existing.Clone();
+            bridgeSets.EnsureSets();
+            loadedSetId = bridgeSets.ActiveSetId;
+        }
+
+        private void FlushEditorInto(string setId)
+        {
+            if (bridgeSets == null || string.IsNullOrWhiteSpace(setId) || BridgesInput == null)
+                return;
+
+            bridgeSets.ApplyToSet(
+                setId,
+                GetSelectedKey(BridgeTypeOptions, BridgeTypeSelector.SelectedIndex, bridgeSets.GetBridgeType()),
+                SplitBridgeLines(BridgesInput.Text));
+        }
+
+        private void FillActiveSetEditor()
+        {
+            List<TorBridgeSet> sets = bridgeSets.GetSets();
+            BridgeSetsSelector.ItemsSource = sets.Select(DescribeSet).ToList();
+            int index = sets.FindIndex(set => string.Equals(set.Id, bridgeSets.ActiveSetId, StringComparison.Ordinal));
+            BridgeSetsSelector.SelectedIndex = index < 0 ? 0 : index;
+            loadedSetId = bridgeSets.ActiveSetId;
+            TorBridgeSet active = bridgeSets.GetActiveSet();
+            int typeIndex = BridgeTypeOptions.Keys.ToList().IndexOf(active.BridgeType);
+            if (typeIndex >= 0)
+                BridgeTypeSelector.SelectedIndex = typeIndex;
+            BridgesInput.Text = string.Join(Environment.NewLine, active.GetBridgeLines());
+        }
+
+        private void BindActiveSetToEditor()
+        {
+            isApplyingTorUi = true;
+            suppressBridgeTypeLoad = true;
+            try
+            {
+                FillActiveSetEditor();
+            }
+            finally
+            {
+                suppressBridgeTypeLoad = false;
+                isApplyingTorUi = false;
+            }
+        }
+
+        private string DescribeSet(TorBridgeSet set)
+        {
+            string typeName = BridgeTypeOptions.TryGetValue(set.BridgeType, out string name)
+                ? name
+                : set.BridgeType.ToString();
+            int count = set.GetBridgeLines().Count;
+            int ordinal = bridgeSets.SetOrdinal(set);
+            if (ordinal > 0)
+                return LocalizeFormat("Lang.Tor.Set.Item.Numbered", typeName, count, ordinal);
+            return LocalizeFormat("Lang.Tor.Set.Item", typeName, count);
+        }
+
+        private void OnBridgeSetSelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (isApplyingTorUi || bridgeSets == null)
+                return;
+
+            List<TorBridgeSet> sets = bridgeSets.GetSets();
+            int index = BridgeSetsSelector.SelectedIndex;
+            if (index < 0 || index >= sets.Count)
+                return;
+
+            string id = sets[index].Id;
+            if (string.Equals(id, loadedSetId, StringComparison.Ordinal))
+                return;
+
+            FlushEditorInto(loadedSetId);
+            bridgeSets.SelectSet(id);
+            BindActiveSetToEditor();
+            PersistTorEditor();
+        }
+
+        private void OnNewBridgeSetClick(object? sender, RoutedEventArgs e)
+        {
+            EnsureBridgeSets(settingsHandler.UserSettings.GetTorSettings());
+            FlushEditorInto(loadedSetId);
+            bridgeSets.AddSet(
+                GetSelectedKey(BridgeTypeOptions, BridgeTypeSelector.SelectedIndex, BridgeType.OBFS4),
+                new List<string>());
+            BindActiveSetToEditor();
+            if (TorStatusText != null)
+                TorStatusText.Text = Localize("Lang.Tor.Status.SetAdded");
+            PersistTorEditor();
+        }
+
+        private void OnDeleteBridgeSetClick(object? sender, RoutedEventArgs e)
+        {
+            EnsureBridgeSets(settingsHandler.UserSettings.GetTorSettings());
+            bridgeSets.RemoveActiveSet();
+            BindActiveSetToEditor();
+            PersistTorEditor();
         }
 
         private static TKey GetSelectedKey<TKey>(Dictionary<TKey, string> options, int index, TKey fallback) where TKey : notnull
@@ -1136,17 +1250,27 @@ namespace InvisibleGorillaXRay.Android.Views
         }
 
         private void OnSnowflakeClick(object? sender, RoutedEventArgs e)
-            => ApplyBuiltinLines(BridgeType.SNOWFLAKE, DefaultBridges.ForType(BridgeType.SNOWFLAKE));
+            => OpenBuiltinSet("snowflake", BridgeType.SNOWFLAKE, DefaultBridges.ForType(BridgeType.SNOWFLAKE));
 
         private void OnSnowflakeAmpClick(object? sender, RoutedEventArgs e)
-            => ApplyBuiltinLines(BridgeType.SNOWFLAKE, new List<string> { DefaultBridges.SnowflakeAmp });
+            => OpenBuiltinSet("snowflake-amp", BridgeType.SNOWFLAKE, new List<string> { DefaultBridges.SnowflakeAmp });
 
         private void OnMeekAzureClick(object? sender, RoutedEventArgs e)
-            => ApplyBuiltinLines(BridgeType.MEEK_AZURE, new List<string> { DefaultBridges.MeekAzure });
+            => OpenBuiltinSet("meek", BridgeType.MEEK_AZURE, new List<string> { DefaultBridges.MeekAzure });
 
         private void ApplyBuiltinLines(BridgeType type, IList<string> lines)
         {
             ApplyBridgeSelection(type, lines, LocalizeFormat("Lang.Tor.Status.MethodSelected", type));
+        }
+
+        private void OpenBuiltinSet(string origin, BridgeType type, IList<string> lines)
+        {
+            EnsureBridgeSets(settingsHandler.UserSettings.GetTorSettings());
+            FlushEditorInto(loadedSetId);
+            bridgeSets.OpenOrCreateOrigin(origin, type, lines);
+            BindActiveSetToEditor();
+            TorEnabledToggle.IsChecked = true;
+            SwitchTorLive(LocalizeFormat("Lang.Tor.Status.MethodSelected", type));
         }
 
         /// <summary>

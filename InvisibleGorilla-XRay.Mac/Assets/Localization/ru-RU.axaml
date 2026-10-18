@@ -104,6 +104,12 @@
     <x:String x:Key="Lang.Tor.ExitCountry">Страна выхода</x:String>
     <x:String x:Key="Lang.Tor.SocksPort">SOCKS-порт Tor</x:String>
     <x:String x:Key="Lang.Tor.Bridges">Строки мостов</x:String>
+    <x:String x:Key="Lang.Tor.Sets">Сохранённые наборы</x:String>
+    <x:String x:Key="Lang.Tor.Set.New">Новый набор</x:String>
+    <x:String x:Key="Lang.Tor.Set.Delete">Удалить</x:String>
+    <x:String x:Key="Lang.Tor.Set.Item">{0} · {1}</x:String>
+    <x:String x:Key="Lang.Tor.Set.Item.Numbered">{0} · {1} · {2}</x:String>
+    <x:String x:Key="Lang.Tor.Status.SetAdded">Новый набор добавлен. Прежние адреса остаются в списке.</x:String>
     <x:String x:Key="Lang.Tor.Bridges.Hint">По одному мосту в строке (obfs4 / webtunnel / meek). Пусто — встроенные мосты.</x:String>
     <x:String x:Key="Lang.Tor.UseDefault">Встроенные</x:String>
     <x:String x:Key="Lang.Tor.FetchMoat">Запросить мосты</x:String>

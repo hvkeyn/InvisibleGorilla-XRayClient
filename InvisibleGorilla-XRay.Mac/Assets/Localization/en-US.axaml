@@ -104,6 +104,12 @@
     <x:String x:Key="Lang.Tor.ExitCountry">Exit country</x:String>
     <x:String x:Key="Lang.Tor.SocksPort">Tor SOCKS port</x:String>
     <x:String x:Key="Lang.Tor.Bridges">Bridge lines</x:String>
+    <x:String x:Key="Lang.Tor.Sets">Saved sets</x:String>
+    <x:String x:Key="Lang.Tor.Set.New">New set</x:String>
+    <x:String x:Key="Lang.Tor.Set.Delete">Delete</x:String>
+    <x:String x:Key="Lang.Tor.Set.Item">{0} · {1}</x:String>
+    <x:String x:Key="Lang.Tor.Set.Item.Numbered">{0} · {1} · {2}</x:String>
+    <x:String x:Key="Lang.Tor.Status.SetAdded">New set added. The previous addresses stay in the list.</x:String>
     <x:String x:Key="Lang.Tor.Bridges.Hint">One bridge per line (obfs4 / webtunnel / meek). Leave empty to use built-in bridges.</x:String>
     <x:String x:Key="Lang.Tor.UseDefault">Use built-in</x:String>
     <x:String x:Key="Lang.Tor.FetchMoat">Request bridges</x:String>

@@ -416,6 +416,25 @@
                         </Grid>
 
                         <TextBlock Foreground="White" Margin="0,4,0,0"
+                            Text="{DynamicResource Lang.Tor.Sets}"
+                            FontWeight="Normal" FontSize="14"/>
+                        <ComboBox x:Name="comboBoxBridgeSets" Height="26"
+                            FontWeight="Normal" FontSize="13"
+                            SelectionChanged="OnBridgeSetChanged"/>
+                        <WrapPanel Orientation="Horizontal">
+                            <Button x:Name="buttonNewBridgeSet" Height="28" Margin="0,0,6,6"
+                                Content="{DynamicResource Lang.Tor.Set.New}"
+                                Theme="{StaticResource Button.Rectangle.Gray}"
+                                FontWeight="Normal" FontSize="12" Foreground="White"
+                                Click="OnNewBridgeSetClick"/>
+                            <Button x:Name="buttonDeleteBridgeSet" Height="28" Margin="0,0,6,6"
+                                Content="{DynamicResource Lang.Tor.Set.Delete}"
+                                Theme="{StaticResource Button.Rectangle.Gray}"
+                                FontWeight="Normal" FontSize="12" Foreground="White"
+                                Click="OnDeleteBridgeSetClick"/>
+                        </WrapPanel>
+
+                        <TextBlock Foreground="White" Margin="0,4,0,0"
                             Text="{DynamicResource Lang.Tor.Bridges}"
                             FontWeight="Normal" FontSize="14"/>
                         <TextBox x:Name="textBoxBridges" Height="90"

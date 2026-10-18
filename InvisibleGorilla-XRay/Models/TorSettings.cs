@@ -58,6 +58,13 @@ namespace InvisibleGorillaXRay.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
         public string ExitCountry;
 
+        // Several saved address lists. The active one is what a start and a check use.
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public List<TorBridgeSet> Sets;
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public string ActiveSetId;
+
         public TorSettings()
         {
             Enabled = false;
@@ -68,6 +75,8 @@ namespace InvisibleGorillaXRay.Models
             BridgeLines = new List<string>();
             LastLatencyMs = -1;
             ExitCountry = "";
+            Sets = new List<TorBridgeSet>();
+            ActiveSetId = "";
         }
 
         public bool GetEnabled() => Enabled;
@@ -116,6 +125,7 @@ namespace InvisibleGorillaXRay.Models
 
         public TorSettings Clone()
         {
+            EnsureSets();
             return new TorSettings
             {
                 Enabled = Enabled,
@@ -125,8 +135,227 @@ namespace InvisibleGorillaXRay.Models
                 BridgeType = BridgeType,
                 BridgeLines = GetBridgeLines(),
                 LastLatencyMs = LastLatencyMs,
-                ExitCountry = GetExitCountry()
+                ExitCountry = GetExitCountry(),
+                ActiveSetId = ActiveSetId ?? "",
+                Sets = Sets.Select(set => set.Clone()).ToList()
             };
+        }
+
+        public void EnsureSets()
+        {
+            if (Sets == null)
+                Sets = new List<TorBridgeSet>();
+
+            Sets.RemoveAll(set => set == null || string.IsNullOrWhiteSpace(set.Id));
+            if (Sets.Count == 0)
+            {
+                TorBridgeSet migrated = new TorBridgeSet
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    BridgeType = BridgeType,
+                    BridgeLines = GetBridgeLines()
+                };
+                Sets.Add(migrated);
+                ActiveSetId = migrated.Id;
+            }
+
+            if (FindSet(ActiveSetId) == null)
+                ActiveSetId = Sets[0].Id;
+        }
+
+        public List<TorBridgeSet> GetSets()
+        {
+            EnsureSets();
+            return Sets;
+        }
+
+        public TorBridgeSet FindSet(string id)
+        {
+            if (Sets == null || string.IsNullOrWhiteSpace(id))
+                return null;
+
+            return Sets.LastOrDefault(set => set != null && string.Equals(set.Id, id, StringComparison.Ordinal));
+        }
+
+        public TorBridgeSet GetActiveSet()
+        {
+            EnsureSets();
+            return FindSet(ActiveSetId);
+        }
+
+        public void ApplyToSet(string setId, BridgeType type, IList<string> lines)
+        {
+            EnsureSets();
+            TorBridgeSet set = FindSet(setId) ?? GetActiveSet();
+            set.BridgeType = type;
+            set.BridgeLines = TorBridgeSet.CopyLines(lines);
+            if (string.Equals(set.Id, ActiveSetId, StringComparison.Ordinal))
+                PublishActive();
+        }
+
+        public void SelectSet(string setId)
+        {
+            EnsureSets();
+            TorBridgeSet set = FindSet(setId);
+            if (set == null)
+                return;
+
+            ActiveSetId = set.Id;
+            PublishActive();
+        }
+
+        public TorBridgeSet AddSet(BridgeType type, IList<string> lines)
+        {
+            EnsureSets();
+            TorBridgeSet set = new TorBridgeSet
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                BridgeType = type,
+                BridgeLines = TorBridgeSet.CopyLines(lines)
+            };
+            Sets.Add(set);
+            ActiveSetId = set.Id;
+            PublishActive();
+            return set;
+        }
+
+        /// <summary>
+        /// Opens the saved list for this transport. A missing list is created from the built-in lines.
+        /// An existing list is left as the user saved it.
+        /// </summary>
+        public TorBridgeSet OpenOrCreateOrigin(string origin, BridgeType type, IList<string> builtinLines)
+        {
+            EnsureSets();
+            if (!string.IsNullOrWhiteSpace(origin))
+            {
+                TorBridgeSet existing = Sets.FirstOrDefault(set =>
+                    string.Equals(set.Origin, origin, StringComparison.OrdinalIgnoreCase));
+                if (existing != null)
+                {
+                    SelectSet(existing.Id);
+                    return existing;
+                }
+            }
+
+            TorBridgeSet created = AddSet(type, builtinLines);
+            created.Origin = origin ?? "";
+            return created;
+        }
+
+        public void RemoveActiveSet()
+        {
+            EnsureSets();
+            TorBridgeSet active = GetActiveSet();
+            if (Sets.Count <= 1)
+            {
+                active.BridgeLines = new List<string>();
+                PublishActive();
+                return;
+            }
+
+            int index = Sets.IndexOf(active);
+            Sets.Remove(active);
+            TorBridgeSet next = Sets[Math.Min(Math.Max(index, 0), Sets.Count - 1)];
+            ActiveSetId = next.Id;
+            PublishActive();
+        }
+
+        public int SetOrdinal(TorBridgeSet set)
+        {
+            EnsureSets();
+            if (set == null)
+                return 0;
+
+            int same = 0;
+            int ordinal = 0;
+            foreach (TorBridgeSet other in Sets)
+            {
+                if (other.BridgeType != set.BridgeType)
+                    continue;
+
+                same++;
+                if (string.Equals(other.Id, set.Id, StringComparison.Ordinal))
+                    ordinal = same;
+            }
+
+            return same > 1 ? ordinal : 0;
+        }
+
+        private void PublishActive()
+        {
+            TorBridgeSet active = FindSet(ActiveSetId) ?? (Sets.Count > 0 ? Sets[0] : null);
+            if (active == null)
+                return;
+
+            ActiveSetId = active.Id;
+            BridgeType = active.BridgeType;
+            BridgeLines = active.GetBridgeLines();
+        }
+    }
+
+    /// <summary>
+    /// One saved list of bridge addresses. Several lists can share a transport.
+    /// </summary>
+    public class TorBridgeSet
+    {
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public string Id;
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public BridgeType BridgeType;
+
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public List<string> BridgeLines;
+
+        // Built-in shortcut that owns this list, such as "snowflake" or "snowflake-amp".
+        // Empty for a list the user saved themselves.
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public string Origin;
+
+        public TorBridgeSet()
+        {
+            Id = "";
+            BridgeType = BridgeType.OBFS4;
+            BridgeLines = new List<string>();
+            Origin = "";
+        }
+
+        public List<string> GetBridgeLines()
+        {
+            return CopyLines(BridgeLines);
+        }
+
+        public TorBridgeSet Clone()
+        {
+            return new TorBridgeSet
+            {
+                Id = Id ?? "",
+                BridgeType = BridgeType,
+                BridgeLines = GetBridgeLines(),
+                Origin = Origin ?? ""
+            };
+        }
+
+        public static List<string> CopyLines(IList<string> lines)
+        {
+            var copy = new List<string>();
+            if (lines == null)
+                return copy;
+
+            foreach (string raw in lines)
+            {
+                if (string.IsNullOrWhiteSpace(raw))
+                    continue;
+
+                foreach (string part in raw.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    string line = part.Trim();
+                    if (line.Length > 0)
+                        copy.Add(line);
+                }
+            }
+
+            return copy;
         }
     }
 }
