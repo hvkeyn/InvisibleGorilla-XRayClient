@@ -139,6 +139,7 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
                     if (enablingCommandStatus.Code == Code.ERROR
                         || !WaitUntilTunInterfaceReady(address))
                     {
+                        LogTunFailureDiagnosis();
                         Disable();
                         return new Status(
                             code: Code.ERROR,
@@ -279,9 +280,64 @@ namespace InvisibleGorillaXRay.Handlers.Tunnels
 
         private Status ExecuteCommand(string command) => executeCommand.Invoke(command);
 
-        private bool WaitUntilTunInterfaceReady(string address)
+        /// <summary>
+        /// Explains a failed TUN start. The most common cause is a non-elevated app: sing-box then
+        /// reports "A required privilege is not held by the client" and no adapter is created,
+        /// while the UI only says that the tunnel cannot be opened.
+        /// </summary>
+        private void LogTunFailureDiagnosis()
         {
-            int elapsed = 0;
+            try
+            {
+                bool elevated = false;
+                try
+                {
+                    using System.Security.Principal.WindowsIdentity identity =
+                        System.Security.Principal.WindowsIdentity.GetCurrent();
+                    elevated = new System.Security.Principal.WindowsPrincipal(identity)
+                        .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+                }
+                catch
+                {
+                }
+
+                DiagnosticLog.Write(
+                    "WindowsTunnel",
+                    $"TUN failure diagnosis: appElevated={elevated}; a TUN adapter requires administrator rights.");
+
+                string tunLog = System.IO.Path.Combine(
+                    System.IO.Path.GetFullPath(Directory.TUN),
+                    "tun-diagnostic.log");
+
+                if (!System.IO.File.Exists(tunLog))
+                    return;
+
+                string[] lines = System.IO.File.ReadAllLines(tunLog);
+                int start = Math.Max(0, lines.Length - 60);
+                int printed = 0;
+
+                for (int i = lines.Length - 1; i >= start && printed < 4; i--)
+                {
+                    string line = lines[i];
+                    if (line.IndexOf("FATAL", StringComparison.OrdinalIgnoreCase) < 0
+                        && line.IndexOf("privilege", StringComparison.OrdinalIgnoreCase) < 0
+                        && line.IndexOf("failed to start", StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        continue;
+                    }
+
+                    DiagnosticLog.Write("TUN.out", line.Trim());
+                    printed++;
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("WindowsTunnel.LogTunFailureDiagnosis", ex);
+            }
+        }
+
+        private bool WaitUntilTunInterfaceReady(string address)
+        {            int elapsed = 0;
             const int sliceMs = 200;
             while (elapsed < InterfaceReadyTimeoutMs)
             {
