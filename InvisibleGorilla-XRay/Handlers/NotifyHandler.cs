@@ -71,6 +71,7 @@ namespace InvisibleGorillaXRay.Handlers
                 notifyIcon.Icon = icon ?? SystemIcons.Application;
                 notifyIcon.Text = "Invisible Gorilla XRay";
                 notifyIcon.Visible = true;
+                hintIcon = notifyIcon;
 
                 HandleNotifyIconClick();
                 AddMenuStrip();
@@ -91,6 +92,31 @@ namespace InvisibleGorillaXRay.Handlers
         /// True when the tray icon is actually shown. The window must not hide itself otherwise.
         /// </summary>
         public static bool IsIconVisible { get; private set; }
+
+        private static NotifyIcon hintIcon;
+        private static bool minimizedHintShown;
+
+        /// <summary>
+        /// Windows 11 puts a fresh tray icon into the hidden overflow area, so a minimized window
+        /// looks lost. Show a balloon once per run so the user knows where the app went.
+        /// </summary>
+        public static void ShowMinimizedHint()
+        {
+            try
+            {
+                if (minimizedHintShown || hintIcon == null)
+                    return;
+
+                minimizedHintShown = true;
+                hintIcon.BalloonTipTitle = "Invisible Gorilla XRay";
+                hintIcon.BalloonTipText = "Свёрнуто. Значок приложения также в трее (возможно, в скрытой области «^»).";
+                hintIcon.BalloonTipIcon = ToolTipIcon.Info;
+                hintIcon.ShowBalloonTip(4000);
+            }
+            catch
+            {
+            }
+        }
 
         private void HandleNotifyIconClick()
         {

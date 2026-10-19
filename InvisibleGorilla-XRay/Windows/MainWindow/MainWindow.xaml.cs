@@ -121,6 +121,11 @@ namespace InvisibleGorillaXRay
 
             InitializeConnectionInfoTimer();
             InitializeNetworkMonitoring();
+
+            // Windows logoff/shutdown must be able to close the window even though a user close
+            // is now always minimized.
+            if (Application.Current != null)
+                Application.Current.SessionEnding += (_, __) => shutdownRequested = true;
             LoadHomeLog();
 
             void InitializeNetworkMonitoring()
@@ -668,27 +673,19 @@ namespace InvisibleGorillaXRay
 
         protected override void OnClosing(CancelEventArgs e)
         {
-            if (!shutdownRequested && runWorker.IsBusy)
-            {
-                e.Cancel = true;
-                RequestGracefulShutdown();
-                return;
-            }
-
             if (!shutdownRequested)
             {
-                if (Handlers.NotifyHandler.IsIconVisible)
-                {
-                    e.Cancel = true;
-                    Hide();
-                    return;
-                }
-
-                // No tray icon: hiding the window made the app unreachable (the single-instance
-                // guard then blocked a second launch). Stay in the taskbar instead.
-                DiagnosticLog.Write("MainWindow.OnClosing", "No tray icon; keeping the window minimized in the taskbar.");
+                // Closing the window must never make the app unreachable. It used to hide into
+                // the tray (invisible on Windows 11 until the user opens the overflow area), and
+                // with an active session it killed the tunnel. Minimize instead; the real exit is
+                // the tray menu item "Закрыть" and the OS session-end path.
                 e.Cancel = true;
+                if (WindowState == WindowState.Minimized)
+                    return;
+
                 WindowState = WindowState.Minimized;
+                DiagnosticLog.Write("MainWindow.OnClosing", "Window minimized to the taskbar; tray icon also available.");
+                Handlers.NotifyHandler.ShowMinimizedHint();
                 return;
             }
 
