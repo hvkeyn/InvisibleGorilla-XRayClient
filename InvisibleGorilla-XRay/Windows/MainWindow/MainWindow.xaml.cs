@@ -704,7 +704,6 @@ namespace InvisibleGorillaXRay
                 e.Cancel = true;
                 Hide();
                 DiagnosticLog.Write("MainWindow.OnClosing", "Window hidden to the tray; Shift+close or the tray menu exits.");
-                Handlers.NotifyHandler.ShowMinimizedHint();
                 return;
             }
 
