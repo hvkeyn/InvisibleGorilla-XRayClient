@@ -677,8 +677,18 @@ namespace InvisibleGorillaXRay
 
             if (!shutdownRequested)
             {
+                if (Handlers.NotifyHandler.IsIconVisible)
+                {
+                    e.Cancel = true;
+                    Hide();
+                    return;
+                }
+
+                // No tray icon: hiding the window made the app unreachable (the single-instance
+                // guard then blocked a second launch). Stay in the taskbar instead.
+                DiagnosticLog.Write("MainWindow.OnClosing", "No tray icon; keeping the window minimized in the taskbar.");
                 e.Cancel = true;
-                Hide();
+                WindowState = WindowState.Minimized;
                 return;
             }
 

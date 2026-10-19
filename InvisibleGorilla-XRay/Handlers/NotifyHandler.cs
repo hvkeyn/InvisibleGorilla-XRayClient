@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Drawing;
 using System.Windows.Forms;
@@ -56,25 +56,41 @@ namespace InvisibleGorillaXRay.Handlers
 
         public void InitializeNotifyIcon()
         {
-            if (IsNotifyIconAlreadyExists())
-                notifyIcon.Dispose();
-
-            notifyIcon = new NotifyIcon();
-            notifyIcon.Icon = GetNotifyIcon();
-            notifyIcon.Visible = true;
-
-            HandleNotifyIconClick();
-            AddMenuStrip();
-
-            bool IsNotifyIconAlreadyExists() => notifyIcon != null;
-
-            Icon GetNotifyIcon()
+            try
             {
-                return Icon.ExtractAssociatedIcon(
+                if (IsNotifyIconAlreadyExists())
+                    notifyIcon.Dispose();
+
+                notifyIcon = new NotifyIcon();
+                Icon icon = Icon.ExtractAssociatedIcon(
                     System.Environment.GetCommandLineArgs().First()
                 );
+
+                // A null icon makes the tray area show nothing, so closing the window looked
+                // like the app had vanished while it kept running in the background.
+                notifyIcon.Icon = icon ?? SystemIcons.Application;
+                notifyIcon.Text = "Invisible Gorilla XRay";
+                notifyIcon.Visible = true;
+
+                HandleNotifyIconClick();
+                AddMenuStrip();
+
+                IsIconVisible = true;
+                Core.DiagnosticLog.Write("Notify", $"Tray icon created (customIcon={icon != null})");
             }
+            catch (Exception ex)
+            {
+                IsIconVisible = false;
+                Core.DiagnosticLog.WriteException("Notify.Initialize", ex);
+            }
+
+            bool IsNotifyIconAlreadyExists() => notifyIcon != null;
         }
+
+        /// <summary>
+        /// True when the tray icon is actually shown. The window must not hide itself otherwise.
+        /// </summary>
+        public static bool IsIconVisible { get; private set; }
 
         private void HandleNotifyIconClick()
         {
