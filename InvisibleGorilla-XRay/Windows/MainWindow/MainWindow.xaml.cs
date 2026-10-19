@@ -675,16 +675,26 @@ namespace InvisibleGorillaXRay
         {
             if (!shutdownRequested)
             {
+                // Shift+close is the explicit exit; the tray menu has the same "Закрыть" item.
+                if ((System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Shift) == System.Windows.Input.ModifierKeys.Shift)
+                {
+                    shutdownRequested = true;
+                    e.Cancel = true;
+                    DiagnosticLog.Write("MainWindow.OnClosing", "Shift+close: shutting down.");
+                    RequestGracefulShutdown();
+                    return;
+                }
+
                 // Closing the window must never make the app unreachable. It used to hide into
                 // the tray (invisible on Windows 11 until the user opens the overflow area), and
                 // with an active session it killed the tunnel. Minimize instead; the real exit is
-                // the tray menu item "Закрыть" and the OS session-end path.
+                // Shift+close, the tray menu item "Закрыть" and the OS session-end path.
                 e.Cancel = true;
                 if (WindowState == WindowState.Minimized)
                     return;
 
                 WindowState = WindowState.Minimized;
-                DiagnosticLog.Write("MainWindow.OnClosing", "Window minimized to the taskbar; tray icon also available.");
+                DiagnosticLog.Write("MainWindow.OnClosing", "Window minimized to the taskbar; Shift+close or tray menu exits.");
                 Handlers.NotifyHandler.ShowMinimizedHint();
                 return;
             }
