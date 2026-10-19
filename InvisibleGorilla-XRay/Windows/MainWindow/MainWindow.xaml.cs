@@ -685,16 +685,25 @@ namespace InvisibleGorillaXRay
                     return;
                 }
 
-                // Closing the window must never make the app unreachable. It used to hide into
-                // the tray (invisible on Windows 11 until the user opens the overflow area), and
-                // with an active session it killed the tunnel. Minimize instead; the real exit is
-                // Shift+close, the tray menu item "Закрыть" and the OS session-end path.
-                e.Cancel = true;
-                if (WindowState == WindowState.Minimized)
-                    return;
+                // Closing hides the window into the tray, as it always did. The safety net below
+                // only kicks in when the tray icon could not be created: hiding the window then
+                // makes the app unreachable and the single-instance guard blocks a relaunch.
+                if (!Handlers.NotifyHandler.IsIconVisible)
+                {
+                    e.Cancel = true;
+                    if (WindowState == WindowState.Minimized)
+                        return;
 
-                WindowState = WindowState.Minimized;
-                DiagnosticLog.Write("MainWindow.OnClosing", "Window minimized to the taskbar; Shift+close or tray menu exits.");
+                    WindowState = WindowState.Minimized;
+                    DiagnosticLog.Write(
+                        "MainWindow.OnClosing",
+                        "No tray icon; kept in the taskbar instead of hiding. Shift+close exits.");
+                    return;
+                }
+
+                e.Cancel = true;
+                Hide();
+                DiagnosticLog.Write("MainWindow.OnClosing", "Window hidden to the tray; Shift+close or the tray menu exits.");
                 Handlers.NotifyHandler.ShowMinimizedHint();
                 return;
             }
