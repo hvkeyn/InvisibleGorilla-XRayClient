@@ -1220,9 +1220,32 @@ switch ($Step) {
     "DotNet"    { Build-DotNetApp }
 }
 
+# Windows запускает процесс с уровнем целостности из метки файла. Сборка, сделанная в
+# песочнице, может нести метку Low — тогда приложение теряет системный прокси, значок в
+# трее и TUN. После публикации выравниваем метки выходной папки.
+function Fix-PublishIntegrity {
+    $script = Join-Path $PSScriptRoot "scripts\fix-publish-integrity.ps1"
+    if (-not (Test-Path $script)) {
+        return
+    }
+
+    $target = $OutputDir
+    if (-not [System.IO.Path]::IsPathRooted($target)) {
+        $target = Join-Path $PSScriptRoot $target
+    }
+
+    if (-not (Test-Path $target)) {
+        return
+    }
+
+    Write-Info "Выравниваю метки целостности в $target"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $script -Path $target | Out-Null
+}
+
 $stopwatch.Stop()
 $elapsed = $stopwatch.Elapsed
 
+Fix-PublishIntegrity
 Write-Host ""
 Write-Host ("=" * 60) -ForegroundColor Green
 Write-Host ("  Готово за {0:mm\:ss\.ff}" -f $elapsed) -ForegroundColor Green

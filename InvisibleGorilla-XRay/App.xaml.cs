@@ -21,6 +21,7 @@ namespace InvisibleGorillaXRay
         protected override void OnStartup(StartupEventArgs e)
         {
             WindowsStaleTunCleanup.TryDisableStaleTunnel();
+            ReportIntegrityLevel();
             InitializeAppManager();
             InitializeNotifyIcon();
             InitializeWindowFactory();
@@ -28,6 +29,33 @@ namespace InvisibleGorillaXRay
             HandleShowWindowRequests();
             HandlePipes();
             HandleExitingEvents();
+
+            // A build copied from a sandboxed folder can carry a Low integrity label, and then
+            // the whole process runs as Low: no system proxy, no tray icon, no Wintun adapter.
+            // Say that up front instead of letting every feature fail with an unrelated error.
+            void ReportIntegrityLevel()
+            {
+                string level = Services.Diagnostics.ProcessIntegrity.Describe();
+                Core.DiagnosticLog.Write("Integrity", $"Process integrity level: {level}");
+
+                if (!Services.Diagnostics.ProcessIntegrity.IsLow)
+                    return;
+
+                Core.DiagnosticLog.Write(
+                    "Integrity",
+                    "Low integrity detected: system proxy, tray icon and TUN cannot work. " +
+                    "Fix with: icacls \"<app folder>\" /setintegritylevel (OI)(CI)High /T");
+
+                MessageBox.Show(
+                    "Приложение запущено с низким уровнем целостности (Low).\n\n" +
+                    "В этом режиме Windows не разрешает ему менять системный прокси,\n" +
+                    "показывать значок в трее и создавать TUN-адаптер.\n\n" +
+                    "Исправление (PowerShell от администратора):\n" +
+                    "icacls \"<папка приложения>\" /setintegritylevel (OI)(CI)High /T",
+                    "Invisible Gorilla XRay",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
 
             void InitializeAppManager()
             {
