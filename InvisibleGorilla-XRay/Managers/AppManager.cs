@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows;
 using System.Threading;
 
@@ -55,10 +55,24 @@ namespace InvisibleGorillaXRay.Managers
             if(!isCreatedNew)
             {
                 if (IsThereAnyArg())
+                {
                     PipeManager.SignalOpenedApp(args);
+                }
                 else
-                    ShowAppAlreadyRunningMessageBox();
-                
+                {
+                    // A dead-end message box made a second double-click look like a broken
+                    // shortcut. Ask the running instance to bring its window back instead.
+                    try
+                    {
+                        PipeManager.SignalOpenedApp(new[] { PipeManager.SHOW_WINDOW_COMMAND });
+                        global::InvisibleGorillaXRay.Core.DiagnosticLog.Write("AppManager", "Second instance: asked the running app to show its window");
+                    }
+                    catch (Exception ex)
+                    {
+                        global::InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("AppManager.SecondInstance", ex);
+                    }
+                }
+
                 Environment.Exit(0);
             }
 

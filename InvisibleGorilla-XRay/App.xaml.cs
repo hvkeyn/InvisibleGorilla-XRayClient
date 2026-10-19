@@ -25,6 +25,7 @@ namespace InvisibleGorillaXRay
             InitializeNotifyIcon();
             InitializeWindowFactory();
             InitializeMainWindow();
+            HandleShowWindowRequests();
             HandlePipes();
             HandleExitingEvents();
 
@@ -56,6 +57,35 @@ namespace InvisibleGorillaXRay
                     PipeManager.SignalThisApp(e.Args);
                 
                 PipeManager.ListenForPipes();
+            }
+
+            void HandleShowWindowRequests()
+            {
+                Action<string> previous = PipeManager.OnReceiveArg;
+
+                PipeManager.OnReceiveArg = message =>
+                {
+                    if (string.Equals(message?.Trim(), PipeManager.SHOW_WINDOW_COMMAND, StringComparison.Ordinal))
+                    {
+                        ShowMainWindow();
+                        return;
+                    }
+
+                    previous?.Invoke(message);
+                };
+
+                void ShowMainWindow()
+                {
+                    Window window = MainWindow;
+                    if (window == null)
+                        return;
+
+                    window.Show();
+                    window.WindowState = WindowState.Normal;
+                    window.Topmost = true;
+                    window.Topmost = false;
+                    window.Activate();
+                }
             }
 
             void HandleExitingEvents()

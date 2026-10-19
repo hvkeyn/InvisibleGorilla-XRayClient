@@ -10,6 +10,11 @@ namespace InvisibleGorillaXRay.Managers
     {
         private const string PIPE_NAME = "InvisibleGorillaXRayPipe";
 
+        /// <summary>
+        /// Message that asks the running instance to bring its main window back.
+        /// </summary>
+        public const string SHOW_WINDOW_COMMAND = "igx:show-window";
+
         public static Action<string> OnReceiveArg = delegate{};
 
         public static void ListenForPipes()
