@@ -151,11 +151,13 @@ namespace InvisibleGorillaXRay.Models
             Sets.RemoveAll(set => set == null || string.IsNullOrWhiteSpace(set.Id));
             if (Sets.Count == 0)
             {
+                List<string> migratedLines = GetBridgeLines();
+                BridgeType migratedType = TorBridgeSet.InferType(migratedLines);
                 TorBridgeSet migrated = new TorBridgeSet
                 {
                     Id = Guid.NewGuid().ToString("N"),
-                    BridgeType = BridgeType,
-                    BridgeLines = GetBridgeLines()
+                    BridgeType = migratedType != BridgeType.NONE ? migratedType : BridgeType,
+                    BridgeLines = migratedLines
                 };
                 Sets.Add(migrated);
                 ActiveSetId = migrated.Id;
@@ -163,6 +165,9 @@ namespace InvisibleGorillaXRay.Models
 
             if (FindSet(ActiveSetId) == null)
                 ActiveSetId = Sets[0].Id;
+
+            RepairSetTypes();
+            PublishActive();
         }
 
         public List<TorBridgeSet> GetSets()
@@ -189,8 +194,10 @@ namespace InvisibleGorillaXRay.Models
         {
             EnsureSets();
             TorBridgeSet set = FindSet(setId) ?? GetActiveSet();
-            set.BridgeType = type;
-            set.BridgeLines = TorBridgeSet.CopyLines(lines);
+            List<string> copy = TorBridgeSet.CopyLines(lines);
+            BridgeType inferred = TorBridgeSet.InferType(copy);
+            set.BridgeType = inferred != BridgeType.NONE ? inferred : type;
+            set.BridgeLines = copy;
             if (string.Equals(set.Id, ActiveSetId, StringComparison.Ordinal))
                 PublishActive();
         }
@@ -283,6 +290,21 @@ namespace InvisibleGorillaXRay.Models
             return same > 1 ? ordinal : 0;
         }
 
+        public void RepairSetTypes()
+        {
+            if (Sets == null)
+                return;
+
+            foreach (TorBridgeSet set in Sets)
+            {
+                if (set == null)
+                    continue;
+                BridgeType inferred = TorBridgeSet.InferType(set.GetBridgeLines());
+                if (inferred != BridgeType.NONE)
+                    set.BridgeType = inferred;
+            }
+        }
+
         private void PublishActive()
         {
             TorBridgeSet active = FindSet(ActiveSetId) ?? (Sets.Count > 0 ? Sets[0] : null);
@@ -336,6 +358,33 @@ namespace InvisibleGorillaXRay.Models
                 BridgeLines = GetBridgeLines(),
                 Origin = Origin ?? ""
             };
+        }
+
+        public static BridgeType InferType(IList<string> lines)
+        {
+            if (lines == null)
+                return BridgeType.NONE;
+
+            foreach (string raw in lines)
+            {
+                if (string.IsNullOrWhiteSpace(raw))
+                    continue;
+
+                string trimmed = raw.Trim();
+                if (trimmed.StartsWith("Bridge ", StringComparison.OrdinalIgnoreCase))
+                    trimmed = trimmed.Substring("Bridge ".Length).TrimStart();
+
+                if (trimmed.StartsWith("snowflake ", StringComparison.OrdinalIgnoreCase))
+                    return BridgeType.SNOWFLAKE;
+                if (trimmed.StartsWith("meek", StringComparison.OrdinalIgnoreCase))
+                    return BridgeType.MEEK_AZURE;
+                if (trimmed.StartsWith("webtunnel ", StringComparison.OrdinalIgnoreCase))
+                    return BridgeType.WEBTUNNEL;
+                if (trimmed.StartsWith("obfs4 ", StringComparison.OrdinalIgnoreCase))
+                    return BridgeType.OBFS4;
+            }
+
+            return BridgeType.NONE;
         }
 
         public static List<string> CopyLines(IList<string> lines)

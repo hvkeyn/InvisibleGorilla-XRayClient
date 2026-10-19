@@ -291,14 +291,15 @@ namespace InvisibleGorillaXRay.Mac.Views
         private void BindActiveSetToEditor()
         {
             suppressSetLoad = true;
+            bridgeSets.RepairSetTypes();
+            TorBridgeSet active = bridgeSets.GetActiveSet();
+            textBoxBridges.Text = string.Join(Environment.NewLine, active.GetBridgeLines());
+            SelectComboBoxItem(comboBoxBridgeType, active.BridgeType);
             comboBoxBridgeSets.ItemsSource = bridgeSets.GetSets()
                 .Select(set => new KeyValuePair<string, string>(set.Id, DescribeSet(set)))
                 .ToList();
             SelectComboBoxItem(comboBoxBridgeSets, bridgeSets.ActiveSetId);
             loadedSetId = bridgeSets.ActiveSetId;
-            TorBridgeSet active = bridgeSets.GetActiveSet();
-            SelectComboBoxItem(comboBoxBridgeType, active.BridgeType);
-            textBoxBridges.Text = string.Join(Environment.NewLine, active.GetBridgeLines());
             suppressSetLoad = false;
         }
 

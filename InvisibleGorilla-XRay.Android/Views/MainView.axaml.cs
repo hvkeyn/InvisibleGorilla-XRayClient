@@ -966,16 +966,33 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void FillActiveSetEditor()
         {
-            List<TorBridgeSet> sets = bridgeSets.GetSets();
-            BridgeSetsSelector.ItemsSource = sets.Select(DescribeSet).ToList();
-            int index = sets.FindIndex(set => string.Equals(set.Id, bridgeSets.ActiveSetId, StringComparison.Ordinal));
-            BridgeSetsSelector.SelectedIndex = index < 0 ? 0 : index;
-            loadedSetId = bridgeSets.ActiveSetId;
-            TorBridgeSet active = bridgeSets.GetActiveSet();
-            int typeIndex = BridgeTypeOptions.Keys.ToList().IndexOf(active.BridgeType);
-            if (typeIndex >= 0)
-                BridgeTypeSelector.SelectedIndex = typeIndex;
-            BridgesInput.Text = string.Join(Environment.NewLine, active.GetBridgeLines());
+            bool previousApply = isApplyingTorUi;
+            bool previousType = suppressBridgeTypeLoad;
+            isApplyingTorUi = true;
+            suppressBridgeTypeLoad = true;
+            try
+            {
+                bridgeSets.RepairSetTypes();
+                List<TorBridgeSet> sets = bridgeSets.GetSets();
+                TorBridgeSet active = bridgeSets.GetActiveSet();
+                List<string> lines = active.GetBridgeLines();
+                if (BridgesInput != null)
+                    BridgesInput.Text = string.Join(Environment.NewLine, lines);
+
+                int typeIndex = BridgeTypeOptions.Keys.ToList().IndexOf(active.BridgeType);
+                if (typeIndex >= 0)
+                    BridgeTypeSelector.SelectedIndex = typeIndex;
+
+                BridgeSetsSelector.ItemsSource = sets.Select(DescribeSet).ToList();
+                int index = sets.FindIndex(set => string.Equals(set.Id, bridgeSets.ActiveSetId, StringComparison.Ordinal));
+                BridgeSetsSelector.SelectedIndex = index < 0 ? 0 : index;
+                loadedSetId = bridgeSets.ActiveSetId;
+            }
+            finally
+            {
+                suppressBridgeTypeLoad = previousType;
+                isApplyingTorUi = previousApply;
+            }
         }
 
         private void BindActiveSetToEditor()
@@ -4254,10 +4271,9 @@ namespace InvisibleGorillaXRay.Android.Views
                 {
                     tor.Enabled = true;
                     tor.Mode = profile.Mode;
-                    tor.BridgeType = profile.BridgeType;
-                    tor.BridgeLines = profile.GetBridgeLines();
                     if (profile.GetSocksPort() > 0)
                         tor.SocksPort = profile.GetSocksPort();
+                    ActivateSetForLines(tor, profile.BridgeType, profile.GetBridgeLines());
                 }
                 else if (tor.Enabled)
                 {
@@ -4268,6 +4284,38 @@ namespace InvisibleGorillaXRay.Android.Views
             current.Tor = tor;
             settingsHandler.UpdateUserSettings(current);
             ApplyTorEditorPanel();
+        }
+
+        private static void ActivateSetForLines(TorSettings tor, BridgeType type, IList<string> lines)
+        {
+            tor.EnsureSets();
+            List<string> copy = TorBridgeSet.CopyLines(lines);
+            BridgeType inferred = TorBridgeSet.InferType(copy);
+            if (inferred != BridgeType.NONE)
+                type = inferred;
+
+            foreach (TorBridgeSet set in tor.GetSets())
+            {
+                List<string> existing = set.GetBridgeLines();
+                if (existing.Count != copy.Count)
+                    continue;
+                bool same = true;
+                for (int i = 0; i < copy.Count; i++)
+                {
+                    if (!string.Equals(existing[i], copy[i], StringComparison.Ordinal))
+                    {
+                        same = false;
+                        break;
+                    }
+                }
+                if (!same)
+                    continue;
+                tor.ApplyToSet(set.Id, type, copy);
+                tor.SelectSet(set.Id);
+                return;
+            }
+
+            tor.AddSet(type, copy);
         }
 
         /// <summary>
@@ -4302,6 +4350,9 @@ namespace InvisibleGorillaXRay.Android.Views
                 SocksPort = socksPort,
                 LastLatencyMs = -1
             });
+            TorSettings tor = current.GetTorSettings();
+            ActivateSetForLines(tor, bridgeType, cleaned);
+            current.Tor = tor;
             settingsHandler.UpdateUserSettings(current);
 
             return path;

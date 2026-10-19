@@ -298,14 +298,15 @@ namespace InvisibleGorillaXRay
         {
             suppressSetLoad = true;
             suppressBridgeTypeLoad = true;
+            bridgeSets.RepairSetTypes();
+            TorBridgeSet active = bridgeSets.GetActiveSet();
+            textBoxBridges.Text = string.Join(Environment.NewLine, active.GetBridgeLines());
+            comboBoxBridgeType.SelectedValue = active.BridgeType;
             comboBoxBridgeSets.ItemsSource = bridgeSets.GetSets()
                 .Select(set => new KeyValuePair<string, string>(set.Id, DescribeSet(set)))
                 .ToList();
             comboBoxBridgeSets.SelectedValue = bridgeSets.ActiveSetId;
             loadedSetId = bridgeSets.ActiveSetId;
-            TorBridgeSet active = bridgeSets.GetActiveSet();
-            comboBoxBridgeType.SelectedValue = active.BridgeType;
-            textBoxBridges.Text = string.Join(Environment.NewLine, active.GetBridgeLines());
             suppressBridgeTypeLoad = false;
             suppressSetLoad = false;
         }

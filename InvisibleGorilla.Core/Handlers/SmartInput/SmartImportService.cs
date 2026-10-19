@@ -129,27 +129,47 @@ namespace InvisibleGorillaXRay.Handlers.SmartInput
         public static TorSettings MergeBridges(TorSettings current, List<string> newLines, BridgeType bridgeType)
         {
             TorSettings tor = current?.Clone() ?? new TorSettings();
+            tor.EnsureSets();
 
-            var merged = new List<string>(tor.GetBridgeLines());
-            var seen = new HashSet<string>(merged, StringComparer.OrdinalIgnoreCase);
+            var incoming = TorBridgeSet.CopyLines(newLines);
+            BridgeType type = bridgeType != BridgeType.NONE
+                ? bridgeType
+                : TorBridgeSet.InferType(incoming);
+            if (type == BridgeType.NONE)
+                type = tor.GetBridgeType();
+            if (type == BridgeType.NONE)
+                type = BridgeType.OBFS4;
 
-            if (newLines != null)
+            TorBridgeSet target = null;
+            foreach (TorBridgeSet set in tor.GetSets())
             {
-                foreach (string raw in newLines)
+                BridgeType setType = TorBridgeSet.InferType(set.GetBridgeLines());
+                if (setType == BridgeType.NONE)
+                    setType = set.BridgeType;
+                if (setType != type)
+                    continue;
+                target = set;
+            }
+
+            if (target == null)
+            {
+                tor.AddSet(type, incoming);
+            }
+            else
+            {
+                var merged = target.GetBridgeLines();
+                var seen = new HashSet<string>(merged, StringComparer.OrdinalIgnoreCase);
+                foreach (string line in incoming)
                 {
-                    string line = raw?.Trim();
-                    if (string.IsNullOrEmpty(line))
-                        continue;
                     if (seen.Add(line))
                         merged.Add(line);
                 }
+
+                tor.ApplyToSet(target.Id, type, merged);
+                tor.SelectSet(target.Id);
             }
 
-            tor.BridgeLines = merged;
-            if (bridgeType != BridgeType.NONE)
-                tor.BridgeType = bridgeType;
             tor.Enabled = true;
-
             return tor;
         }
     }
