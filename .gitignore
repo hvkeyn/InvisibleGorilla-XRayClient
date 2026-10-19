@@ -117,3 +117,4 @@ InvisibleGorilla-XRay-Windows-*.zip
 /release-v3.6.*/
 /tests/**/bin/
 /tests/**/obj/
+/publish-windows-bridges/

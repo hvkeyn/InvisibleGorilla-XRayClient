@@ -2,6 +2,7 @@ using System;
 using System.Text;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading;
 
 namespace InvisibleGorillaXRay.Handlers.Processes
 {
@@ -49,8 +50,20 @@ namespace InvisibleGorillaXRay.Handlers.Processes
 
             if (IsProcessRunning())
             {
-                DiagnosticLog.Write("TunnelProcess", "Start skipped because process is already running");
-                return;
+                // A helper left over from a previous session (or from another app folder) used
+                // to be reused blindly: its socket was dead or its TUN interface was stuck, and
+                // the next connect failed with "cannot open tunnel". Only reuse a healthy one.
+                if (IsProcessPortActive() && IsSocketConnected())
+                {
+                    DiagnosticLog.Write("TunnelProcess", "Start skipped: a healthy TUN service is already running");
+                    return;
+                }
+
+                DiagnosticLog.Write(
+                    "TunnelProcess",
+                    $"TUN service is stale (portActive={IsProcessPortActive()}, socketConnected={IsSocketConnected()}); restarting it");
+                Stop(keepServiceRunning: false);
+                Thread.Sleep(700);
             }
             
             foreach (string processName in TunProcessNames)
@@ -157,6 +170,37 @@ namespace InvisibleGorillaXRay.Handlers.Processes
         public bool IsProcessRunning() => processor.IsProcessRunning(tunProcessName);
 
         public bool IsProcessPortActive() => NetworkUtility.IsPortActive(getPort.Invoke());
+
+        /// <summary>
+        /// Drops the control socket and, unless the caller wants to keep the helper alive,
+        /// stops the helper processes as well.
+        /// </summary>
+        public void Stop(bool keepServiceRunning = true)
+        {
+            try { sender?.Close(); } catch { }
+            try { sender?.Dispose(); } catch { }
+            sender = null;
+
+            if (keepServiceRunning)
+                return;
+
+            foreach (string processName in TunProcessNames)
+                processor.StopSystemProcesses(processName);
+        }
+
+        private bool IsSocketConnected()
+        {
+            try
+            {
+                return sender != null
+                    && sender.Connected
+                    && !(sender.Poll(200, SelectMode.SelectRead) && sender.Available == 0);
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
         private void LogRuntimeFiles(string tunDirectoryFullPath, string fullTunExePath)
         {
