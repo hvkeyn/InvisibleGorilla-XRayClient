@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Win32;
 
@@ -77,6 +78,52 @@ namespace InvisibleGorillaXRay
             {
                 MainWindow mainWindow = windowFactory.CreateMainWindow();
                 mainWindow.Show();
+                ScheduleAutoUpdate(mainWindow);
+            }
+
+            // Checks once per start, a few seconds after the window is up, and silently installs
+            // a newer release. Skipped while a session is running so an update never cuts traffic.
+            void ScheduleAutoUpdate(Window mainWindow)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
+
+                        SettingsHandler settingsHandler = appManager.HandlersManager.GetHandler<SettingsHandler>();
+                        if (!settingsHandler.UserSettings.GetAutoUpdateEnabled())
+                        {
+                            Core.DiagnosticLog.Write("AutoUpdate", "Skipped: disabled in settings");
+                            return;
+                        }
+
+                        UpdateHandler updateHandler = appManager.HandlersManager.GetHandler<UpdateHandler>();
+                        Models.UpdateInfo info = await updateHandler.CheckForUpdateAsync().ConfigureAwait(false);
+                        if (info == null || !info.IsNewerThanCurrent)
+                        {
+                            Core.DiagnosticLog.Write("AutoUpdate", "No newer release");
+                            return;
+                        }
+
+                        Core.DiagnosticLog.Write("AutoUpdate", $"Installing {info.Version} in the background");
+
+                        await Dispatcher.InvokeAsync(() =>
+                        {
+                            if ((mainWindow as MainWindow)?.IsServerRunning == true)
+                            {
+                                Core.DiagnosticLog.Write("AutoUpdate", "Deferred: a session is running");
+                                return;
+                            }
+
+                            Services.WindowsAutoUpdateService.StartAutoUpdateFlow(mainWindow, updateHandler, silent: true);
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Core.DiagnosticLog.WriteException("AutoUpdate", ex);
+                    }
+                });
             }
 
             void HandlePipes()
