@@ -31,13 +31,17 @@ const (
 	androidMaxUdpPayloadSize = 65535 - 20 - 8 - 7
 
 	// Yandex OpenFlux mux dies on a Chrome flood, but 10/2 made refresh and
-	// video start wait on idle googlevideo shells. 24 streams / 6 dials is
-	// enough for a page + one video without starving the mux.
-	androidMaxConcurrentSocks = 24
-	androidMaxConcurrentDials = 6
-	androidSocksIdleEvict     = 2 * time.Second
-	androidSocksHotWindow     = 2 * time.Second
-	androidSocksReadIdle      = 20 * time.Second
+	// video start wait on idle googlevideo shells. 24 streams / 6 dials was
+	// still tight for a page with a player: the dial gate serialised the six
+	// parallel connections YouTube opens per video and the 2 s idle eviction
+	// closed keep-alive shells that the player reused a moment later, so
+	// playback stalled and reconnected. 64 streams / 16 dials with a 10 s
+	// idle window keep the mux alive without starving it.
+	androidMaxConcurrentSocks = 64
+	androidMaxConcurrentDials = 16
+	androidSocksIdleEvict     = 10 * time.Second
+	androidSocksHotWindow     = 5 * time.Second
+	androidSocksReadIdle      = 45 * time.Second
 )
 
 var (
