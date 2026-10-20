@@ -230,6 +230,24 @@ namespace InvisibleGorillaXRay.Core
         [DllImport(LIB_NAME, EntryPoint = "SetAndroidTunDnsUpstream", CallingConvention = CallingConvention.Cdecl)]
         private static extern void SetAndroidTunDnsUpstreamNative(IntPtr address);
 
+        /// <summary>
+        /// Drops QUIC (UDP/443) on the Android tunnel so players fall back to TCP.
+        /// </summary>
+        public static void SetAndroidBlockQuic(bool enabled)
+        {
+            try
+            {
+                SetAndroidBlockQuicNative(enabled ? 1 : 0);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("XRayWrapper.SetAndroidBlockQuic", ex);
+            }
+        }
+
+        [DllImport(LIB_NAME, EntryPoint = "SetAndroidBlockQuic", CallingConvention = CallingConvention.Cdecl)]
+        private static extern void SetAndroidBlockQuicNative(int enabled);
+
         public static string? StartAndroidTunnel(
             int fileDescriptor,
             int proxyPort,

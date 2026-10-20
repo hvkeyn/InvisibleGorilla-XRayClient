@@ -1859,6 +1859,8 @@
                         <ComboBox x:Name="ProtocolComboBox" />
                         <CheckBox x:Name="UdpEnabledCheckBox"
                                   Content="Enable UDP" />
+                        <CheckBox x:Name="BlockQuicCheckBox"
+                                  Content="Block QUIC (force TCP)" />
                         <CheckBox x:Name="AnalyticsCheckBox"
                                   IsVisible="False"
                                   Content="Send anonymous analytics" />

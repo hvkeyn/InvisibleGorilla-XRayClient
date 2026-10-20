@@ -52,6 +52,8 @@ namespace InvisibleGorillaXRay.Android.Handlers.Tunnels
                 "AndroidTunnel",
                 $"TUN proxy={ip}:{proxyPort}, address={address}, dns={dns}, authEnabled={!string.IsNullOrEmpty(proxyUser)}, torNames={torOnly}");
 
+            ApplyQuicPolicy();
+
             Status startStatus = AndroidVpnServiceController.Start(new AndroidVpnStartOptions
             {
                 ProxyPort = proxyPort,
@@ -113,6 +115,24 @@ namespace InvisibleGorillaXRay.Android.Handlers.Tunnels
             DiagnosticLog.Write("AndroidTunnel", "Cancel requested");
             try { OpenFluxHttpBridge.Shared.Stop(); } catch { }
             AndroidVpnServiceController.Stop();
+        }
+
+        /// <summary>
+        /// Tells the native relay whether to drop QUIC (UDP/443) so players stay on TCP.
+        /// </summary>
+        private static void ApplyQuicPolicy()
+        {
+            try
+            {
+                SettingsHandler settingsHandler = new(() => new AndroidStartup());
+                bool blockQuic = settingsHandler.UserSettings.GetBlockQuic();
+                XRayCoreWrapper.SetAndroidBlockQuic(blockQuic);
+                DiagnosticLog.Write("AndroidTunnel", $"QUIC policy: blockQuic={blockQuic}");
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("AndroidTunnel.ApplyQuicPolicy", ex);
+            }
         }
 
         private static bool IsTorOnlyConfig()

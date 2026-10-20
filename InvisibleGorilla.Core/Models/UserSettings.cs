@@ -35,6 +35,10 @@ namespace InvisibleGorillaXRay.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(true)]
         public bool IsUdpEnable;
 
+        // Android: drop QUIC (UDP/443) so video falls back to TCP through the proxy.
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(false)]
+        public bool BlockQuic;
+
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(false)]
         public bool IsRunningAtStartup;
 
@@ -222,6 +226,8 @@ namespace InvisibleGorillaXRay.Models
         public bool GetSystemProxyUsed() => IsSystemProxyUse;
 
         public bool GetUdpEnabled() => IsUdpEnable;
+
+        public bool GetBlockQuic() => BlockQuic;
 
         public bool GetRunningAtStartupEnabled() => IsRunningAtStartup;
 

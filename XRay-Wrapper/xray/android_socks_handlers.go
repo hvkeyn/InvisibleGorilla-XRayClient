@@ -446,6 +446,12 @@ func (h *androidSocksUDPHandler) connectInternal(conn tcore.UDPConn, dest string
 }
 
 func (h *androidSocksUDPHandler) ReceiveTo(conn tcore.UDPConn, data []byte, addr *net.UDPAddr) error {
+	// QUIC is UDP/443. Players and browsers retry a dropped flow over TCP, which is
+	// far more forgiving through a TCP-based proxy than a lossy UDP relay.
+	if androidBlockQuic.Load() && addr != nil && addr.Port == 443 {
+		return nil
+	}
+
 	h.Lock()
 	packetConn, ok1 := h.udpConns[conn]
 	remoteAddr, ok2 := h.remoteAddrs[conn]

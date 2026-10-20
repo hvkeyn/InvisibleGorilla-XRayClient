@@ -321,6 +321,12 @@ func isBridgeStopping(bridge *androidTunBridge) bool {
 	}
 }
 
+var androidBlockQuic atomic.Bool
+
+//export SetAndroidBlockQuic
+func SetAndroidBlockQuic(enable C.int) {
+	androidBlockQuic.Store(enable != 0)
+}
 //export SetAndroidSocketProtect
 func SetAndroidSocketProtect(cb C.android_protect_fn) {
 	C.android_set_protect(cb)

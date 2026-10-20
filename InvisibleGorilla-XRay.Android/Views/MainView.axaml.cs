@@ -386,6 +386,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private TextBox ProxyPortInput => GetRequiredControl<TextBox>("ProxyPortTextBox");
         private TextBox DnsInput => GetRequiredControl<TextBox>("DnsTextBox");
         private CheckBox UdpEnabledToggle => GetRequiredControl<CheckBox>("UdpEnabledCheckBox");
+        private CheckBox BlockQuicToggle => GetRequiredControl<CheckBox>("BlockQuicCheckBox");
         private CheckBox AnalyticsToggle => GetRequiredControl<CheckBox>("AnalyticsCheckBox");
         private CheckBox AppRulesEnabledToggle => GetRequiredControl<CheckBox>("AppRulesEnabledCheckBox");
         private StackPanel AppRulesItemsHost => GetRequiredControl<StackPanel>("AppRulesItemsPanel");
@@ -827,10 +828,24 @@ namespace InvisibleGorillaXRay.Android.Views
             ProxyPortInput.Text = settings.GetProxyPort().ToString();
             DnsInput.Text = settings.GetDns();
             UdpEnabledToggle.IsChecked = settings.GetUdpEnabled();
+            BlockQuicToggle.IsChecked = settings.GetBlockQuic();
             AnalyticsToggle.IsChecked = settings.GetSendingAnalyticsEnabled();
             LoadTorSettingsIntoControls(settings);
             RefreshAppRulesSummary();
             isSettingsLoadedIntoControls = true;
+
+            // UDP and QUIC affect the next session, so persist them the moment they change.
+            // The Confirm button is easy to miss and RUN does not save pending edits.
+            BlockQuicToggle.IsCheckedChanged += (_, __) =>
+            {
+                if (isSettingsLoadedIntoControls)
+                    TrySaveSettings(showSuccessMessage: false);
+            };
+            UdpEnabledToggle.IsCheckedChanged += (_, __) =>
+            {
+                if (isSettingsLoadedIntoControls)
+                    TrySaveSettings(showSuccessMessage: false);
+            };
         }
 
         private bool isApplyingTorUi;
@@ -2213,6 +2228,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 LogLevel = current.GetLogLevel(),
                 IsSystemProxyUse = false,
                 IsUdpEnable = current.GetUdpEnabled(),
+                BlockQuic = current.GetBlockQuic(),
                 IsRunningAtStartup = current.GetRunningAtStartupEnabled(),
                 IsStartHidden = current.GetStartHiddenEnabled(),
                 IsAutoConnect = current.GetAutoConnectEnabled(),
@@ -2824,6 +2840,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 LogLevel = current.GetLogLevel(),
                 IsSystemProxyUse = false,
                 IsUdpEnable = UdpEnabledToggle.IsChecked ?? current.GetUdpEnabled(),
+                BlockQuic = BlockQuicToggle.IsChecked ?? current.GetBlockQuic(),
                 IsRunningAtStartup = current.GetRunningAtStartupEnabled(),
                 IsStartHidden = current.GetStartHiddenEnabled(),
                 IsAutoConnect = current.GetAutoConnectEnabled(),
