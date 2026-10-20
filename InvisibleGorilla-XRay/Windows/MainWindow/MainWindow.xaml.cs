@@ -1473,7 +1473,7 @@ namespace InvisibleGorillaXRay
 
         private void ClearConnectionInfoDetails()
         {
-            textInfoFlag.Text = "🌐";
+            textInfoFlag.Text = string.Empty;
             imageInfoFlag.Source = null;
             imageInfoFlag.Visibility = Visibility.Collapsed;
             textInfoLocation.Text = "—";
@@ -1485,6 +1485,10 @@ namespace InvisibleGorillaXRay
         {
             string place = info.PlaceLine;
             string country = info.CountryName;
+
+            DiagnosticLog.Write(
+                "ConnectionInfo",
+                $"details: code='{info.CountryCode}', country='{country}', place='{place}', flag='{info.FlagImageUrl}'");
 
             textInfoLocation.Text = !string.IsNullOrWhiteSpace(place)
                 ? place
@@ -1525,18 +1529,28 @@ namespace InvisibleGorillaXRay
                     flag.UriSource = new Uri(info.FlagImageUrl, UriKind.Absolute);
                     flag.CacheOption = BitmapCacheOption.OnLoad;
                     flag.EndInit();
-                    imageInfoFlag.Source = flag;
-                    imageInfoFlag.Visibility = Visibility.Visible;
-                    textInfoFlag.Text = string.Empty;
-                    return;
+
+                    // A captive portal or a filtered proxy can answer with a tiny placeholder
+                    // image; it used to leave an empty box on the card instead of the code.
+                    if (flag.PixelWidth >= 10 && flag.PixelHeight >= 6)
+                    {
+                        imageInfoFlag.Source = flag;
+                        imageInfoFlag.Visibility = Visibility.Visible;
+                        textInfoFlag.Text = string.Empty;
+                        return;
+                    }
                 }
                 catch
                 {
-                    // Fall back to emoji when the CDN image cannot be loaded.
+                    // The CDN is not always reachable through the tunnel; fall back below.
                 }
             }
 
-            textInfoFlag.Text = !string.IsNullOrWhiteSpace(info.FlagEmoji) ? info.FlagEmoji : "🌐";
+            // Windows ships no flag glyphs in Segoe UI Emoji, so "🇩🇪" renders as a tofu
+            // box. Show the ISO code instead - it always renders and stays readable.
+            textInfoFlag.Text = string.IsNullOrWhiteSpace(info.CountryCode)
+                ? string.Empty
+                : info.CountryCode.Trim().ToUpperInvariant();
         }
 
         private void ApplyVerdict(bool connected, string currentIp)

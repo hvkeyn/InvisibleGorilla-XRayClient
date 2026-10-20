@@ -4047,7 +4047,11 @@ namespace InvisibleGorillaXRay.Android.Views
                     : AvailabilityPendingBrush;
 
             ConnectionInfoIpText.Text = info.Ip;
-            string flag = !string.IsNullOrWhiteSpace(info.FlagEmoji) ? $"{info.FlagEmoji} " : string.Empty;
+            // The app font has no flag glyphs, so an emoji flag renders as a box.
+            // The ISO code is readable on every device.
+            string flag = string.IsNullOrWhiteSpace(info.CountryCode)
+                ? string.Empty
+                : $"{info.CountryCode.Trim().ToUpperInvariant()} · ";
             string place = !string.IsNullOrWhiteSpace(info.PlaceLine) ? info.PlaceLine : info.CountryName;
             string countrySuffix = !string.IsNullOrWhiteSpace(info.PlaceLine) && !string.IsNullOrWhiteSpace(info.CountryName)
                 ? $"\n{info.CountryName}"

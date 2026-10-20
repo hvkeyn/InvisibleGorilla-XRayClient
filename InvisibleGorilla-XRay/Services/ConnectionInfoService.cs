@@ -187,12 +187,12 @@ namespace InvisibleGorillaXRay.Services
                 if (string.IsNullOrWhiteSpace(ip))
                     return new ConnectionInfo { Ok = false, Error = "no ip", LatencyMs = latencyMs };
 
-                string countryCode = FirstNonEmpty(root, "country_iso", "country_code", "country");
+                string countryCode = FirstNonEmpty(root, "country_iso", "country_code", "countryCode", "cc", "country");
                 string countryName = FirstNonEmpty(root, "country_name", "country");
                 if (countryCode.Length > 2)
                 {
                     countryName = string.IsNullOrWhiteSpace(countryName) ? countryCode : countryName;
-                    countryCode = FirstNonEmpty(root, "country_iso");
+                    countryCode = FirstNonEmpty(root, "country_iso", "countryCode", "cc");
                 }
 
                 countryName = CountryDisplay.GetCountryName(countryCode, countryName);

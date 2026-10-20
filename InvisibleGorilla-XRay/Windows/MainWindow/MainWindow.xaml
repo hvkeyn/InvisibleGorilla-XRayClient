@@ -333,8 +333,9 @@
                                                 HorizontalAlignment="Center" VerticalAlignment="Center"
                                                 Visibility="Collapsed" x:Name="imageInfoFlag"/>
                                             <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                FontFamily="Segoe UI Emoji" FontSize="12" x:Name="textInfoFlag"
-                                                Text="🌐"/>
+                                                FontFamily="{StaticResource SegoeUI}" FontWeight="SemiBold"
+                                                FontSize="9" Foreground="#CFCFCF" x:Name="textInfoFlag"
+                                                Text=""/>
                                         </Grid>
                                     </Border>
                                     <StackPanel Grid.Column="2" Orientation="Vertical">
