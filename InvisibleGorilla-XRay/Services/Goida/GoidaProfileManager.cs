@@ -538,6 +538,35 @@ namespace InvisibleGorillaXRay.Services.Goida
                     OnFirstVlessOk = () => _ = EvaluateAutoSwitchAsync(getSettings().Clone())
                 };
 
+                // A background batch that started while the app was idle must not keep
+                // dialling dozens of nodes once the user's tunnel is up: stop it early so
+                // the probe traffic does not compete with the real connection.
+                using CancellationTokenSource? linked = manual
+                    ? null
+                    : CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                Task? sessionWatch = linked == null
+                    ? null
+                    : Task.Run(async () =>
+                    {
+                        try
+                        {
+                            while (!linked.IsCancellationRequested)
+                            {
+                                await Task.Delay(500).ConfigureAwait(false);
+                                if (isVpnSessionActive?.Invoke() == true)
+                                {
+                                    linked.Cancel();
+                                    return;
+                                }
+                            }
+                        }
+                        catch
+                        {
+                        }
+                    });
+
+                CancellationToken probeToken = linked?.Token ?? cancellationToken;
+
                 GoidaProbeResult result;
                 try
                 {
@@ -550,7 +579,7 @@ namespace InvisibleGorillaXRay.Services.Goida
                         result = await monitor.ProbeTcpThenVlessAsync(
                             probeTargets,
                             probeOptions,
-                            cancellationToken).ConfigureAwait(false);
+                            probeToken).ConfigureAwait(false);
                     }
                     finally
                     {
@@ -1117,6 +1146,12 @@ namespace InvisibleGorillaXRay.Services.Goida
 
         private bool ShouldRunBackground(GoidaProfileSettings settings)
         {
+            // The profile has to be switched on. Without this check the 26 node lists kept
+            // refreshing and every cached node kept being probed while the user was on a
+            // different profile, and those probe batches competed with the live tunnel.
+            if (!settings.Enabled)
+                return false;
+
             return settings.EnabledListIds?.Count > 0
                 || !string.IsNullOrWhiteSpace(settings.ActiveNodeId)
                 || settings.LastRefreshUtc != default
