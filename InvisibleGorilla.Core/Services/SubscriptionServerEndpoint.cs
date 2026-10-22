@@ -49,6 +49,49 @@ namespace InvisibleGorillaXRay.Services
             return null;
         }
 
+        /// <summary>
+        /// Providers over the device limit hand back a list of promotional "nodes" instead of servers
+        /// ("Превышен лимит устройств", "Перейдите в боте", ...). They share one gateway and only
+        /// display a page in the browser, so they must never be treated as working proxies.
+        /// </summary>
+        public static bool IsDeviceLimitRemark(string remark)
+        {
+            if (string.IsNullOrWhiteSpace(remark))
+                return false;
+
+            string value = remark.ToLowerInvariant();
+            return value.Contains("лимит")
+                || value.Contains("limit")
+                || value.Contains("устройств")
+                || value.Contains("device")
+                || value.Contains("перейдите в боте")
+                || value.Contains("работает только в тг")
+                || value.Contains("управление устройствами")
+                || value.Contains("это бесплатный ключ")
+                || value.Contains("безлимит")
+                || value.Contains("полный доступ")
+                || value.Contains("мои ключи");
+        }
+
+        public static bool IsDeviceLimitList(System.Collections.Generic.IEnumerable<string> remarks)
+        {
+            if (remarks == null)
+                return false;
+
+            int total = 0, hints = 0;
+            foreach (string remark in remarks)
+            {
+                if (string.IsNullOrWhiteSpace(remark))
+                    continue;
+
+                total++;
+                if (IsDeviceLimitRemark(remark))
+                    hints++;
+            }
+
+            return total > 0 && hints * 100 / total >= 60;
+        }
+
         public static bool IsPlaceholderLink(string link)
         {
             if (string.IsNullOrWhiteSpace(link))
@@ -199,8 +242,17 @@ namespace InvisibleGorillaXRay.Services
                 return false;
 
             string value = text.ToLowerInvariant();
-            return value.Contains("лимит устройств")
-                || value.Contains("device limit");
+            // Providers answer an over-limit request with a short refusal instead of the node
+            // list: "приложение не поддерживается", "свяжитесь с нами", "device limit", "hwid".
+            return value.Contains("лимит")
+                || value.Contains("limit")
+                || value.Contains("устройств")
+                || value.Contains("device")
+                || value.Contains("hwid")
+                || value.Contains("не поддерживается")
+                || value.Contains("свяжитесь с нами")
+                || value.Contains("@support")
+                || value.Contains("support");
         }
 
         private static string FormatSecurity(string security)

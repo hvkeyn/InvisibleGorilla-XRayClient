@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json;
 
 namespace InvisibleGorillaXRay.Handlers.Templates
@@ -63,15 +64,29 @@ namespace InvisibleGorillaXRay.Handlers.Templates
             // 0.0.0.0:1 plus a "contact support" note. Those entries are filtered out above, so an
             // empty list here means there is nothing to connect to - say so instead of storing an
             // empty group that silently falls back to the real IP.
+            // Over-limit subscriptions come back as promotional "nodes" that only open a
+            // "device limit" page. Treat the whole list as a limit, not as usable servers.
+            if (!Isv2RayListEmpty() && IsLimitList())
+            {
+                return new Status(
+                    code: Code.ERROR,
+                    subCode: SubCode.CANT_CONNECT,
+                    content: LocalizationService.GetTerm("Lang.ConnectionInfo.DeviceLimit")
+                );
+            }
+
             if (Isv2RayListEmpty())
             {
                 string notice = !string.IsNullOrWhiteSpace(template.Meta.Notice)
                     ? template.Meta.Notice
                     : template.Meta.Announce;
-                string baseMessage = LocalizationService.GetTerm(Localization.INVALID_SUBSCRIPTION);
+                bool deviceLimit = Services.SubscriptionServerEndpoint.IsDeviceLimitText(notice);
+                string baseMessage = deviceLimit
+                    ? LocalizationService.GetTerm("Lang.ConnectionInfo.DeviceLimit")
+                    : LocalizationService.GetTerm(Localization.INVALID_SUBSCRIPTION);
                 return new Status(
                     code: Code.ERROR,
-                    subCode: SubCode.INVALID_CONFIG,
+                    subCode: deviceLimit ? SubCode.CANT_CONNECT : SubCode.INVALID_CONFIG,
                     content: string.IsNullOrWhiteSpace(notice)
                         ? baseMessage
                         : $"{baseMessage} {notice.Trim()}"
@@ -107,6 +122,8 @@ namespace InvisibleGorillaXRay.Handlers.Templates
 
                 return null;
             }
+
+            bool IsLimitList() => Services.SubscriptionServerEndpoint.IsDeviceLimitList(v2RayList.Select(item => item.Length > 0 ? item[0] : null));
 
             bool Isv2RayListEmpty() => v2RayList.Count == 0;
         }
