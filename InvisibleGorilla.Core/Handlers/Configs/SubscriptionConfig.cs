@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
@@ -148,8 +148,19 @@ namespace InvisibleGorillaXRay.Handlers.Configs
                 if (string.IsNullOrWhiteSpace(safeRemark))
                     safeRemark = "server";
 
+                string payload = JsonUtility.SanitizeRuntimeManagedSections(data);
+                if (string.IsNullOrWhiteSpace(payload))
+                {
+                    // A node that converted to nothing must not become an empty file: the app used
+                    // to pick it, fail with "invalid configuration" and blame the user's setup.
+                    InvisibleGorillaXRay.Core.DiagnosticLog.Write(
+                        "SubscriptionConfig",
+                        $"Skipped empty config for '{safeRemark}'");
+                    return;
+                }
+
                 string destinationPath = System.IO.Path.Combine(stagingDirectory, safeRemark + ".json");
-                SaveToDirectory(destinationPath, JsonUtility.SanitizeRuntimeManagedSections(data));
+                SaveToDirectory(destinationPath, payload);
                 writtenNames.Add(safeRemark);
             }
 
@@ -248,6 +259,25 @@ namespace InvisibleGorillaXRay.Handlers.Configs
 
             foreach(FileInfo file in files)
             {
+                if (file.Length <= 2)
+                {
+                    // An empty node file can never start; a refresh interrupted during a write
+                    // used to leave one behind and the app kept offering it as the current node.
+                    InvisibleGorillaXRay.Core.DiagnosticLog.Write(
+                        "SubscriptionConfig",
+                        $"Removing empty node file '{file.Name}'");
+                    try
+                    {
+                        file.Delete();
+                    }
+                    catch (Exception ex)
+                    {
+                        InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("SubscriptionConfig.CleanupEmpty", ex);
+                    }
+
+                    continue;
+                }
+
                 AddConfigToList(CreateConfigModel(file.FullName));
             }
 

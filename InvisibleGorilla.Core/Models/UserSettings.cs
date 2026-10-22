@@ -39,6 +39,10 @@ namespace InvisibleGorillaXRay.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(false)]
         public bool BlockQuic;
 
+        // Pick the fastest reachable node of a subscription before connecting.
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(true)]
+        public bool IsAutoSelectBest;
+
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(false)]
         public bool IsRunningAtStartup;
 
@@ -232,6 +236,8 @@ namespace InvisibleGorillaXRay.Models
         public bool GetUdpEnabled() => IsUdpEnable;
 
         public bool GetBlockQuic() => BlockQuic;
+
+        public bool GetAutoSelectBest() => IsAutoSelectBest;
 
         public bool GetRunningAtStartupEnabled() => IsRunningAtStartup;
 

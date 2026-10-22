@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace InvisibleGorillaXRay.Handlers
 {
@@ -102,7 +103,32 @@ namespace InvisibleGorillaXRay.Handlers
         public List<Config> GetAllSubscriptionConfigs(string path) 
         {
             subscriptionConfig.LoadFiles(path);
-            return subscriptionConfig.GetAllConfigs();
+
+            List<Config> configs = subscriptionConfig.GetAllConfigs();
+
+            // A refresh interrupted mid-write could leave a zero-byte node file behind. Such a
+            // file can never start, so drop it instead of offering it as a server.
+            foreach (Config config in configs.ToList())
+            {
+                try
+                {
+                    System.IO.FileInfo info = new(config.Path);
+                    if (info.Exists && info.Length <= 2)
+                    {
+                        InvisibleGorillaXRay.Core.DiagnosticLog.Write(
+                            "ConfigHandler",
+                            $"Removing empty subscription config '{info.Name}'");
+                        configs.Remove(config);
+                        System.IO.File.Delete(config.Path);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("ConfigHandler.EmptyConfig", ex);
+                }
+            }
+
+            return configs;
         }
 
         public List<Subscription> GetAllGroups()

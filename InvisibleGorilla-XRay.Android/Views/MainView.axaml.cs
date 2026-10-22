@@ -387,6 +387,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private TextBox DnsInput => GetRequiredControl<TextBox>("DnsTextBox");
         private CheckBox UdpEnabledToggle => GetRequiredControl<CheckBox>("UdpEnabledCheckBox");
         private CheckBox BlockQuicToggle => GetRequiredControl<CheckBox>("BlockQuicCheckBox");
+        private CheckBox AutoBestToggle => GetRequiredControl<CheckBox>("AutoBestCheckBox");
         private CheckBox AnalyticsToggle => GetRequiredControl<CheckBox>("AnalyticsCheckBox");
         private CheckBox AppRulesEnabledToggle => GetRequiredControl<CheckBox>("AppRulesEnabledCheckBox");
         private StackPanel AppRulesItemsHost => GetRequiredControl<StackPanel>("AppRulesItemsPanel");
@@ -791,7 +792,64 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             EnsureSettingsControlsCreated();
             LoadSettingsIntoControls();
+            RepairCurrentConfigIfEmpty();
             UpdateRuntimeSummary();
+        }
+
+        /// <summary>
+        /// A subscription refresh can leave the selected node as an empty file (the app then
+        /// reports "invalid configuration" before the user even presses RUN). Fall back to any
+        /// usable node of the same group at startup.
+        /// </summary>
+        private bool isRepairingCurrentConfig;
+
+        private void RepairCurrentConfigIfEmpty()
+        {
+            if (isRepairingCurrentConfig)
+                return;
+
+            isRepairingCurrentConfig = true;
+            try
+            {
+                string current = settingsHandler.UserSettings.GetCurrentConfigPath();
+                if (string.IsNullOrWhiteSpace(current)
+                    || GoidaProfilePaths.IsMarker(current)
+                    || OpenFluxProfilePaths.IsMarker(current)
+                    || TorProfilePaths.IsMarker(current)
+                    || HasConfigPayload(current))
+                    return;
+
+                string directory = System.IO.Path.GetDirectoryName(current);
+                if (string.IsNullOrWhiteSpace(directory) || !System.IO.Directory.Exists(directory))
+                    return;
+
+                string replacementPath = System.IO.Directory
+                    .GetFiles(directory, "*.json")
+                    .Where(path => HasConfigPayload(path))
+                    .OrderBy(path => path.Length)
+                    .FirstOrDefault();
+
+                if (string.IsNullOrWhiteSpace(replacementPath))
+                {
+                    // Nothing usable next to the broken file: drop it so the app stops
+                    // offering an empty node.
+                    try { System.IO.File.Delete(current); } catch { }
+                    return;
+                }
+
+                settingsHandler.UpdateCurrentConfigPath(replacementPath);
+                DiagnosticLog.Write(
+                    "MainView",
+                    $"Repaired empty current config -> {System.IO.Path.GetFileNameWithoutExtension(replacementPath)}");
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.RepairCurrentConfigIfEmpty", ex);
+            }
+            finally
+            {
+                isRepairingCurrentConfig = false;
+            }
         }
 
         // One-time control wiring (ItemsSource) without touching the user-entered values,
@@ -829,6 +887,7 @@ namespace InvisibleGorillaXRay.Android.Views
             DnsInput.Text = settings.GetDns();
             UdpEnabledToggle.IsChecked = settings.GetUdpEnabled();
             BlockQuicToggle.IsChecked = settings.GetBlockQuic();
+            AutoBestToggle.IsChecked = settings.GetAutoSelectBest();
             AnalyticsToggle.IsChecked = settings.GetSendingAnalyticsEnabled();
             LoadTorSettingsIntoControls(settings);
             RefreshAppRulesSummary();
@@ -842,6 +901,11 @@ namespace InvisibleGorillaXRay.Android.Views
                     TrySaveSettings(showSuccessMessage: false);
             };
             UdpEnabledToggle.IsCheckedChanged += (_, __) =>
+            {
+                if (isSettingsLoadedIntoControls)
+                    TrySaveSettings(showSuccessMessage: false);
+            };
+            AutoBestToggle.IsCheckedChanged += (_, __) =>
             {
                 if (isSettingsLoadedIntoControls)
                     TrySaveSettings(showSuccessMessage: false);
@@ -2229,6 +2293,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 IsSystemProxyUse = false,
                 IsUdpEnable = current.GetUdpEnabled(),
                 BlockQuic = current.GetBlockQuic(),
+                IsAutoSelectBest = current.GetAutoSelectBest(),
                 IsRunningAtStartup = current.GetRunningAtStartupEnabled(),
                 IsStartHidden = current.GetStartHiddenEnabled(),
                 IsAutoConnect = current.GetAutoConnectEnabled(),
@@ -2841,6 +2906,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 IsSystemProxyUse = false,
                 IsUdpEnable = UdpEnabledToggle.IsChecked ?? current.GetUdpEnabled(),
                 BlockQuic = BlockQuicToggle.IsChecked ?? current.GetBlockQuic(),
+                IsAutoSelectBest = AutoBestToggle.IsChecked ?? current.GetAutoSelectBest(),
                 IsRunningAtStartup = current.GetRunningAtStartupEnabled(),
                 IsStartHidden = current.GetStartHiddenEnabled(),
                 IsAutoConnect = current.GetAutoConnectEnabled(),
@@ -2964,6 +3030,8 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void UpdateCurrentConfigSummary()
         {
+            RepairCurrentConfigIfEmpty();
+
             Config? currentConfig = configHandler.GetCurrentConfig();
             GoidaProfileSettings goidaSettings = settingsHandler.UserSettings.GetGoidaSettings();
             GoidaNode? activeGoidaNode = null;
@@ -4602,12 +4670,19 @@ namespace InvisibleGorillaXRay.Android.Views
                 || configs.Any(config => SubscriptionServerEndpoint.IsDeviceLimitText(config.Name));
             List<Config> usable = deviceLimited
                 ? new List<Config>()
-                : configs.Where(config => !SubscriptionServerEndpoint.IsProviderNotice(config.Name)).ToList();
+                : configs
+                    .Where(config => !SubscriptionServerEndpoint.IsProviderNotice(config.Name))
+                    .Where(config => HasConfigPayload(config.Path))
+                    .ToList();
             if (configs.Count > 0 && usable.Count == 0)
             {
                 blockedStatus = "Lang.Android.Status.DeviceLimitNotice";
                 return false;
             }
+
+            // Manual mode: keep the node the user picked, only switch when it is not usable.
+            if (!settingsHandler.UserSettings.GetAutoSelectBest())
+                return true;
 
             if (usable.Count < 2)
             {
@@ -4683,6 +4758,23 @@ namespace InvisibleGorillaXRay.Android.Views
         /// (for example an XHTTP node the shipped core cannot start). Move to the next fastest
         /// reachable node of the same group so RUN does not die on the first broken entry.
         /// </summary>
+        /// <summary>
+        /// An empty or unreadable config file used to be selected, fail with "invalid
+        /// configuration" and send the user to the provider. Treat such a file as unusable.
+        /// </summary>
+        private static bool HasConfigPayload(string path)
+        {
+            try
+            {
+                return !string.IsNullOrWhiteSpace(path)
+                    && System.IO.File.Exists(path)
+                    && new System.IO.FileInfo(path).Length > 2;
+            }
+            catch
+            {
+                return false;
+            }
+        }
         private bool TrySwitchToNextSubscriptionNode(Exception startFailure)
         {
             try
@@ -4705,6 +4797,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 List<Config> candidates = configs
                     .Where(config => !subscriptionFailoverTried.Contains(config.Path))
                     .Where(config => !SubscriptionServerEndpoint.IsProviderNotice(config.Name))
+                    .Where(config => HasConfigPayload(config.Path))
                     .ToList();
                 if (candidates.Count == 0)
                     return false;
@@ -4995,6 +5088,16 @@ namespace InvisibleGorillaXRay.Android.Views
                 const int maxStartAttempts = 3;
                 for (int startAttempt = 0; ; startAttempt++)
                 {
+                    // An empty file left by a subscription refresh must not be "loaded" first:
+                    // that produced "The selected configuration is invalid" before any failover.
+                    string currentNodePath = settingsHandler.UserSettings.GetCurrentConfigPath();
+                    if (!HasConfigPayload(currentNodePath)
+                        && startAttempt + 1 < maxStartAttempts
+                        && TrySwitchToNextSubscriptionNode(new InvalidOperationException("empty config")))
+                    {
+                        continue;
+                    }
+
                     Status configStatus = core.LoadConfig();
                     if (configStatus.Code == Code.ERROR)
                     {

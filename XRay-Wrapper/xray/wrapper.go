@@ -55,12 +55,12 @@ func StartServer(config *C.char, port int, logLevel *C.char, logPath *C.char, is
 
 	server, err := core.New(configObj)
 	if err != nil {
-		fmt.Println("error | failed to initialize the server >", err)
+		reportStartFailure(logPath, "failed to initialize the server", err)
 		return
 	}
 
 	if err := server.Start(); err != nil {
-		fmt.Println("error | failed to start server >", err)
+		reportStartFailure(logPath, "failed to start server", err)
 		return
 	}
 
@@ -89,6 +89,20 @@ func StartServer(config *C.char, port int, logLevel *C.char, logPath *C.char, is
 	case <-osSignalChannel:
 	case <-stopChannel:
 	}
+}
+
+// reportStartFailure stores the core error next to the log file and prints it, so the app can
+// explain a refused config on platforms where stdout is not visible (Android).
+func reportStartFailure(logPath *C.char, stage string, err error) {
+	message := stage + " > " + err.Error()
+	fmt.Println("error |", message)
+
+	path := C.GoString(logPath)
+	if path == "" {
+		return
+	}
+
+	_ = os.WriteFile(path+".err", []byte(message), 0644)
 }
 
 //export StopServer

@@ -173,6 +173,16 @@ namespace InvisibleGorillaXRay.Core
         {
             try
             {
+                string errorFile = logPath + ".err";
+                if (System.IO.File.Exists(errorFile))
+                {
+                    foreach (string line in System.IO.File.ReadAllLines(errorFile))
+                    {
+                        if (!string.IsNullOrWhiteSpace(line))
+                            DiagnosticLog.Write("CoreError", line.Trim());
+                    }
+                }
+
                 string file = logPath;
                 if (!System.IO.File.Exists(file))
                     file = logPath + ".log";
