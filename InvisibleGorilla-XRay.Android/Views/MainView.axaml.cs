@@ -4678,6 +4678,72 @@ namespace InvisibleGorillaXRay.Android.Views
             return true;
         }
 
+        /// <summary>
+        /// The node with the best TCP handshake can still make xray-core refuse the config
+        /// (for example an XHTTP node the shipped core cannot start). Move to the next fastest
+        /// reachable node of the same group so RUN does not die on the first broken entry.
+        /// </summary>
+        private bool TrySwitchToNextSubscriptionNode(Exception startFailure)
+        {
+            try
+            {
+                string current = settingsHandler.UserSettings.GetCurrentConfigPath();
+                if (IsOpenFluxProfileActive() || IsCurrentConfigTor() || GoidaProfilePaths.IsMarker(current))
+                    return false;
+
+                string directory = System.IO.Path.GetDirectoryName(current);
+                if (string.IsNullOrWhiteSpace(directory)
+                    || !System.IO.File.Exists(System.IO.Path.Combine(directory, "info.dat")))
+                    return false;
+
+                List<Config> configs = configHandler.GetAllSubscriptionConfigs(directory);
+                if (configs.Count < 2)
+                    return false;
+
+                subscriptionFailoverTried.Add(current);
+
+                List<Config> candidates = configs
+                    .Where(config => !subscriptionFailoverTried.Contains(config.Path))
+                    .Where(config => !SubscriptionServerEndpoint.IsProviderNotice(config.Name))
+                    .ToList();
+                if (candidates.Count == 0)
+                    return false;
+
+                int[] latencies = SubscriptionServerEndpoint.ProbeFiles(
+                    candidates.Select(config => config.Path).ToList());
+
+                Config next = null;
+                int bestLatency = int.MaxValue;
+                for (int index = 0; index < candidates.Count; index++)
+                {
+                    if (latencies[index] < 0 || latencies[index] >= bestLatency)
+                        continue;
+
+                    next = candidates[index];
+                    bestLatency = latencies[index];
+                }
+
+                next ??= candidates[0];
+
+                DiagnosticLog.Write(
+                    "MainView.Run",
+                    $"Failover after core start error: {startFailure.Message}; next node {next.Name} ({bestLatency} ms)");
+
+                settingsHandler.UpdateCurrentConfigPath(next.Path);
+                PostConnectionUi(Volatile.Read(ref connectionEpoch), () =>
+                {
+                    UpdateCurrentConfigSummary();
+                    SetStatus(LocalizeFormat("Lang.Android.Status.SwitchedServer", DisplayConfigName(next.Name)));
+                });
+                return true;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.TrySwitchToNextSubscriptionNode", ex);
+                return false;
+            }
+        }
+
         private bool TryPickFastestSubscriptionServer(IReadOnlyList<Config> configs, out Config fastest, out int latency)
         {
             fastest = null;
@@ -4923,59 +4989,81 @@ namespace InvisibleGorillaXRay.Android.Views
                         : "Browser document not ready");
                 }
 
-                Status configStatus = core.LoadConfig();
-                if (configStatus.Code == Code.ERROR)
+                // A node can look reachable (TCP handshake) and still make xray-core refuse the
+                // config, e.g. an XHTTP node the core cannot start. Walk down the group before
+                // giving up, so RUN does not end on the first broken entry.
+                const int maxStartAttempts = 3;
+                for (int startAttempt = 0; ; startAttempt++)
                 {
-                    failureMessage = configStatus.Content?.ToString() ?? "Lang.Message.NoConfig";
-                    return;
-                }
-
-                activeConfig = configStatus.Content?.ToString() ?? string.Empty;
-                notificationGeneration = AndroidConnectionNotificationManager.ShowStarting(
-                    BuildConnectionNotificationSession(activeConfig, notificationText));
-
-                Status modeStatus = core.EnableMode();
-                if (modeStatus.Code == Code.ERROR)
-                {
-                    failureMessage = modeStatus.Content?.ToString() ?? "Lang.Message.CantProxy";
-                    return;
-                }
-
-                if (modeStatus.Code == Code.INFO && modeStatus.SubCode == SubCode.CANCELED)
-                {
-                    failureMessage = "Lang.Android.Status.StartCanceled";
-                    return;
-                }
-
-                started = true;
-                AndroidConnectionNotificationManager.MarkRunning();
-                LogGoidaConnectionEvent(connected: true);
-
-                try
-                {
-                    connectionOpLock.Release();
-                    lockHeld = false;
-                }
-                catch (SemaphoreFullException)
-                {
-                    lockHeld = false;
-                }
-
-                if (OpenFluxProfilePaths.IsMarker(settingsHandler.UserSettings.GetCurrentConfigPath()))
-                    PostConnectionUi(epoch, () =>
+                    Status configStatus = core.LoadConfig();
+                    if (configStatus.Code == Code.ERROR)
                     {
-                        SetStatus("Lang.OpenFlux.Status.WaitingPeer");
-                        SetHomeProgress(74, Localize("Lang.OpenFlux.Status.WaitingPeer"));
-                    });
+                        failureMessage = configStatus.Content?.ToString() ?? "Lang.Message.NoConfig";
+                        return;
+                    }
 
-                core.Run(activeConfig, () =>
-                {
-                    PostConnectionUi(epoch, () =>
+                    activeConfig = configStatus.Content?.ToString() ?? string.Empty;
+                    notificationGeneration = AndroidConnectionNotificationManager.ShowStarting(
+                        BuildConnectionNotificationSession(activeConfig, notificationText));
+
+                    Status modeStatus = core.EnableMode();
+                    if (modeStatus.Code == Code.ERROR)
                     {
-                        SetConnectionState(ConnectionState.Running);
-                        SetStatus("Lang.Android.Status.RunningTunnel");
-                    });
-                });
+                        failureMessage = modeStatus.Content?.ToString() ?? "Lang.Message.CantProxy";
+                        return;
+                    }
+
+                    if (modeStatus.Code == Code.INFO && modeStatus.SubCode == SubCode.CANCELED)
+                    {
+                        failureMessage = "Lang.Android.Status.StartCanceled";
+                        return;
+                    }
+
+                    started = true;
+                    AndroidConnectionNotificationManager.MarkRunning();
+                    LogGoidaConnectionEvent(connected: true);
+
+                    try
+                    {
+                        connectionOpLock.Release();
+                        lockHeld = false;
+                    }
+                    catch (SemaphoreFullException)
+                    {
+                        lockHeld = false;
+                    }
+
+                    if (OpenFluxProfilePaths.IsMarker(settingsHandler.UserSettings.GetCurrentConfigPath()))
+                        PostConnectionUi(epoch, () =>
+                        {
+                            SetStatus("Lang.OpenFlux.Status.WaitingPeer");
+                            SetHomeProgress(74, Localize("Lang.OpenFlux.Status.WaitingPeer"));
+                        });
+
+                    try
+                    {
+                        core.Run(activeConfig, () =>
+                        {
+                            PostConnectionUi(epoch, () =>
+                            {
+                                SetConnectionState(ConnectionState.Running);
+                                SetStatus("Lang.Android.Status.RunningTunnel");
+                            });
+                        });
+                        break;
+                    }
+                    catch (Exception startFailure)
+                    {
+                        if (startAttempt + 1 >= maxStartAttempts || !TrySwitchToNextSubscriptionNode(startFailure))
+                            throw;
+
+                        DiagnosticLog.Write(
+                            "MainView.Run",
+                            $"Start failed on {activeConfig} (attempt {startAttempt + 1}): {startFailure.Message}");
+                        StopCoreAndVpn();
+                        Thread.Sleep(300);
+                    }
+                }
             }
             catch (Exception ex)
             {

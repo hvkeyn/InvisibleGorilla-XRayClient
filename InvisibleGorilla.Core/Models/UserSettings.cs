@@ -51,6 +51,10 @@ namespace InvisibleGorillaXRay.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(true)]
         public bool IsSendingAnalytics;
 
+        // Windows: download, install and restart automatically when a newer release exists.
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(true)]
+        public bool IsAutoUpdate;
+
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(10801)]
         public int ProxyPort;
 
@@ -236,6 +240,8 @@ namespace InvisibleGorillaXRay.Models
         public bool GetAutoConnectEnabled() => IsAutoConnect;
 
         public bool GetSendingAnalyticsEnabled() => IsSendingAnalytics;
+
+        public bool GetAutoUpdateEnabled() => IsAutoUpdate;
 
         public int GetProxyPort() => ProxyPort;
 

@@ -127,7 +127,12 @@ namespace InvisibleGorillaXRay.Core
             string file = XRayCoreWrapper.LoadConfig(format, path);
 
             if (!JsonUtility.IsJsonValid(file))
+            {
+                DiagnosticLog.Write(
+                    "Config",
+                    $"Invalid JSON from {System.IO.Path.GetFileName(path)}: length={file?.Length ?? 0}, head={(file?.Length > 300 ? file.Substring(0, 300) : file)}");
                 return new Status(Code.ERROR, SubCode.INVALID_CONFIG, LocalizationService.GetTerm(Localization.INVALID_CONFIG));
+            }
 
             return new Status(Code.SUCCESS, SubCode.SUCCESS, file);
         }
@@ -159,6 +164,42 @@ namespace InvisibleGorillaXRay.Core
             DisableTunnel();
         }
 
+        /// <summary>
+        /// xray-core reports a rejected config only in its own log file. Copy the tail into the
+        /// diagnostic log so a failed start is explained in logcat / diagnostic.log instead of a
+        /// bare "cannot enable tunnel mode".
+        /// </summary>
+        private static void LogCoreLogTail(string logPath)
+        {
+            try
+            {
+                string file = logPath;
+                if (!System.IO.File.Exists(file))
+                    file = logPath + ".log";
+                if (!System.IO.File.Exists(file))
+                    return;
+
+                using System.IO.FileStream stream = new(file, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.ReadWrite);
+                long length = stream.Length;
+                long start = Math.Max(0, length - 8192);
+                stream.Seek(start, System.IO.SeekOrigin.Begin);
+                using System.IO.StreamReader reader = new(stream);
+                string text = reader.ReadToEnd();
+                if (string.IsNullOrWhiteSpace(text))
+                    return;
+
+                foreach (string line in text.Split('\n'))
+                {
+                    string trimmed = line.Trim();
+                    if (trimmed.Length > 0)
+                        DiagnosticLog.Write("CoreLog", trimmed);
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("CoreLog.Tail", ex);
+            }
+        }
         public void Run(string config, Action? onReady = null)
         {
             DiagnosticLog.Clear();
@@ -173,6 +214,11 @@ namespace InvisibleGorillaXRay.Core
             int proxyPort = getProxyPort.Invoke();
             int tunnelServicePort = getTunPort.Invoke();
             LogLevel logLevel = getLogLevel.Invoke();
+            // When the core refuses a config it prints the reason into its own log file only.
+            // Keep at least warnings on Android so a failed start can be explained instead of
+            // showing a bare "cannot enable tunnel mode".
+            if (logLevel == LogLevel.NONE && OperatingSystem.IsAndroid())
+                logLevel = LogLevel.WARNING;
             string configuredLogDirectory = getLogPath.Invoke();
             if (!System.IO.Path.IsPathRooted(configuredLogDirectory))
             {
@@ -267,6 +313,7 @@ namespace InvisibleGorillaXRay.Core
             {
                 DiagnosticLog.Write("Run", "WARNING: Server thread is no longer alive! xray-core likely failed to start.");
                 DiagnosticLog.Write("Run", "Skipping proxy enable since server is not running.");
+                LogCoreLogTail(logPath);
                 if (torEnabled) torManager.Stop();
                 throw new InvalidOperationException(
                     LocalizationService.GetTerm(Localization.CANT_TUNNEL_SYSTEM));
@@ -277,6 +324,7 @@ namespace InvisibleGorillaXRay.Core
                 DiagnosticLog.Write("Run", "Local proxy listener did not become active in time, stopping server.");
                 XRayCoreWrapper.StopServer();
                 serverThread.Join(2000);
+                LogCoreLogTail(logPath);
                 if (torEnabled) torManager.Stop();
                 throw new InvalidOperationException(mode == Mode.TUN
                     ? LocalizationService.GetTerm(Localization.CANT_TUNNEL_SYSTEM)
