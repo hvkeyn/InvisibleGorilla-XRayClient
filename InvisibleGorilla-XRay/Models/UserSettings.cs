@@ -51,6 +51,10 @@ namespace InvisibleGorillaXRay.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(true)]
         public bool IsAutoUpdate;
 
+        // Subscription groups: measure nodes on RUN and switch to the fastest one.
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(true)]
+        public bool IsAutoSelectBest;
+
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(10801)]
         public int ProxyPort;
 
@@ -219,6 +223,8 @@ namespace InvisibleGorillaXRay.Models
         public bool GetSendingAnalyticsEnabled() => IsSendingAnalytics;
 
         public bool GetAutoUpdateEnabled() => IsAutoUpdate;
+
+        public bool GetAutoSelectBest() => IsAutoSelectBest;
 
         public int GetProxyPort() => ProxyPort;
 

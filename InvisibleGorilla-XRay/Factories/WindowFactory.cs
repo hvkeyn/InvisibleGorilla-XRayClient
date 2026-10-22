@@ -101,6 +101,8 @@ namespace InvisibleGorillaXRay.Factories
 
             Status LoadConfigUnlessDeviceLimited()
             {
+                TrySelectFastestSubscriptionNode();
+
                 string path = settingsHandler.UserSettings.GetCurrentConfigPath();
                 string directory = System.IO.Path.GetDirectoryName(path);
                 if (!string.IsNullOrWhiteSpace(directory))
@@ -115,7 +117,69 @@ namespace InvisibleGorillaXRay.Factories
                     }
                 }
 
+                // A provider stub (0.0.0.0:1) would "connect" while every packet goes out directly,
+                // so the user sees the real IP and thinks the tunnel works. Refuse it up front.
+                if (System.IO.File.Exists(path))
+                {
+                    try
+                    {
+                        if (SubscriptionServerEndpoint.IsPlaceholderJson(System.IO.File.ReadAllText(path)))
+                        {
+                            return new Status(
+                                Code.ERROR,
+                                SubCode.INVALID_CONFIG,
+                                "Configuration is a provider stub (0.0.0.0:1) and cannot be used. "
+                                + "Refresh the subscription or contact the provider.");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        DiagnosticLog.WriteException("LoadConfig.PlaceholderCheck", ex);
+                    }
+                }
+
                 return core.LoadConfig();
+            }
+
+            // Subscription groups can hold dozens of nodes, and the one picked yesterday may be
+            // dead today. Measure the group before the session starts and switch to the fastest
+            // reachable node, so RUN always lands on a working server.
+            void TrySelectFastestSubscriptionNode()
+            {
+                try
+                {
+                    if (!settingsHandler.UserSettings.GetAutoSelectBest())
+                        return;
+
+                    string current = settingsHandler.UserSettings.GetCurrentConfigPath();
+                    if (string.IsNullOrWhiteSpace(current) || !System.IO.File.Exists(current))
+                        return;
+
+                    string directory = System.IO.Path.GetDirectoryName(current);
+                    if (string.IsNullOrWhiteSpace(directory)
+                        || directory.IndexOf(
+                            $"{System.IO.Path.DirectorySeparatorChar}Subscriptions{System.IO.Path.DirectorySeparatorChar}",
+                            StringComparison.OrdinalIgnoreCase) < 0)
+                        return;
+
+                    string[] candidates = System.IO.Directory.GetFiles(directory, "*.json");
+                    if (candidates.Length < 2)
+                        return;
+
+                    string best = BestNodeSelector.Pick(candidates);
+                    if (string.IsNullOrWhiteSpace(best)
+                        || string.Equals(best, current, StringComparison.OrdinalIgnoreCase))
+                        return;
+
+                    settingsHandler.UpdateCurrentConfigPath(best);
+                    DiagnosticLog.Write(
+                        "AutoSelect",
+                        $"Switched subscription node to {System.IO.Path.GetFileNameWithoutExtension(best)}");
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("AutoSelect", ex);
+                }
             }
 
             bool TrySwitchLiveServer()

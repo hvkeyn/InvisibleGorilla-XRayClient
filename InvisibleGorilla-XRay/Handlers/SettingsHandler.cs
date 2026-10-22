@@ -34,6 +34,7 @@ namespace InvisibleGorillaXRay.Handlers
             this.userSettings.IsAutoConnect = userSettings.IsAutoConnect;
             this.userSettings.IsSendingAnalytics = userSettings.IsSendingAnalytics;
             this.userSettings.IsAutoUpdate = userSettings.IsAutoUpdate;
+            this.userSettings.IsAutoSelectBest = userSettings.IsAutoSelectBest;
             this.userSettings.ProxyPort = userSettings.ProxyPort;
             this.userSettings.TunPort = userSettings.TunPort;
             this.userSettings.TestPort = userSettings.TestPort;

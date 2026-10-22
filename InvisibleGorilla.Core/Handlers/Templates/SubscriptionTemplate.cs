@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 
@@ -58,12 +58,25 @@ namespace InvisibleGorillaXRay.Handlers.Templates
             List<string[]> v2RayList = template.ConvertToV2RayList(convertConfigLinkToV2Ray);
             bool hasNotice = !string.IsNullOrWhiteSpace(template.Meta.Notice)
                 || !string.IsNullOrWhiteSpace(template.Meta.Announce);
-            if(Isv2RayListEmpty() && !hasNotice)
+
+            // Providers often answer an unsupported client with a stub: placeholder nodes such as
+            // 0.0.0.0:1 plus a "contact support" note. Those entries are filtered out above, so an
+            // empty list here means there is nothing to connect to - say so instead of storing an
+            // empty group that silently falls back to the real IP.
+            if (Isv2RayListEmpty())
+            {
+                string notice = !string.IsNullOrWhiteSpace(template.Meta.Notice)
+                    ? template.Meta.Notice
+                    : template.Meta.Announce;
+                string baseMessage = LocalizationService.GetTerm(Localization.INVALID_SUBSCRIPTION);
                 return new Status(
                     code: Code.ERROR,
                     subCode: SubCode.INVALID_CONFIG,
-                    content: LocalizationService.GetTerm(Localization.INVALID_SUBSCRIPTION)
+                    content: string.IsNullOrWhiteSpace(notice)
+                        ? baseMessage
+                        : $"{baseMessage} {notice.Trim()}"
                 );
+            }
 
             string title = string.IsNullOrWhiteSpace(template.ProfileTitle) ? remark : template.ProfileTitle;
             if (string.IsNullOrWhiteSpace(template.GetValidRemark(title)))
