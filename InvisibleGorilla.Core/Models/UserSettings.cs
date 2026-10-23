@@ -43,6 +43,10 @@ namespace InvisibleGorillaXRay.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(true)]
         public bool IsAutoSelectBest = true;
 
+        // Which nodes the automatic pick may choose: 0 any, 1 foreign only, 2 Russia only.
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(0)]
+        public int ServerScope;
+
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(false)]
         public bool IsRunningAtStartup;
 
@@ -238,6 +242,8 @@ namespace InvisibleGorillaXRay.Models
         public bool GetBlockQuic() => BlockQuic;
 
         public bool GetAutoSelectBest() => IsAutoSelectBest;
+
+        public int GetServerScope() => ServerScope;
 
         public bool GetRunningAtStartupEnabled() => IsRunningAtStartup;
 

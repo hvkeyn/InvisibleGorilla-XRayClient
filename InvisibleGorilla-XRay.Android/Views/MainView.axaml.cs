@@ -388,7 +388,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private TextBox DnsInput => GetRequiredControl<TextBox>("DnsTextBox");
         private CheckBox UdpEnabledToggle => GetRequiredControl<CheckBox>("UdpEnabledCheckBox");
         private CheckBox BlockQuicToggle => GetRequiredControl<CheckBox>("BlockQuicCheckBox");
-        private CheckBox AutoBestToggle => GetRequiredControl<CheckBox>("AutoBestCheckBox");
+        private Button AutoBestToggle => GetRequiredControl<Button>("AutoBestButton");
         private CheckBox AnalyticsToggle => GetRequiredControl<CheckBox>("AnalyticsCheckBox");
         private CheckBox AppRulesEnabledToggle => GetRequiredControl<CheckBox>("AppRulesEnabledCheckBox");
         private StackPanel AppRulesItemsHost => GetRequiredControl<StackPanel>("AppRulesItemsPanel");
@@ -906,9 +906,7 @@ namespace InvisibleGorillaXRay.Android.Views
             DnsInput.Text = settings.GetDns();
             UdpEnabledToggle.IsChecked = settings.GetUdpEnabled();
             BlockQuicToggle.IsChecked = settings.GetBlockQuic();
-            suppressAutoBestSync = true;
-            AutoBestToggle.IsChecked = settings.GetAutoSelectBest();
-            suppressAutoBestSync = false;
+            ApplyAutoBestUi();
             AnalyticsToggle.IsChecked = settings.GetSendingAnalyticsEnabled();
             LoadTorSettingsIntoControls(settings);
             RefreshAppRulesSummary();
@@ -926,31 +924,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 if (isSettingsLoadedIntoControls)
                     TrySaveSettings(showSuccessMessage: false);
             };
-            AutoBestToggle.IsCheckedChanged += (_, __) =>
-            {
-                // The subscription panel sets the same checkbox; ignore the sync writes.
-                if (suppressAutoBestSync)
-                    return;
 
-                bool auto = AutoBestToggle.IsChecked == true;
-                UserSettings live = settingsHandler.UserSettings;
-                if (live.GetAutoSelectBest() == auto)
-                    return;
-
-                // Persist immediately: the settings screen may never be opened, and without
-                // this the auto pick silently stayed off while the checkbox looked on.
-                try
-                {
-                    live.IsAutoSelectBest = auto;
-                    settingsHandler.UpdateUserSettings(live);
-                    UpdateCurrentConfigSummary();
-                    DiagnosticLog.Write("Auto", $"selection changed to {auto}");
-                }
-                catch (Exception ex)
-                {
-                    DiagnosticLog.WriteException("MainView.AutoBest", ex);
-                }
-            };
         }
 
         private bool isApplyingTorUi;
@@ -2386,26 +2360,95 @@ namespace InvisibleGorillaXRay.Android.Views
             NoGeneralConfigsText.IsVisible = generalConfigs.Count == 0;
         }
 
-        private void SyncAutoBestFromSettings()
+        private void SyncAutoBestFromSettings() => ApplyAutoBestUi();
+
+        private void ApplyAutoBestUi()
         {
             try
             {
-                bool auto = settingsHandler.UserSettings.GetAutoSelectBest();
-                CheckBox toggle = AutoBestToggle;
-                if (toggle.IsChecked == auto)
-                    return;
+                UserSettings settings = settingsHandler.UserSettings;
+                bool auto = settings.GetAutoSelectBest();
 
-                suppressAutoBestSync = true;
-                toggle.IsChecked = auto;
+                if (this.FindControl<TextBlock>("AutoBestButtonText") is { } label)
+                    label.Text = auto ? "Auto: on" : "Auto: off";
+
+                PaintScopeButton("ScopeAnyButton", settings.GetServerScope() == 0);
+                PaintScopeButton("ScopeForeignButton", settings.GetServerScope() == 1);
+                PaintScopeButton("ScopeRuButton", settings.GetServerScope() == 2);
             }
             catch (Exception ex)
             {
-                DiagnosticLog.WriteException("MainView.SyncAutoBest", ex);
+                DiagnosticLog.WriteException("MainView.ApplyAutoBestUi", ex);
             }
-            finally
+        }
+
+        private void PaintScopeButton(string name, bool active)
+        {
+            if (this.FindControl<Button>(name) is not { } button)
+                return;
+
+            button.Opacity = active ? 1.0 : 0.55;
+        }
+
+        private void OnToggleAutoBestClick(object? sender, RoutedEventArgs e)
+        {
+            try
             {
-                suppressAutoBestSync = false;
+                UserSettings live = settingsHandler.UserSettings;
+                live.IsAutoSelectBest = !live.GetAutoSelectBest();
+                settingsHandler.UpdateUserSettings(live);
+                ApplyAutoBestUi();
+                UpdateCurrentConfigSummary();
+                SetStatus(live.IsAutoSelectBest ? "Auto select: on" : "Auto select: off");
+                DiagnosticLog.Write("Auto", $"auto={live.IsAutoSelectBest}");
             }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.ToggleAutoBest", ex);
+            }
+        }
+
+        private void OnScopeAnyClick(object? sender, RoutedEventArgs e) => SetServerScope(0);
+
+        private void OnScopeForeignClick(object? sender, RoutedEventArgs e) => SetServerScope(1);
+
+        private void OnScopeRuClick(object? sender, RoutedEventArgs e) => SetServerScope(2);
+
+        private void SetServerScope(int scope)
+        {
+            try
+            {
+                UserSettings live = settingsHandler.UserSettings;
+                live.ServerScope = scope;
+                settingsHandler.UpdateUserSettings(live);
+                ApplyAutoBestUi();
+                SetStatus(scope switch
+                {
+                    1 => "Auto select uses foreign servers",
+                    2 => "Auto select uses Russian servers",
+                    _ => "Auto select uses any server"
+                });
+                DiagnosticLog.Write("Auto", $"scope={scope}");
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.SetServerScope", ex);
+            }
+        }
+
+        private static bool IsRussianNodeName(string name)
+        {
+            string value = (name ?? "").ToLowerInvariant();
+            if (value.Length == 0)
+                return false;
+
+            foreach (string marker in new[] { "росси", "рф", "russia", "москв", "все операторы", "игровой" })
+            {
+                if (value.Contains(marker))
+                    return true;
+            }
+
+            return System.Text.RegularExpressions.Regex.IsMatch(value, @"\bru\b");
         }
         private void RefreshSubscriptions()
         {
@@ -2979,7 +3022,8 @@ namespace InvisibleGorillaXRay.Android.Views
                 IsSystemProxyUse = false,
                 IsUdpEnable = UdpEnabledToggle.IsChecked ?? current.GetUdpEnabled(),
                 BlockQuic = BlockQuicToggle.IsChecked ?? current.GetBlockQuic(),
-                IsAutoSelectBest = AutoBestToggle.IsChecked ?? current.GetAutoSelectBest(),
+                IsAutoSelectBest = current.GetAutoSelectBest(),
+                ServerScope = current.GetServerScope(),
                 IsRunningAtStartup = current.GetRunningAtStartupEnabled(),
                 IsStartHidden = current.GetStartHiddenEnabled(),
                 IsAutoConnect = current.GetAutoConnectEnabled(),
@@ -4362,6 +4406,18 @@ namespace InvisibleGorillaXRay.Android.Views
                 if (selectedConfig == null)
                     return false;
 
+                // An explicit pick wins over the automatic one: otherwise the fastest-node
+                // selection quietly replaces the node the user just chose.
+                if (selectedConfig.Group == GroupType.SUBSCRIPTION
+                    && settingsHandler.UserSettings.GetAutoSelectBest())
+                {
+                    UserSettings live = settingsHandler.UserSettings;
+                    live.IsAutoSelectBest = false;
+                    settingsHandler.UpdateUserSettings(live);
+                    ApplyAutoBestUi();
+                    DiagnosticLog.Write("Auto", $"disabled after manual pick {System.IO.Path.GetFileName(path)}");
+                }
+
                 ApplyTorStateForSelectedConfig(path);
                 ApplyOpenFluxPanel();
 
@@ -4764,6 +4820,20 @@ namespace InvisibleGorillaXRay.Android.Views
             // Manual mode: keep the node the user picked, only switch when it is not usable.
             if (!settingsHandler.UserSettings.GetAutoSelectBest())
                 return true;
+
+            int scope = settingsHandler.UserSettings.GetServerScope();
+            if (scope == 1)
+                usable = usable.Where(config => !IsRussianNodeName(config.Name)).ToList();
+            else if (scope == 2)
+                usable = usable.Where(config => IsRussianNodeName(config.Name)).ToList();
+
+            if (usable.Count == 0)
+            {
+                blockedStatus = scope == 1
+                    ? "No foreign servers in this subscription"
+                    : "No Russian servers in this subscription";
+                return false;
+            }
 
             if (usable.Count < 2)
             {

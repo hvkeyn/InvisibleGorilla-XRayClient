@@ -34,6 +34,7 @@ namespace InvisibleGorillaXRay.Handlers
             this.userSettings.IsUdpEnable = userSettings.IsUdpEnable;
             this.userSettings.BlockQuic = userSettings.BlockQuic;
             this.userSettings.IsAutoSelectBest = userSettings.IsAutoSelectBest;
+            this.userSettings.ServerScope = userSettings.ServerScope;
             this.userSettings.IsRunningAtStartup = userSettings.IsRunningAtStartup;
             this.userSettings.IsStartHidden = userSettings.IsStartHidden;
             this.userSettings.IsAutoConnect = userSettings.IsAutoConnect;
