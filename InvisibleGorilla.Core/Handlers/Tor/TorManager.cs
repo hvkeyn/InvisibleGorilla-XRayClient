@@ -81,6 +81,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
 
         public Status Start(TorSettings settings, int maxWaitMs = 180000)
         {
+            stopRequested = false;
             if (settings == null)
                 return new Status(Code.ERROR, SubCode.CANT_CONNECT, "Tor settings are missing.");
 
@@ -144,6 +145,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
 
         public void Stop()
         {
+                stopRequested = true;
                 lock (sync)
                 {
                     if (torProcess != null)
@@ -169,6 +171,7 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 LatestLinkLabel = "";
             }
 
+        private volatile bool stopRequested;
         private bool StartProcess(string torrcPath)
         {
             var startInfo = new ProcessStartInfo
