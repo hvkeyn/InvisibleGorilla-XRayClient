@@ -2074,8 +2074,6 @@ namespace InvisibleGorillaXRay
                 try
                 {
                     have = TryReadTunnelSpeed(out down, out up);
-                    if (have && (down > 0 || up > 0))
-                        DiagnosticLog.Write("Home.Speed", $"sample down={down} up={up}");
                 }
                 catch (Exception ex)
                 {

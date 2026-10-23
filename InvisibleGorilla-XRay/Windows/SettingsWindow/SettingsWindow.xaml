@@ -163,6 +163,17 @@
                         <CheckBox x:Name="checkBoxAutoConnect" Margin="5 15 0 0" Foreground="White" 
                             Content="{DynamicResource Lang.Window.Settings.Basic.AutoConnect}" FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14"/>
                         
+                        <CheckBox x:Name="checkBoxAutoSelectBest" Margin="5 25 0 0" Foreground="White"
+                            Content="Auto: pick the fastest subscription node" FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14"/>
+
+                        <ComboBox x:Name="comboBoxServerScope" Margin="5 10 0 0" Height="26" Width="180"
+                            HorizontalAlignment="Left"
+                            FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14">
+                            <ComboBoxItem Content="Any server" Tag="0"/>
+                            <ComboBoxItem Content="Foreign only" Tag="1"/>
+                            <ComboBoxItem Content="RU only" Tag="2"/>
+                        </ComboBox>
+
                         <CheckBox x:Name="checkBoxSendAnalytics" Margin="5 15 0 0" Foreground="White"
                             Visibility="Collapsed"
                             FontFamily="{StaticResource SegoeUI}" FontWeight="Normal" FontSize="14">

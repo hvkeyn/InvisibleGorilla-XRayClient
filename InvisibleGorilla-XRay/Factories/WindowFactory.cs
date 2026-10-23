@@ -162,32 +162,12 @@ namespace InvisibleGorillaXRay.Factories
                             StringComparison.OrdinalIgnoreCase) < 0)
                         return;
 
-                    string[] allCandidates = System.IO.Directory.GetFiles(directory, "*.json");
-
-                    // Same scope rules as the Android build: the automatic pick may be limited
-                    // to foreign or to Russian nodes.
-                    int scope = settingsHandler.UserSettings.GetServerScope();
-                    var scoped = new System.Collections.Generic.List<string>();
-                    foreach (string candidate in allCandidates)
-                    {
-                        if (Models.ServerScope.Matches(System.IO.Path.GetFileNameWithoutExtension(candidate), scope))
-                            scoped.Add(candidate);
-                    }
-
-                    string[] candidates = scoped.ToArray();
-                    if (candidates.Length < 2)
-                    {
-                        if (allCandidates.Length >= 2 && candidates.Length < 2)
-                            DiagnosticLog.Write("AutoSelect", $"scope={scope} leaves {candidates.Length} node(s)");
-                        return;
-                    }
-
-                    string best = BestNodeSelector.Pick(candidates);
-                    if (string.IsNullOrWhiteSpace(best)
-                        || string.Equals(best, current, StringComparison.OrdinalIgnoreCase))
+                    // Shared selector: same scope rules and probe on every platform.
+                    if (!Services.SubscriptionAutoSelector.TryPick(current, settingsHandler.UserSettings, out string picked))
                         return;
 
-                    settingsHandler.UpdateCurrentConfigPath(best);
+                    settingsHandler.UpdateCurrentConfigPath(picked);
+                    string best = picked;
                     DiagnosticLog.Write(
                         "AutoSelect",
                         $"Switched subscription node to {System.IO.Path.GetFileNameWithoutExtension(best)}");

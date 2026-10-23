@@ -208,6 +208,10 @@ namespace InvisibleGorillaXRay
                 checkBoxRunAtStartup.IsChecked = getRunningAtStartupEnabled.Invoke();
                 checkBoxStartHidden.IsChecked = getStartHiddenEnabled.Invoke();
                 checkBoxAutoConnect.IsChecked = getAutoConnectEnabled.Invoke();
+
+            UserSettings loadedSettings = getUserSettings.Invoke();
+            checkBoxAutoSelectBest.IsChecked = loadedSettings.GetAutoSelectBest();
+            comboBoxServerScope.SelectedIndex = Math.Clamp(loadedSettings.GetServerScope(), 0, 2);
                 checkBoxSendAnalytics.IsChecked = getSendingAnalyticsEnabled.Invoke();
                 RefreshAppRulesSummary();
             }
@@ -978,6 +982,11 @@ namespace InvisibleGorillaXRay
                 appRuleTemplates: currentSettings.GetAppRuleTemplates(),
                 appRuleTemplateBindings: currentSettings.GetAppRuleTemplateBindings()
             );
+
+            userSettings.IsAutoSelectBest = checkBoxAutoSelectBest.IsChecked == true;
+            userSettings.ServerScope = comboBoxServerScope.SelectedIndex < 0
+                ? 0
+                : comboBoxServerScope.SelectedIndex;
 
             userSettings.Tor = BuildTorSettingsFromUi();
             userSettings.Goida = currentSettings.GetGoidaSettings().Clone();

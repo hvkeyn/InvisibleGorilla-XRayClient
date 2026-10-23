@@ -136,7 +136,7 @@ namespace InvisibleGorillaXRay.Mac.Factories
                             : "-";
                         return string.Format(
                             LocalizationService.GetTerm("Lang.Goida.ServerListNameWithNode"),
-                            activeNode.DisplayName) + $" · {latency}";
+                            activeNode.DisplayName) + $" В· {latency}";
                     }
 
                     return LocalizationService.GetTerm("Lang.Goida.ServerListName");
@@ -191,6 +191,22 @@ namespace InvisibleGorillaXRay.Mac.Factories
 
             Status LoadConfigForServer(string path)
             {
+                try
+                {
+                    if (InvisibleGorillaXRay.Services.SubscriptionAutoSelector.TryPick(
+                            settingsHandler.UserSettings.GetCurrentConfigPath(),
+                            settingsHandler.UserSettings,
+                            out string picked))
+                    {
+                        settingsHandler.UpdateCurrentConfigPath(picked);
+                        path = picked;
+                        DiagnosticLog.Write("AutoSelect", $"switched to {System.IO.Path.GetFileNameWithoutExtension(picked)}");
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    DiagnosticLog.WriteException("AutoSelect.Pick", ex);
+                }
                 if (GoidaProfilePaths.IsMarker(path))
                 {
                     goidaHandler.Manager.TryEnsureActiveNode();
