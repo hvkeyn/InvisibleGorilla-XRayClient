@@ -10,7 +10,10 @@ import (
 
 	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/log"
+	"github.com/xtls/xray-core/app/policy"
 	"github.com/xtls/xray-core/app/proxyman"
+	appStats "github.com/xtls/xray-core/app/stats"
+	fstats "github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/common/cmdarg"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
@@ -20,6 +23,40 @@ import (
 
 	clog "github.com/xtls/xray-core/common/log"
 )
+
+// activeInstance keeps the running core so traffic counters can be read in-process.
+var activeInstance *core.Instance
+
+//export GetTrafficCounters
+func GetTrafficCounters(uplink *C.longlong, downlink *C.longlong) {
+	up, down := readInboundTraffic()
+	*uplink = C.longlong(up)
+	*downlink = C.longlong(down)
+}
+
+func readInboundTraffic() (int64, int64) {
+	instance := activeInstance
+	if instance == nil {
+		return 0, 0
+	}
+
+	manager, ok := instance.GetFeature(fstats.ManagerType()).(fstats.Manager)
+	if !ok {
+		return 0, 0
+	}
+
+	return counterValue(manager, "inbound>>>local>>>traffic>>>uplink"),
+		counterValue(manager, "inbound>>>local>>>traffic>>>downlink")
+}
+
+func counterValue(manager fstats.Manager, name string) int64 {
+	counter := manager.GetCounter(name)
+	if counter == nil {
+		return 0
+	}
+
+	return counter.Value()
+}
 
 //export GetConfigFormat
 func GetConfigFormat(path *C.char) *C.char {
@@ -155,6 +192,19 @@ func ensureCoreApps(configObj *core.Config) {
 		serial.ToTypedMessage(&dispatcher.Config{}),
 		serial.ToTypedMessage(&proxyman.InboundConfig{}),
 		serial.ToTypedMessage(&proxyman.OutboundConfig{}),
+		// Traffic counters for the UI: the stats manager is kept in-process only,
+		// no API inbound is added, so nothing is exposed on localhost.
+		serial.ToTypedMessage(&appStats.Config{}),
+		serial.ToTypedMessage(&policy.Config{
+			System: &policy.SystemPolicy{
+				Stats: &policy.SystemPolicy_Stats{
+					InboundUplink:    true,
+					InboundDownlink:  true,
+					OutboundUplink:   true,
+					OutboundDownlink: true,
+				},
+			},
+		}),
 	}
 
 	for _, element := range required {
@@ -219,6 +269,7 @@ func overrideInboundToHttp(port net.Port) []*core.InboundHandlerConfig {
 				},
 			}),
 			ProxySettings: serial.ToTypedMessage(&http.ServerConfig{}),
+			Tag:           "local",
 		},
 	}
 }
@@ -247,6 +298,7 @@ func overrideInboundToSocks(port net.Port, isUdpEnabled bool, auth *localSocksAu
 				},
 			}),
 			ProxySettings: serial.ToTypedMessage(serverConfig),
+			Tag:           "local",
 		},
 	}
 }

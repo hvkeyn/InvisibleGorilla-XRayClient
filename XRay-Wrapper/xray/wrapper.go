@@ -121,6 +121,8 @@ func StartServer(config *C.char, port int, logLevel *C.char, logPath *C.char, is
 		return
 	}
 
+	activeInstance = server
+
 	if err := safeStart(server, logPath); err != nil {
 		reportStartFailure(logPath, "failed to start server", err)
 		return

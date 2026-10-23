@@ -2074,6 +2074,8 @@ namespace InvisibleGorillaXRay
                 try
                 {
                     have = TryReadTunnelSpeed(out down, out up);
+                    if (have && (down > 0 || up > 0))
+                        DiagnosticLog.Write("Home.Speed", $"sample down={down} up={up}");
                 }
                 catch (Exception ex)
                 {
@@ -2107,7 +2109,37 @@ namespace InvisibleGorillaXRay
                     return true;
             }
 
+            // Proxy/SOCKS mode has no TUN adapter, so the OS counters stay at zero. Read the
+            // core's own inbound counters instead, which cover exactly the proxied traffic.
+            if (TryReadCoreSpeed(out down, out up))
+                return true;
+
             return TryReadBridgeSpeed(out down, out up);
+        }
+
+        private bool TryReadCoreSpeed(out long down, out long up)
+        {
+            down = 0;
+            up = 0;
+            if (!Core.XRayCoreWrapper.GetTraffic(out long totalUp, out long totalDown))
+                return false;
+
+            lock (homeSpeedLock)
+            {
+                if (!homeSpeedReady)
+                {
+                    homeSpeedRx = totalDown;
+                    homeSpeedTx = totalUp;
+                    homeSpeedReady = true;
+                    return totalDown > 0 || totalUp > 0;
+                }
+
+                down = Math.Max(0, totalDown - homeSpeedRx);
+                up = Math.Max(0, totalUp - homeSpeedTx);
+                homeSpeedRx = totalDown;
+                homeSpeedTx = totalUp;
+                return true;
+            }
         }
 
         private static bool HasTunnelAdapter()

@@ -62,6 +62,30 @@ namespace InvisibleGorillaXRay.Core
             static extern IntPtr GetConfigFormatNative(IntPtr pathPtr);
         }
 
+        /// <summary>
+        /// Traffic counters of the local listener. Available in proxy mode too, where there is
+        /// no TUN adapter to read byte counters from.
+        /// </summary>
+        public static bool GetTraffic(out long uplink, out long downlink)
+        {
+            uplink = 0;
+            downlink = 0;
+            try
+            {
+                GetTrafficCountersNative(out long up, out long down);
+                uplink = up;
+                downlink = down;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("XRayWrapper.GetTraffic", ex);
+                return false;
+            }
+        }
+
+        [DllImport(LIB_NAME, EntryPoint = "GetTrafficCounters")]
+        static extern void GetTrafficCountersNative(out long uplink, out long downlink);
         public static bool IsFileExists(string path)
         {
             IntPtr pathPtr = StringToUtf8Ptr(path);
