@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -30,6 +31,63 @@ var serverStopMutex sync.Mutex
 var serverStopChannel chan struct{}
 var serverLifecycleActive bool
 var serverStopRequested bool
+
+// describeConfig lists the apps and handler counts so a failed start can be explained.
+func describeConfig(configObj *core.Config) string {
+	if configObj == nil {
+		return "config is nil"
+	}
+
+	names := make([]string, 0, len(configObj.App))
+	for _, app := range configObj.App {
+		if app != nil {
+			names = append(names, app.Type)
+		}
+	}
+
+	return fmt.Sprintf("apps=%d [%s] inbounds=%d outbounds=%d",
+		len(configObj.App), strings.Join(names, ", "), len(configObj.Inbound), len(configObj.Outbound))
+}
+
+func writeDebugFile(logPath *C.char, text string) {
+	path := C.GoString(logPath)
+	if path == "" {
+		return
+	}
+
+	_ = os.WriteFile(path+".debug", []byte(text), 0644)
+}
+
+// safeStart runs server.Start and converts a panic into an error plus a stack file.
+func safeStart(server *core.Instance, logPath *C.char) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			stack := make([]byte, 1<<20)
+			length := runtime.Stack(stack, false)
+			message := fmt.Sprintf("panic: %v\n%s", recovered, stack[:length])
+			writeDebugFile(logPath, message)
+			err = fmt.Errorf("core panic: %v", recovered)
+		}
+	}()
+
+	return server.Start()
+}
+
+// safeNew creates the core instance, converting a panic into an error.
+func safeNew(configObj *core.Config, logPath *C.char, debugInfo string) (server *core.Instance, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			stack := make([]byte, 1<<20)
+			length := runtime.Stack(stack, false)
+			writeDebugFile(logPath, fmt.Sprintf("%s\npanic: %v\n%s", debugInfo, recovered, stack[:length]))
+			server = nil
+			err = fmt.Errorf("core panic: %v", recovered)
+		}
+	}()
+
+	writeDebugFile(logPath, debugInfo)
+	return core.New(configObj)
+}
 
 //export StartServer
 func StartServer(config *C.char, port int, logLevel *C.char, logPath *C.char, isSocks bool, isUdpEnabled bool, username *C.char, password *C.char) {
@@ -53,13 +111,17 @@ func StartServer(config *C.char, port int, logLevel *C.char, logPath *C.char, is
 		tryMakingDirectory(logPath)
 	}
 
-	server, err := core.New(configObj)
+	// The core panics (instead of returning an error) when a config confuses the
+	// proxyman feature set. Catch it here: a panic in this process kills the whole
+	// app, and the stack is the only way to explain why.
+	debugInfo := describeConfig(configObj)
+	server, err := safeNew(configObj, logPath, debugInfo)
 	if err != nil {
 		reportStartFailure(logPath, "failed to initialize the server", err)
 		return
 	}
 
-	if err := server.Start(); err != nil {
+	if err := safeStart(server, logPath); err != nil {
 		reportStartFailure(logPath, "failed to start server", err)
 		return
 	}
@@ -126,6 +188,13 @@ func StopServer() {
 func TestConnection(config *C.char, port int) int {
 	configObj := convertJsonToObject(config)
 	configObj.Inbound = overrideInbound(net.Port(port), false, false, nil)
+
+	for _, app := range configObj.App {
+		if app != nil {
+			fmt.Println("debug | app", app.Type)
+		}
+	}
+	fmt.Println("debug | inbounds", len(configObj.Inbound), "outbounds", len(configObj.Outbound), "apps", len(configObj.App))
 
 	server, err := core.New(configObj)
 	if err != nil {

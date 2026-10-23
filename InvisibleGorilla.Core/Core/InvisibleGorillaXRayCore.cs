@@ -144,6 +144,52 @@ namespace InvisibleGorillaXRay.Core
         /// hook stays so a future core downgrade has one place to adapt configs.
         /// </summary>
         private static string StripUnsupportedCoreSections(string json) => json;
+        /// <summary>
+        /// The native loader converts a v2ray JSON file into the proto config the core expects.
+        /// It is given a temporary ASCII path: Cyrillic names used to come back empty, and older
+        /// transport names are rewritten because a config with unknown fields is rejected whole.
+        /// </summary>
+        private static string LoadConfigThroughCore(string path, string format)
+        {
+            string tempPath = null;
+            try
+            {
+                if (System.IO.File.Exists(path))
+                {
+                    string raw = System.IO.File.ReadAllText(path);
+                    string sanitized = raw
+                        .Replace("\"splithttpSettings\"", "\"xhttpSettings\"")
+                        .Replace("\"splithttp\"", "\"xhttp\"");
+
+                    tempPath = System.IO.Path.Combine(
+                        System.IO.Path.GetTempPath(),
+                        "igx-config-" + Guid.NewGuid().ToString("N") + ".json");
+                    System.IO.File.WriteAllText(tempPath, sanitized);
+
+                    string converted = XRayCoreWrapper.LoadConfig("json", tempPath);
+                    if (!string.IsNullOrWhiteSpace(converted))
+                    {
+                        DiagnosticLog.Write("Config", $"Converted {System.IO.Path.GetFileName(path)} via the core loader");
+                        return converted;
+                    }
+
+                    DiagnosticLog.Write("Config", $"Core loader returned nothing for {System.IO.Path.GetFileName(path)}");
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("Config.LoadThroughCore", ex);
+            }
+            finally
+            {
+                if (tempPath != null)
+                {
+                    try { System.IO.File.Delete(tempPath); } catch { }
+                }
+            }
+
+            return XRayCoreWrapper.LoadConfig(format, path);
+        }
         public Status LoadConfig(string path)
         {
             if (OpenFluxProfilePaths.IsMarker(path))
@@ -159,39 +205,7 @@ namespace InvisibleGorillaXRay.Core
             }
 
             string format = XRayCoreWrapper.GetConfigFormat(path);
-            string file;
-
-            // The native loader receives the path as a C string and returned an empty config for
-            // node files with Cyrillic names, which surfaced as "invalid configuration". Plain
-            // JSON files can be read directly; other formats still go through the wrapper.
-            if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) && System.IO.File.Exists(path))
-            {
-                try
-                {
-                    file = System.IO.File.ReadAllText(path);
-                    if (file.Length > 0 && file[0] == '\uFEFF')
-                        file = file.Substring(1);
-                    DiagnosticLog.Write("Config", $"Read {System.IO.Path.GetFileName(path)} directly: {file.Length} bytes");
-                }
-                catch (Exception ex)
-                {
-                    DiagnosticLog.WriteException("Config.ReadDirect", ex);
-                    file = XRayCoreWrapper.LoadConfig(format, path);
-                }
-            }
-            else
-            {
-                file = XRayCoreWrapper.LoadConfig(format, path);
-            }
-
-            // Older converters wrote the legacy transport name; current cores only register
-            // "xhttp", and a config with "splithttp" makes the native core panic.
-            if (!string.IsNullOrWhiteSpace(file) && file.IndexOf("splithttp", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                file = file.Replace("\"splithttp\"", "\"xhttp\"");
-                DiagnosticLog.Write("Config", "Renamed splithttp -> xhttp");
-            }
-
+            string file = LoadConfigThroughCore(path, format);
             file = StripUnsupportedCoreSections(file);
 
             if (!JsonUtility.IsJsonValid(file))
@@ -241,6 +255,16 @@ namespace InvisibleGorillaXRay.Core
         {
             try
             {
+                string debugFile = logPath + ".debug";
+                if (System.IO.File.Exists(debugFile))
+                {
+                    foreach (string line in System.IO.File.ReadAllLines(debugFile))
+                    {
+                        if (!string.IsNullOrWhiteSpace(line))
+                            DiagnosticLog.Write("CoreDebug", line.Trim());
+                    }
+                }
+
                 string errorFile = logPath + ".err";
                 if (System.IO.File.Exists(errorFile))
                 {
