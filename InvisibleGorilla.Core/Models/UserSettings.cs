@@ -41,7 +41,7 @@ namespace InvisibleGorillaXRay.Models
 
         // Pick the fastest reachable node of a subscription before connecting.
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(true)]
-        public bool IsAutoSelectBest;
+        public bool IsAutoSelectBest = true;
 
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(false)]
         public bool IsRunningAtStartup;

@@ -108,6 +108,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private bool isServersSectionInitialized;
         private bool isServersSectionRefreshing;
         private bool isSettingsSectionInitialized;
+        private bool suppressAutoBestSync;
         private bool isSettingsLoadedIntoControls;
         private bool suppressSubscriptionSelectionChanged;
         private bool updateAvailable;
@@ -905,7 +906,9 @@ namespace InvisibleGorillaXRay.Android.Views
             DnsInput.Text = settings.GetDns();
             UdpEnabledToggle.IsChecked = settings.GetUdpEnabled();
             BlockQuicToggle.IsChecked = settings.GetBlockQuic();
+            suppressAutoBestSync = true;
             AutoBestToggle.IsChecked = settings.GetAutoSelectBest();
+            suppressAutoBestSync = false;
             AnalyticsToggle.IsChecked = settings.GetSendingAnalyticsEnabled();
             LoadTorSettingsIntoControls(settings);
             RefreshAppRulesSummary();
@@ -925,8 +928,28 @@ namespace InvisibleGorillaXRay.Android.Views
             };
             AutoBestToggle.IsCheckedChanged += (_, __) =>
             {
-                if (isSettingsLoadedIntoControls)
-                    TrySaveSettings(showSuccessMessage: false);
+                // The subscription panel sets the same checkbox; ignore the sync writes.
+                if (suppressAutoBestSync)
+                    return;
+
+                bool auto = AutoBestToggle.IsChecked == true;
+                UserSettings live = settingsHandler.UserSettings;
+                if (live.GetAutoSelectBest() == auto)
+                    return;
+
+                // Persist immediately: the settings screen may never be opened, and without
+                // this the auto pick silently stayed off while the checkbox looked on.
+                try
+                {
+                    live.IsAutoSelectBest = auto;
+                    settingsHandler.UpdateUserSettings(live);
+                    UpdateCurrentConfigSummary();
+                    DiagnosticLog.Write("Auto", $"selection changed to {auto}");
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("MainView.AutoBest", ex);
+                }
             };
         }
 
@@ -2363,8 +2386,30 @@ namespace InvisibleGorillaXRay.Android.Views
             NoGeneralConfigsText.IsVisible = generalConfigs.Count == 0;
         }
 
+        private void SyncAutoBestFromSettings()
+        {
+            try
+            {
+                bool auto = settingsHandler.UserSettings.GetAutoSelectBest();
+                CheckBox toggle = AutoBestToggle;
+                if (toggle.IsChecked == auto)
+                    return;
+
+                suppressAutoBestSync = true;
+                toggle.IsChecked = auto;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.SyncAutoBest", ex);
+            }
+            finally
+            {
+                suppressAutoBestSync = false;
+            }
+        }
         private void RefreshSubscriptions()
         {
+            SyncAutoBestFromSettings();
             string? previousSelection = selectedSubscription?.Directory.FullName;
             subscriptionGroups = configHandler.GetAllGroups();
 
@@ -4711,6 +4756,10 @@ namespace InvisibleGorillaXRay.Android.Views
                 blockedStatus = "Lang.Android.Status.DeviceLimitNotice";
                 return false;
             }
+
+            DiagnosticLog.Write(
+                "Auto",
+                $"block: configs={configs.Count} usable={usable.Count} auto={settingsHandler.UserSettings.GetAutoSelectBest()} current={System.IO.Path.GetFileName(path)}");
 
             // Manual mode: keep the node the user picked, only switch when it is not usable.
             if (!settingsHandler.UserSettings.GetAutoSelectBest())
