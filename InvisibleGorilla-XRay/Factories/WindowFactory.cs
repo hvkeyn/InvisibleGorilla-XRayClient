@@ -162,9 +162,25 @@ namespace InvisibleGorillaXRay.Factories
                             StringComparison.OrdinalIgnoreCase) < 0)
                         return;
 
-                    string[] candidates = System.IO.Directory.GetFiles(directory, "*.json");
+                    string[] allCandidates = System.IO.Directory.GetFiles(directory, "*.json");
+
+                    // Same scope rules as the Android build: the automatic pick may be limited
+                    // to foreign or to Russian nodes.
+                    int scope = settingsHandler.UserSettings.GetServerScope();
+                    var scoped = new System.Collections.Generic.List<string>();
+                    foreach (string candidate in allCandidates)
+                    {
+                        if (Models.ServerScope.Matches(System.IO.Path.GetFileNameWithoutExtension(candidate), scope))
+                            scoped.Add(candidate);
+                    }
+
+                    string[] candidates = scoped.ToArray();
                     if (candidates.Length < 2)
+                    {
+                        if (allCandidates.Length >= 2 && candidates.Length < 2)
+                            DiagnosticLog.Write("AutoSelect", $"scope={scope} leaves {candidates.Length} node(s)");
                         return;
+                    }
 
                     string best = BestNodeSelector.Pick(candidates);
                     if (string.IsNullOrWhiteSpace(best)
@@ -494,6 +510,25 @@ namespace InvisibleGorillaXRay.Factories
             {
                 if (GoidaProfilePaths.IsMarker(path))
                     goidaHandler.Manager.TryEnsureActiveNode();
+
+                // An explicit pick wins over the automatic selection, like on Android.
+                try
+                {
+                    string nodeDirectory = System.IO.Path.GetDirectoryName(path);
+                    bool subscriptionNode = !string.IsNullOrWhiteSpace(nodeDirectory)
+                        && System.IO.File.Exists(System.IO.Path.Combine(nodeDirectory, "info.dat"));
+                    if (subscriptionNode && settingsHandler.UserSettings.GetAutoSelectBest())
+                    {
+                        UserSettings live = settingsHandler.UserSettings;
+                        live.IsAutoSelectBest = false;
+                        settingsHandler.UpdateUserSettings(live);
+                        DiagnosticLog.Write("AutoSelect", "disabled after manual pick");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("AutoSelect.ManualPick", ex);
+                }
 
                 settingsHandler.UpdateCurrentConfigPath(path);
                 mainWindow.UpdateUI();

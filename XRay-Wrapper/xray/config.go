@@ -47,6 +47,24 @@ func readInboundTraffic() (int64, int64) {
 		return 0, 0
 	}
 
+	// Tags are not always what we ask for (a config may carry its own inbound tag), so sum
+	// every inbound traffic counter instead of relying on a single name.
+	if concrete, ok := manager.(*appStats.Manager); ok {
+		var uplink, downlink int64
+		concrete.VisitCounters(func(name string, counter fstats.Counter) bool {
+			switch {
+			case strings.HasSuffix(name, "traffic>>>uplink"):
+				uplink += counter.Value()
+			case strings.HasSuffix(name, "traffic>>>downlink"):
+				downlink += counter.Value()
+			}
+
+			return true
+		})
+
+		return uplink, downlink
+	}
+
 	return counterValue(manager, "inbound>>>local>>>traffic>>>uplink"),
 		counterValue(manager, "inbound>>>local>>>traffic>>>downlink")
 }
@@ -126,6 +144,9 @@ func convertJsonToObject(config *C.char) *core.Config {
 
 	json.Unmarshal([]byte(configJson), configObj)
 	stripManagementApps(configObj)
+	// Re-add the apps a modern config needs but may have skipped: dispatcher/proxyman,
+	// stats+policy (traffic counters for the UI), dns and router.
+	ensureCoreApps(configObj)
 	return configObj
 }
 
