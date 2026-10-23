@@ -3092,8 +3092,12 @@ namespace InvisibleGorillaXRay.Android.Views
             }
             else
             {
+                string suffix = currentConfig.Group == GroupType.SUBSCRIPTION
+                    && settingsHandler.UserSettings.GetAutoSelectBest()
+                    ? "  ·  auto"
+                    : string.Empty;
                 currentConfigText = currentConfig.Group == GroupType.SUBSCRIPTION
-                    ? $"{Localize("Lang.Window.Server.Subscriptions")} / {DisplayConfigName(currentConfig.Name)}"
+                    ? $"{Localize("Lang.Window.Server.Subscriptions")} / {DisplayConfigName(currentConfig.Name)}{suffix}"
                     : DisplayConfigName(currentConfig.Name);
             }
 
@@ -5134,6 +5138,7 @@ namespace InvisibleGorillaXRay.Android.Views
             bool lockHeld = false;
             bool started = false;
             string? failureMessage = null;
+            bool markAllNodesUnusable = false;
             string activeConfig = string.Empty;
             int notificationGeneration = 0;
             try
@@ -5209,7 +5214,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 // A node can look reachable (TCP handshake) and still make xray-core refuse the
                 // config, e.g. an XHTTP node the core cannot start. Walk down the group before
                 // giving up, so RUN does not end on the first broken entry.
-                const int maxStartAttempts = 3;
+                const int maxStartAttempts = 6;
                 for (int startAttempt = 0; ; startAttempt++)
                 {
                     // An empty file left by a subscription refresh must not be "loaded" first:
@@ -5287,7 +5292,10 @@ namespace InvisibleGorillaXRay.Android.Views
                     catch (Exception startFailure)
                     {
                         if (startAttempt + 1 >= maxStartAttempts || !TrySwitchToNextSubscriptionNode(startFailure))
+                        {
+                            markAllNodesUnusable = true;
                             throw;
+                        }
 
                         DiagnosticLog.Write(
                             "MainView.Run",
@@ -5299,7 +5307,9 @@ namespace InvisibleGorillaXRay.Android.Views
             }
             catch (Exception ex)
             {
-                failureMessage = MapExceptionToStatus(ex);
+                failureMessage = markAllNodesUnusable
+                    ? "No working server in this subscription was found. Update the subscription or try another server."
+                    : MapExceptionToStatus(ex);
                 DiagnosticLog.WriteException("MainView.Run", ex);
             }
             finally
