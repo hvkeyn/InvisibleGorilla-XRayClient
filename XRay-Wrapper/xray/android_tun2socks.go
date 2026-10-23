@@ -114,6 +114,9 @@ func StartAndroidTun2Socks(fd C.int, proxyPort C.int, isUdpEnabled C.bool, usern
 
 //export StopAndroidTun2Socks
 func StopAndroidTun2Socks() {
+	// Teardown must never take the app down with it.
+	defer func() { _ = recover() }()
+
 	androidTunMutex.Lock()
 	defer androidTunMutex.Unlock()
 	stopAndroidTunLocked()

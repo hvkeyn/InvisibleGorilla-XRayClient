@@ -1024,7 +1024,17 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             TorSettings existing = current.GetTorSettings();
             EnsureBridgeSets(existing);
-            FlushEditorInto(string.IsNullOrWhiteSpace(loadedSetId) ? bridgeSets.ActiveSetId : loadedSetId);
+
+            // Never overwrite a saved bridge set with an empty editor: the panel is recreated
+            // when the user opens another screen, and an empty text box used to wipe the saved
+            // WebTunnel line on save.
+            string setId = string.IsNullOrWhiteSpace(loadedSetId) ? bridgeSets.ActiveSetId : loadedSetId;
+            string editorText = BridgesInput?.Text ?? string.Empty;
+            TorBridgeSet existingSet = bridgeSets.FindSet(setId);
+            bool editorEmpty = string.IsNullOrWhiteSpace(editorText);
+            bool setHasLines = existingSet != null && existingSet.GetBridgeLines().Count > 0;
+            if (!(editorEmpty && setHasLines))
+                FlushEditorInto(setId);
             return new TorSettings
             {
                 Enabled = TorEnabledToggle.IsChecked == true,

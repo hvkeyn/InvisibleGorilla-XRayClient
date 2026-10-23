@@ -169,6 +169,15 @@ func reportStartFailure(logPath *C.char, stage string, err error) {
 
 //export StopServer
 func StopServer() {
+	// A panic while tearing the core down used to kill the whole app on STOP.
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			stack := make([]byte, 1<<20)
+			length := runtime.Stack(stack, false)
+			fmt.Println("panic on stop:", recovered)
+			_ = os.WriteFile("/tmp/igx-stop-panic.log", []byte(fmt.Sprintf("panic: %v\n%s", recovered, stack[:length])), 0644)
+		}
+	}()
 	serverStopMutex.Lock()
 	stopChannel := serverStopChannel
 	if stopChannel != nil {
