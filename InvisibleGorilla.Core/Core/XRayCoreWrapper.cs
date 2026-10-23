@@ -86,6 +86,20 @@ namespace InvisibleGorillaXRay.Core
 
         [DllImport(LIB_NAME, EntryPoint = "GetTrafficCounters")]
         static extern void GetTrafficCountersNative(out long uplink, out long downlink);
+        public static void SetAssetPath(string path)
+        {
+            try
+            {
+                SetAssetPathNative(path);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("XRayWrapper.SetAssetPath", ex);
+            }
+        }
+
+        [DllImport(LIB_NAME, EntryPoint = "SetAssetPath")]
+        static extern void SetAssetPathNative([MarshalAs(UnmanagedType.LPUTF8Str)] string path);
         public static bool IsFileExists(string path)
         {
             IntPtr pathPtr = StringToUtf8Ptr(path);

@@ -11,7 +11,9 @@ import (
 	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/log"
 	"github.com/xtls/xray-core/app/policy"
+	"github.com/xtls/xray-core/app/dns"
 	"github.com/xtls/xray-core/app/proxyman"
+	"github.com/xtls/xray-core/app/router"
 	appStats "github.com/xtls/xray-core/app/stats"
 	fstats "github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/common/cmdarg"
@@ -82,6 +84,18 @@ func IsFileExists(path *C.char) bool {
 	return err == nil && !info.IsDir()
 }
 
+//export SetAssetPath
+func SetAssetPath(path *C.char) {
+	directory := C.GoString(path)
+	if directory == "" {
+		return
+	}
+
+	// core loads geosite.dat/geoip.dat through this env flag; without it the lookup falls
+	// back to the executable directory (/system/bin on Android) and every rule that uses
+	// geosite:/geoip: fails with "failed to open file: geosite.dat".
+	_ = os.Setenv("xray.location.asset", directory)
+}
 //export LoadConfig
 func LoadConfig(ext *C.char, path *C.char) *C.char {
 	format := C.GoString(ext)
@@ -89,7 +103,11 @@ func LoadConfig(ext *C.char, path *C.char) *C.char {
 
 	config, err := core.LoadConfig(format, file)
 	if err != nil {
-		fmt.Println("error | failed to load config file >", err)
+		message := fmt.Sprintf("failed to load config file > %v", err)
+		fmt.Println("error |", message)
+		if len(file) > 0 {
+			_ = os.WriteFile(file[0]+".loaderr", []byte(message), 0644)
+		}
 		return C.CString("")
 	}
 
@@ -126,7 +144,6 @@ var managementAppMarkers = []string{
 	".commander.",
 	".stats.",
 	".policy.",
-	".observatory.",
 }
 
 // stripManagementApps removes management application configs from a loaded
@@ -205,6 +222,10 @@ func ensureCoreApps(configObj *core.Config) {
 				},
 			},
 		}),
+		// Router/balancer configs from modern subscriptions depend on these two features;
+		// without them the core answers "not all dependencies are resolved" and refuses to start.
+		serial.ToTypedMessage(&dns.Config{}),
+		serial.ToTypedMessage(&router.Config{}),
 	}
 
 	for _, element := range required {

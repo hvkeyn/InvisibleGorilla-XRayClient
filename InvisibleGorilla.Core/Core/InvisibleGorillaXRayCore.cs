@@ -149,8 +149,23 @@ namespace InvisibleGorillaXRay.Core
         /// It is given a temporary ASCII path: Cyrillic names used to come back empty, and older
         /// transport names are rewritten because a config with unknown fields is rejected whole.
         /// </summary>
+        public static string? LastConfigLoadError { get; private set; }
+
+        private static bool assetPathApplied;
+
+        private static void EnsureAssetPath()
+        {
+            if (assetPathApplied)
+                return;
+
+            assetPathApplied = true;
+            try { XRayCoreWrapper.SetAssetPath(Values.Directory.ROOT); }
+            catch (Exception ex) { DiagnosticLog.WriteException("Config.SetAssetPath", ex); }
+        }
+
         private static string LoadConfigThroughCore(string path, string format)
         {
+            EnsureAssetPath();
             string tempPath = null;
             try
             {
@@ -173,7 +188,22 @@ namespace InvisibleGorillaXRay.Core
                         return converted;
                     }
 
-                    DiagnosticLog.Write("Config", $"Core loader returned nothing for {System.IO.Path.GetFileName(path)}");
+                    // Read why the core refused the file before the temp copy is deleted, and log
+                    // enough of the payload to see which field it choked on.
+                    string reason = "";
+                    try
+                    {
+                        string errorPath = tempPath + ".loaderr";
+                        if (System.IO.File.Exists(errorPath))
+                            reason = System.IO.File.ReadAllText(errorPath).Trim();
+                    }
+                    catch { }
+
+                    LastConfigLoadError = reason;
+                    string head = sanitized.Length > 700 ? sanitized.Substring(0, 700) : sanitized;
+                    DiagnosticLog.Write(
+                        "Config",
+                        $"Core loader rejected {System.IO.Path.GetFileName(path)}: {reason} || payload={head}");
                 }
             }
             catch (Exception ex)
