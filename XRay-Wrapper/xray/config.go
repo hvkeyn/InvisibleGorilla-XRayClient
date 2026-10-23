@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/log"
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common/cmdarg"
@@ -137,6 +138,37 @@ func convertLogLevelToSeverity(logLevel *C.char) clog.Severity {
 		return clog.Severity_Error
 	default:
 		return clog.Severity_Unknown
+	}
+}
+
+// ensureCoreApps makes sure the feature managers the tunnel needs are present.
+// Subscription configs often list their own apps (log, dns, router, observatory)
+// and omit the proxyman/dispatcher pair, and a non-empty app list disables the
+// defaults inside core.New: the inbound manager then stays nil and the core
+// panics with "interface is nil, not inbound.Manager" on start.
+func ensureCoreApps(configObj *core.Config) {
+	if configObj == nil {
+		return
+	}
+
+	required := []*serial.TypedMessage{
+		serial.ToTypedMessage(&dispatcher.Config{}),
+		serial.ToTypedMessage(&proxyman.InboundConfig{}),
+		serial.ToTypedMessage(&proxyman.OutboundConfig{}),
+	}
+
+	for _, element := range required {
+		exists := false
+		for _, app := range configObj.App {
+			if app != nil && app.Type == element.Type {
+				exists = true
+				break
+			}
+		}
+
+		if !exists {
+			configObj.App = append(configObj.App, element)
+		}
 	}
 }
 
