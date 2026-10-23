@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
@@ -109,6 +110,40 @@ namespace InvisibleGorillaXRay.Core
             return LoadConfig(config.Path);
         }
 
+        /// <summary>
+        /// Modern subscription configs ship apps and balancer strategies that older cores do not
+        /// know (observatory "burst", least-load balancer). The core then refuses to start the
+        /// whole config. Drop just those sections so the nodes still work.
+        /// </summary>
+        /// <summary>
+        /// Modern subscription configs use apps and balancer strategies that this core build does
+        /// not have (observatory "burst", least-load balancer). Removing only the app makes the
+        /// core panic with "interface is nil, not inbound.Manager", so such configs are reduced to
+        /// a single working proxy with direct/block outbounds.
+        /// </summary>
+        private static bool UsesUnsupportedTransport(Newtonsoft.Json.Linq.JToken outbound)
+        {
+            try
+            {
+                string encoded = outbound?["sender_settings"]?["value"]?.ToString();
+                if (string.IsNullOrWhiteSpace(encoded))
+                    return false;
+
+                byte[] raw = Convert.FromBase64String(encoded);
+                string text = System.Text.Encoding.UTF8.GetString(raw);
+                return text.IndexOf("splithttp", StringComparison.OrdinalIgnoreCase) >= 0
+                    || text.IndexOf("xhttp", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        /// <summary>
+        /// The core is kept current, so configs written for newer xray builds load as-is. The
+        /// hook stays so a future core downgrade has one place to adapt configs.
+        /// </summary>
+        private static string StripUnsupportedCoreSections(string json) => json;
         public Status LoadConfig(string path)
         {
             if (OpenFluxProfilePaths.IsMarker(path))
@@ -124,7 +159,40 @@ namespace InvisibleGorillaXRay.Core
             }
 
             string format = XRayCoreWrapper.GetConfigFormat(path);
-            string file = XRayCoreWrapper.LoadConfig(format, path);
+            string file;
+
+            // The native loader receives the path as a C string and returned an empty config for
+            // node files with Cyrillic names, which surfaced as "invalid configuration". Plain
+            // JSON files can be read directly; other formats still go through the wrapper.
+            if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) && System.IO.File.Exists(path))
+            {
+                try
+                {
+                    file = System.IO.File.ReadAllText(path);
+                    if (file.Length > 0 && file[0] == '\uFEFF')
+                        file = file.Substring(1);
+                    DiagnosticLog.Write("Config", $"Read {System.IO.Path.GetFileName(path)} directly: {file.Length} bytes");
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("Config.ReadDirect", ex);
+                    file = XRayCoreWrapper.LoadConfig(format, path);
+                }
+            }
+            else
+            {
+                file = XRayCoreWrapper.LoadConfig(format, path);
+            }
+
+            // Older converters wrote the legacy transport name; current cores only register
+            // "xhttp", and a config with "splithttp" makes the native core panic.
+            if (!string.IsNullOrWhiteSpace(file) && file.IndexOf("splithttp", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                file = file.Replace("\"splithttp\"", "\"xhttp\"");
+                DiagnosticLog.Write("Config", "Renamed splithttp -> xhttp");
+            }
+
+            file = StripUnsupportedCoreSections(file);
 
             if (!JsonUtility.IsJsonValid(file))
             {

@@ -832,8 +832,26 @@ namespace InvisibleGorillaXRay.Android.Views
                 if (string.IsNullOrWhiteSpace(replacementPath))
                 {
                     // Nothing usable next to the broken file: drop it so the app stops
-                    // offering an empty node.
+                    // offering an empty node, then fall back to any other usable config.
                     try { System.IO.File.Delete(current); } catch { }
+
+                    string rootConfigs = System.IO.Path.GetFullPath(Values.Directory.CONFIGS);
+                    if (System.IO.Directory.Exists(rootConfigs))
+                    {
+                        replacementPath = System.IO.Directory
+                            .GetFiles(rootConfigs, "*.json")
+                            .Where(path => HasConfigPayload(path))
+                            .OrderBy(path => path.Length)
+                            .FirstOrDefault();
+                    }
+
+                    if (string.IsNullOrWhiteSpace(replacementPath))
+                        return;
+
+                    settingsHandler.UpdateCurrentConfigPath(replacementPath);
+                    DiagnosticLog.Write(
+                        "MainView",
+                        $"Subscription has no usable nodes; switched to {System.IO.Path.GetFileNameWithoutExtension(replacementPath)}");
                     return;
                 }
 
@@ -5106,6 +5124,9 @@ namespace InvisibleGorillaXRay.Android.Views
                     }
 
                     activeConfig = configStatus.Content?.ToString() ?? string.Empty;
+                DiagnosticLog.Write(
+                    "MainView.Run",
+                    $"Start attempt {startAttempt + 1}: config={settingsHandler.UserSettings.GetCurrentConfigPath()}, bytes={activeConfig.Length}");
                     notificationGeneration = AndroidConnectionNotificationManager.ShowStarting(
                         BuildConnectionNotificationSession(activeConfig, notificationText));
 
@@ -5187,6 +5208,26 @@ namespace InvisibleGorillaXRay.Android.Views
                 if (started)
                     LogGoidaConnectionEvent(connected: false);
                 ResumeGoidaProbingAfterConnection();
+
+                if (!string.IsNullOrWhiteSpace(failureMessage))
+                {
+                    try
+                    {
+                        global::Android.Content.Context? logContext = global::Android.App.Application.Context;
+                        if (logContext != null)
+                        {
+                            AndroidLogShareService.SaveResult snapshot =
+                                AndroidLogShareService.SaveDiagnosticLogAsync(logContext).GetAwaiter().GetResult();
+                            DiagnosticLog.Write(
+                                "MainView.Run",
+                                $"Auto log snapshot: {snapshot.Kind} {snapshot.Path} {snapshot.ErrorMessage}");
+                        }
+                    }
+                    catch (Exception snapshotException)
+                    {
+                        DiagnosticLog.WriteException("MainView.Run.AutoLog", snapshotException);
+                    }
+                }
 
                 if (lockHeld)
                 {
