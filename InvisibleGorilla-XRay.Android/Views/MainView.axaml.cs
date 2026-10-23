@@ -803,7 +803,7 @@ namespace InvisibleGorillaXRay.Android.Views
         /// </summary>
         private bool isRepairingCurrentConfig;
 
-        private void RepairCurrentConfigIfEmpty()
+        private void RepairCurrentConfigIfEmpty(bool force = false)
         {
             if (isRepairingCurrentConfig)
                 return;
@@ -825,7 +825,7 @@ namespace InvisibleGorillaXRay.Android.Views
 
                 string replacementPath = System.IO.Directory
                     .GetFiles(directory, "*.json")
-                    .Where(path => HasConfigPayload(path))
+                    .Where(path => HasConfigPayload(path) && !IsConfigUnusable(path))
                     .OrderBy(path => path.Length)
                     .FirstOrDefault();
 
@@ -840,7 +840,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     {
                         replacementPath = System.IO.Directory
                             .GetFiles(rootConfigs, "*.json")
-                            .Where(path => HasConfigPayload(path))
+                            .Where(path => HasConfigPayload(path) && !IsConfigUnusable(path))
                             .OrderBy(path => path.Length)
                             .FirstOrDefault();
                     }
@@ -4690,7 +4690,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 ? new List<Config>()
                 : configs
                     .Where(config => !SubscriptionServerEndpoint.IsProviderNotice(config.Name))
-                    .Where(config => HasConfigPayload(config.Path))
+                    .Where(config => HasConfigPayload(config.Path) && !IsConfigUnusable(config.Path))
                     .ToList();
             if (configs.Count > 0 && usable.Count == 0)
             {
@@ -4793,6 +4793,102 @@ namespace InvisibleGorillaXRay.Android.Views
                 return false;
             }
         }
+        private static string StartMarkerPath => System.IO.Path.Combine(
+            System.IO.Path.GetFullPath(Values.Directory.CONFIGS), ".starting");
+
+        private static void MarkStartInProgress(string configPath)
+        {
+            try
+            {
+                System.IO.File.WriteAllText(StartMarkerPath, configPath ?? string.Empty);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.MarkStart", ex);
+            }
+        }
+
+        private static void ClearStartMarker()
+        {
+            try
+            {
+                if (System.IO.File.Exists(StartMarkerPath))
+                    System.IO.File.Delete(StartMarkerPath);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.ClearStartMarker", ex);
+            }
+        }
+
+        /// <summary>
+        /// The native core can abort the process on a config it cannot handle. The marker written
+        /// before the start tells the next launch which node killed the app, so it is skipped
+        /// instead of crash-looping.
+        /// </summary>
+        private void RecoverFromNativeCrash()
+        {
+            try
+            {
+                if (!System.IO.File.Exists(StartMarkerPath))
+                    return;
+
+                string crashedPath = System.IO.File.ReadAllText(StartMarkerPath).Trim();
+                System.IO.File.Delete(StartMarkerPath);
+                if (string.IsNullOrWhiteSpace(crashedPath))
+                    return;
+
+                DiagnosticLog.Write("MainView", $"Previous start aborted by the core: {crashedPath}");
+                MarkConfigUnusable(crashedPath);
+
+                string current = settingsHandler.UserSettings.GetCurrentConfigPath();
+                if (string.Equals(current, crashedPath, StringComparison.OrdinalIgnoreCase))
+                    RepairCurrentConfigIfEmpty(force: true);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.RecoverFromNativeCrash", ex);
+            }
+        }
+
+        private static readonly HashSet<string> unusableConfigs = new(StringComparer.OrdinalIgnoreCase);
+
+        private static string UnusableListPath => System.IO.Path.Combine(
+            System.IO.Path.GetFullPath(Values.Directory.CONFIGS), ".unusable");
+
+        private static void MarkConfigUnusable(string path)
+        {
+            try
+            {
+                unusableConfigs.Add(path);
+                System.IO.File.AppendAllText(UnusableListPath, path + Environment.NewLine);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.MarkConfigUnusable", ex);
+            }
+        }
+
+        private static bool IsConfigUnusable(string path)
+        {
+            try
+            {
+                if (unusableConfigs.Count == 0 && System.IO.File.Exists(UnusableListPath))
+                {
+                    foreach (string line in System.IO.File.ReadAllLines(UnusableListPath))
+                    {
+                        string trimmed = line.Trim();
+                        if (trimmed.Length > 0)
+                            unusableConfigs.Add(trimmed);
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return unusableConfigs.Contains(path ?? string.Empty);
+        }
         private bool TrySwitchToNextSubscriptionNode(Exception startFailure)
         {
             try
@@ -4815,7 +4911,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 List<Config> candidates = configs
                     .Where(config => !subscriptionFailoverTried.Contains(config.Path))
                     .Where(config => !SubscriptionServerEndpoint.IsProviderNotice(config.Name))
-                    .Where(config => HasConfigPayload(config.Path))
+                    .Where(config => HasConfigPayload(config.Path) && !IsConfigUnusable(config.Path))
                     .ToList();
                 if (candidates.Count == 0)
                     return false;
@@ -5166,8 +5262,10 @@ namespace InvisibleGorillaXRay.Android.Views
 
                     try
                     {
+                        MarkStartInProgress(settingsHandler.UserSettings.GetCurrentConfigPath());
                         core.Run(activeConfig, () =>
                         {
+                            ClearStartMarker();
                             PostConnectionUi(epoch, () =>
                             {
                                 SetConnectionState(ConnectionState.Running);
