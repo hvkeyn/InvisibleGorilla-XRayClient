@@ -136,7 +136,7 @@ namespace InvisibleGorillaXRay.Mac.Factories
                             : "-";
                         return string.Format(
                             LocalizationService.GetTerm("Lang.Goida.ServerListNameWithNode"),
-                            activeNode.DisplayName) + $" В· {latency}";
+                            activeNode.DisplayName) + $" · {latency}";
                     }
 
                     return LocalizationService.GetTerm("Lang.Goida.ServerListName");
