@@ -1003,6 +1003,13 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void ApplyTorEditorPanel()
         {
+            // Called from the run worker as well: touching controls off the UI thread throws
+            // "Call from invalid thread", so marshal and return.
+            if (!Dispatcher.UIThread.CheckAccess())
+            {
+                Dispatcher.UIThread.Post(ApplyTorEditorPanel);
+                return;
+            }
             Border? panel = this.FindControl<Border>("TorEditorPanel");
             if (panel == null)
             {
@@ -1566,7 +1573,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 StringBuilder metaBuilder = new(app.PackageName);
                 if (app.IsSystemApp)
                 {
-                    metaBuilder.Append(" вЂў ")
+                    metaBuilder.Append(" Р Р†Р вЂљРЎС› ")
                         .Append(Localize("Lang.AppRules.SystemBadge"));
                 }
 
@@ -2450,7 +2457,7 @@ namespace InvisibleGorillaXRay.Android.Views
             if (value.Length == 0)
                 return false;
 
-            foreach (string marker in new[] { "СЂРѕСЃСЃРё", "СЂС„", "russia", "РјРѕСЃРєРІ", "РІСЃРµ РѕРїРµСЂР°С‚РѕСЂС‹", "РёРіСЂРѕРІРѕР№" })
+            foreach (string marker in new[] { "Р РЋР вЂљР В РЎвЂўР РЋР С“Р РЋР С“Р В РЎвЂ", "Р РЋР вЂљР РЋРІР‚С›", "russia", "Р В РЎВР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р вЂ ", "Р В Р вЂ Р РЋР С“Р В Р’Вµ Р В РЎвЂўР В РЎвЂ”Р В Р’ВµР РЋР вЂљР В Р’В°Р РЋРІР‚С™Р В РЎвЂўР РЋР вЂљР РЋРІР‚в„–", "Р В РЎвЂР В РЎвЂ“Р РЋР вЂљР В РЎвЂўР В Р вЂ Р В РЎвЂўР В РІвЂћвЂ“" })
             {
                 if (value.Contains(marker))
                     return true;
@@ -2559,7 +2566,7 @@ namespace InvisibleGorillaXRay.Android.Views
             if (string.IsNullOrWhiteSpace(name))
                 return null;
 
-            int separator = name.IndexOf(" В· ", StringComparison.Ordinal);
+            int separator = name.IndexOf(" Р вЂ™Р’В· ", StringComparison.Ordinal);
             if (separator <= 0)
                 return null;
 
@@ -3191,7 +3198,7 @@ namespace InvisibleGorillaXRay.Android.Views
             {
                 string suffix = currentConfig.Group == GroupType.SUBSCRIPTION
                     && settingsHandler.UserSettings.GetAutoSelectBest()
-                    ? "  В·  auto"
+                    ? "  Р вЂ™Р’В·  auto"
                     : string.Empty;
                 currentConfigText = currentConfig.Group == GroupType.SUBSCRIPTION
                     ? $"{Localize("Lang.Window.Server.Subscriptions")} / {DisplayConfigName(currentConfig.Name)}{suffix}"
@@ -3793,7 +3800,7 @@ namespace InvisibleGorillaXRay.Android.Views
             else
                 Dispatcher.UIThread.Post(RequestStop);
 
-            // Never sleep on the Android/Avalonia UI thread вЂ” that is the ANR dialog.
+            // Never sleep on the Android/Avalonia UI thread Р Р†Р вЂљРІР‚Сњ that is the ANR dialog.
             if (Dispatcher.UIThread.CheckAccess())
                 return false;
 
@@ -3954,7 +3961,7 @@ namespace InvisibleGorillaXRay.Android.Views
             if (!tracking)
             {
                 ConnectionInfoModeText.Text = string.Empty;
-                ConnectionInfoIpText.Text = "вЂ”";
+                ConnectionInfoIpText.Text = "Р Р†Р вЂљРІР‚Сњ";
                 ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Idle");
                 return;
             }
@@ -4184,7 +4191,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     if (!string.IsNullOrWhiteSpace(ConnectionInfoIpText.Text)
                         && !string.Equals(ConnectionInfoIpText.Text, Localize("Lang.ConnectionInfo.Checking"), StringComparison.Ordinal)
                         && !string.Equals(ConnectionInfoIpText.Text, Localize("Lang.ConnectionInfo.Unknown"), StringComparison.Ordinal)
-                        && !string.Equals(ConnectionInfoIpText.Text, "вЂ”", StringComparison.Ordinal))
+                        && !string.Equals(ConnectionInfoIpText.Text, "Р Р†Р вЂљРІР‚Сњ", StringComparison.Ordinal))
                         return;
                     ApplyOpenFluxConnectedWithoutLocation();
                     return;
@@ -4248,7 +4255,7 @@ namespace InvisibleGorillaXRay.Android.Views
             // The ISO code is readable on every device.
             string flag = string.IsNullOrWhiteSpace(info.CountryCode)
                 ? string.Empty
-                : $"{info.CountryCode.Trim().ToUpperInvariant()} В· ";
+                : $"{info.CountryCode.Trim().ToUpperInvariant()} Р вЂ™Р’В· ";
             string place = !string.IsNullOrWhiteSpace(info.PlaceLine) ? info.PlaceLine : info.CountryName;
             string countrySuffix = !string.IsNullOrWhiteSpace(info.PlaceLine) && !string.IsNullOrWhiteSpace(info.CountryName)
                 ? $"\n{info.CountryName}"
@@ -4256,7 +4263,7 @@ namespace InvisibleGorillaXRay.Android.Views
             ConnectionInfoLocationText.Text = string.IsNullOrWhiteSpace(place)
                 ? string.Empty
                 : $"{flag}{place}{countrySuffix}";
-            ConnectionInfoOrgText.Text = string.IsNullOrWhiteSpace(info.Org) ? "вЂ”" : info.Org;
+            ConnectionInfoOrgText.Text = string.IsNullOrWhiteSpace(info.Org) ? "Р Р†Р вЂљРІР‚Сњ" : info.Org;
 
             if (!isConnectionInfoConnected)
             {
@@ -4625,7 +4632,7 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             string subtitle = LocalizeFormat("Lang.Tor.Profile.Subtitle", DescribeBridgeShort(profile.BridgeType));
             if (profile.LastLatencyMs >= 0)
-                subtitle += $" В· {profile.LastLatencyMs} ms";
+                subtitle += $" Р вЂ™Р’В· {profile.LastLatencyMs} ms";
             return subtitle;
         }
 
@@ -5584,7 +5591,7 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             ApplyConnectionModeLine();
             ConnectionInfoDotControl.Background = AvailabilityPendingBrush;
-            ConnectionInfoIpText.Text = "вЂ”";
+            ConnectionInfoIpText.Text = "Р Р†Р вЂљРІР‚Сњ";
             ConnectionInfoLocationText.Text = string.Empty;
             ConnectionInfoOrgText.Text = string.Empty;
             ConnectionInfoVerdictText.Text = Localize("Lang.OpenFlux.Status.WaitingPeer");
@@ -6244,7 +6251,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private bool ApplyBridgesFromSmartImport(List<string> bridgeLines, BridgeType bridgeType)
         {
             // Create a switchable Tor bridge profile (a server-list entry) from the pasted bridges,
-            // then select it so the app immediately routes through it вЂ” just like pasting a VLESS key.
+            // then select it so the app immediately routes through it Р Р†Р вЂљРІР‚Сњ just like pasting a VLESS key.
             string profilePath = CreateTorBridgeProfile(bridgeType, bridgeLines);
 
             if (!string.IsNullOrWhiteSpace(profilePath))
