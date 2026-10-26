@@ -339,6 +339,10 @@ namespace InvisibleGorillaXRay.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
         public List<string> BridgeLines;
 
+        // User-facing name of the saved list; empty keeps the generated description.
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public string Name;
+
         // Built-in shortcut that owns this list, such as "snowflake" or "snowflake-amp".
         // Empty for a list the user saved themselves.
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
@@ -347,6 +351,7 @@ namespace InvisibleGorillaXRay.Models
         public TorBridgeSet()
         {
             Id = "";
+            Name = "";
             BridgeType = BridgeType.OBFS4;
             BridgeLines = new List<string>();
             Origin = "";
@@ -362,6 +367,7 @@ namespace InvisibleGorillaXRay.Models
             return new TorBridgeSet
             {
                 Id = Id ?? "",
+                Name = Name ?? "",
                 BridgeType = BridgeType,
                 BridgeLines = GetBridgeLines(),
                 Origin = Origin ?? ""

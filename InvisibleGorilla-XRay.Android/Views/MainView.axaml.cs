@@ -1134,11 +1134,42 @@ namespace InvisibleGorillaXRay.Android.Views
             string typeName = BridgeTypeOptions.TryGetValue(set.BridgeType, out string name)
                 ? name
                 : set.BridgeType.ToString();
-            int count = set.GetBridgeLines().Count;
+
+            List<string> lines = set.GetBridgeLines();
+            string label = string.IsNullOrWhiteSpace(set.Name)
+                ? BuildSetLabel(typeName, lines)
+                : set.Name;
+
             int ordinal = bridgeSets.SetOrdinal(set);
-            if (ordinal > 0)
-                return LocalizeFormat("Lang.Tor.Set.Item.Numbered", typeName, count, ordinal);
-            return LocalizeFormat("Lang.Tor.Set.Item", typeName, count);
+            return ordinal > 0 ? label + " - " + ordinal : label;
+        }
+
+        // A saved list is named after its address, not after a line count.
+        private static string BuildSetLabel(string typeName, List<string> lines)
+        {
+            foreach (string raw in lines)
+            {
+                if (string.IsNullOrWhiteSpace(raw))
+                    continue;
+
+                string line = raw.Trim();
+                if (line.StartsWith("Bridge ", StringComparison.OrdinalIgnoreCase))
+                    line = line.Substring("Bridge ".Length).TrimStart();
+
+                string[] parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 2)
+                    continue;
+
+                string host = parts[1];
+                int colon = host.IndexOf(':');
+                if (colon > 0)
+                    host = host.Substring(0, colon);
+
+                if (host.Length > 0)
+                    return typeName + " - " + host;
+            }
+
+            return typeName;
         }
 
         private void OnBridgeSetSelectionChanged(object? sender, SelectionChangedEventArgs e)

@@ -335,6 +335,10 @@ namespace InvisibleGorillaXRay.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
         public string Id;
 
+        // User-facing name of the saved list; empty keeps the generated description.
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public string Name;
+
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
         public BridgeType BridgeType;
 
@@ -349,6 +353,7 @@ namespace InvisibleGorillaXRay.Models
         public TorBridgeSet()
         {
             Id = "";
+            Name = "";
             BridgeType = BridgeType.OBFS4;
             BridgeLines = new List<string>();
             Origin = "";
@@ -364,6 +369,7 @@ namespace InvisibleGorillaXRay.Models
             return new TorBridgeSet
             {
                 Id = Id ?? "",
+                Name = Name ?? "",
                 BridgeType = BridgeType,
                 BridgeLines = GetBridgeLines(),
                 Origin = Origin ?? ""
