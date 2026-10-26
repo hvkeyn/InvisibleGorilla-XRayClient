@@ -22,6 +22,8 @@ namespace InvisibleGorillaXRay.Core
 
     public class InvisibleGorillaXRayCore
     {
+        private volatile bool stopRequested;
+
         private Func<Config> getConfig;
         private Func<Mode> getMode;
         private Func<Protocol> getProtocol;
@@ -334,6 +336,7 @@ namespace InvisibleGorillaXRay.Core
         }
         public void Run(string config, Action? onReady = null)
         {
+            stopRequested = false;
             DiagnosticLog.Clear();
 
             if (IsOpenFluxProfile())
@@ -499,11 +502,14 @@ namespace InvisibleGorillaXRay.Core
 
             DiagnosticLog.Write("Run", "Waiting for server thread to complete (Join)...");
 
-            // A native stop that never returns used to freeze the whole app on STOP (the log
-            // simply ended here). Wait a bounded time, then finish the teardown anyway.
-            if (!serverThread.Join(TimeSpan.FromSeconds(8)))
+            // The join is the session itself: wait while the server runs, and only after a stop
+            // request bound the wait so a stuck native teardown cannot freeze the app.
+            while (!stopRequested && serverThread.IsAlive)
+                serverThread.Join(200);
+
+            if (serverThread.IsAlive && !serverThread.Join(TimeSpan.FromSeconds(8)))
             {
-                DiagnosticLog.Write("Run", "Server thread did not finish in 8s; continuing with the stop.");
+                DiagnosticLog.Write("Run", "Server thread did not finish 8s after the stop; continuing.");
             }
             else
             {
@@ -610,6 +616,7 @@ namespace InvisibleGorillaXRay.Core
 
         public void Stop()
         {
+            stopRequested = true;
             // OpenFlux first: StopServer is a no-op for that mode but can block native
             // tun2socks teardown and never reach the sidecar kill.
             long stopStartedMs = Environment.TickCount64;

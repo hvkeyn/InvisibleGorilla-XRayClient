@@ -21,6 +21,8 @@ namespace InvisibleGorillaXRay.Core
 
     public class InvisibleGorillaXRayCore
     {
+        private volatile bool stopRequested;
+
         private Func<Config> getConfig;
         private Func<Mode> getMode;
         private Func<Protocol> getProtocol;
@@ -189,6 +191,7 @@ namespace InvisibleGorillaXRay.Core
 
         public void Run(string config, Action? onReady = null)
         {
+            stopRequested = false;
             DiagnosticLog.Clear();
             cancelRequested = false;
             torOnlySession = false;
@@ -441,10 +444,12 @@ namespace InvisibleGorillaXRay.Core
 
             DiagnosticLog.Write("Run", "Waiting for server thread to complete (Join)...");
 
-            // A native stop that never returns used to freeze the whole app on STOP.
-            if (!serverThread.Join(TimeSpan.FromSeconds(8)))
+            while (!stopRequested && serverThread.IsAlive)
+                serverThread.Join(200);
+
+            if (serverThread.IsAlive && !serverThread.Join(TimeSpan.FromSeconds(8)))
             {
-                DiagnosticLog.Write("Run", "Server thread did not finish in 8s; continuing with the stop.");
+                DiagnosticLog.Write("Run", "Server thread did not finish 8s after the stop; continuing.");
             }
             else
             {
@@ -707,6 +712,7 @@ namespace InvisibleGorillaXRay.Core
 
         public void Stop()
         {
+            stopRequested = true;
             cancelRequested = true;
             torOnlySession = false;
             int runId = Volatile.Read(ref activeRunId);

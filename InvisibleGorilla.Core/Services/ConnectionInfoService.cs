@@ -172,7 +172,12 @@ namespace InvisibleGorillaXRay.Services
                 if (!response.IsSuccessStatusCode)
                     return new ConnectionInfo { Ok = false, Error = $"HTTP {(int)response.StatusCode}" };
 
-                string payload = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                // Always decode as UTF-8: geo providers return UTF-8 even when the header claims
+                // another charset, which turned "Санкт-Петербург" into mojibake in the UI.
+                byte[] payloadBytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+                string payload = System.Text.Encoding.UTF8.GetString(payloadBytes);
+                if (payload.IndexOf('\uFFFD') >= 0)
+                    payload = System.Text.Encoding.GetEncoding(28591).GetString(payloadBytes);
                 if (TryParseTrace(payload, out ConnectionInfo trace))
                     return trace;
 
