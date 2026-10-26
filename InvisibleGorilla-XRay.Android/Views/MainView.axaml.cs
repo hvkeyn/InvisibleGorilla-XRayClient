@@ -931,6 +931,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private bool suppressBridgeTypeLoad;
         private bool bridgeTypeHooked;
         private string loadedSetId = "";
+        private string loadedEditorText = "";
         private TorSettings bridgeSets;
 
         private void LoadTorSettingsIntoControls(UserSettings settings)
@@ -1027,11 +1028,17 @@ namespace InvisibleGorillaXRay.Android.Views
             // WebTunnel line on save.
             string setId = string.IsNullOrWhiteSpace(loadedSetId) ? bridgeSets.ActiveSetId : loadedSetId;
             string editorText = BridgesInput?.Text ?? string.Empty;
-            TorBridgeSet existingSet = bridgeSets.FindSet(setId);
-            bool editorEmpty = string.IsNullOrWhiteSpace(editorText);
-            bool setHasLines = existingSet != null && existingSet.GetBridgeLines().Count > 0;
-            if (!(editorEmpty && setHasLines))
-                FlushEditorInto(setId);
+
+            // Only a real edit may reach the stored set: the panel is rebuilt on every screen
+            // switch, and flushing an untouched editor erased the saved WebTunnel line.
+            if (!string.Equals(editorText, loadedEditorText, StringComparison.Ordinal))
+            {
+                TorBridgeSet existingSet = bridgeSets.FindSet(setId);
+                bool editorEmpty = string.IsNullOrWhiteSpace(editorText);
+                bool setHasLines = existingSet != null && existingSet.GetBridgeLines().Count > 0;
+                if (!(editorEmpty && setHasLines))
+                    FlushEditorInto(setId);
+            }
             return new TorSettings
             {
                 Enabled = TorEnabledToggle.IsChecked == true,
@@ -1091,6 +1098,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 int index = sets.FindIndex(set => string.Equals(set.Id, bridgeSets.ActiveSetId, StringComparison.Ordinal));
                 BridgeSetsSelector.SelectedIndex = index < 0 ? 0 : index;
                 loadedSetId = bridgeSets.ActiveSetId;
+                loadedEditorText = BridgesInput?.Text ?? string.Empty;
             }
             finally
             {
@@ -1558,7 +1566,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 StringBuilder metaBuilder = new(app.PackageName);
                 if (app.IsSystemApp)
                 {
-                    metaBuilder.Append(" • ")
+                    metaBuilder.Append(" вЂў ")
                         .Append(Localize("Lang.AppRules.SystemBadge"));
                 }
 
@@ -2442,7 +2450,7 @@ namespace InvisibleGorillaXRay.Android.Views
             if (value.Length == 0)
                 return false;
 
-            foreach (string marker in new[] { "росси", "рф", "russia", "москв", "все операторы", "игровой" })
+            foreach (string marker in new[] { "СЂРѕСЃСЃРё", "СЂС„", "russia", "РјРѕСЃРєРІ", "РІСЃРµ РѕРїРµСЂР°С‚РѕСЂС‹", "РёРіСЂРѕРІРѕР№" })
             {
                 if (value.Contains(marker))
                     return true;
@@ -2551,7 +2559,7 @@ namespace InvisibleGorillaXRay.Android.Views
             if (string.IsNullOrWhiteSpace(name))
                 return null;
 
-            int separator = name.IndexOf(" · ", StringComparison.Ordinal);
+            int separator = name.IndexOf(" В· ", StringComparison.Ordinal);
             if (separator <= 0)
                 return null;
 
@@ -3183,7 +3191,7 @@ namespace InvisibleGorillaXRay.Android.Views
             {
                 string suffix = currentConfig.Group == GroupType.SUBSCRIPTION
                     && settingsHandler.UserSettings.GetAutoSelectBest()
-                    ? "  ·  auto"
+                    ? "  В·  auto"
                     : string.Empty;
                 currentConfigText = currentConfig.Group == GroupType.SUBSCRIPTION
                     ? $"{Localize("Lang.Window.Server.Subscriptions")} / {DisplayConfigName(currentConfig.Name)}{suffix}"
@@ -3785,7 +3793,7 @@ namespace InvisibleGorillaXRay.Android.Views
             else
                 Dispatcher.UIThread.Post(RequestStop);
 
-            // Never sleep on the Android/Avalonia UI thread — that is the ANR dialog.
+            // Never sleep on the Android/Avalonia UI thread вЂ” that is the ANR dialog.
             if (Dispatcher.UIThread.CheckAccess())
                 return false;
 
@@ -3946,7 +3954,7 @@ namespace InvisibleGorillaXRay.Android.Views
             if (!tracking)
             {
                 ConnectionInfoModeText.Text = string.Empty;
-                ConnectionInfoIpText.Text = "—";
+                ConnectionInfoIpText.Text = "вЂ”";
                 ConnectionInfoVerdictText.Text = Localize("Lang.ConnectionInfo.Idle");
                 return;
             }
@@ -4176,7 +4184,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     if (!string.IsNullOrWhiteSpace(ConnectionInfoIpText.Text)
                         && !string.Equals(ConnectionInfoIpText.Text, Localize("Lang.ConnectionInfo.Checking"), StringComparison.Ordinal)
                         && !string.Equals(ConnectionInfoIpText.Text, Localize("Lang.ConnectionInfo.Unknown"), StringComparison.Ordinal)
-                        && !string.Equals(ConnectionInfoIpText.Text, "—", StringComparison.Ordinal))
+                        && !string.Equals(ConnectionInfoIpText.Text, "вЂ”", StringComparison.Ordinal))
                         return;
                     ApplyOpenFluxConnectedWithoutLocation();
                     return;
@@ -4240,7 +4248,7 @@ namespace InvisibleGorillaXRay.Android.Views
             // The ISO code is readable on every device.
             string flag = string.IsNullOrWhiteSpace(info.CountryCode)
                 ? string.Empty
-                : $"{info.CountryCode.Trim().ToUpperInvariant()} · ";
+                : $"{info.CountryCode.Trim().ToUpperInvariant()} В· ";
             string place = !string.IsNullOrWhiteSpace(info.PlaceLine) ? info.PlaceLine : info.CountryName;
             string countrySuffix = !string.IsNullOrWhiteSpace(info.PlaceLine) && !string.IsNullOrWhiteSpace(info.CountryName)
                 ? $"\n{info.CountryName}"
@@ -4248,7 +4256,7 @@ namespace InvisibleGorillaXRay.Android.Views
             ConnectionInfoLocationText.Text = string.IsNullOrWhiteSpace(place)
                 ? string.Empty
                 : $"{flag}{place}{countrySuffix}";
-            ConnectionInfoOrgText.Text = string.IsNullOrWhiteSpace(info.Org) ? "—" : info.Org;
+            ConnectionInfoOrgText.Text = string.IsNullOrWhiteSpace(info.Org) ? "вЂ”" : info.Org;
 
             if (!isConnectionInfoConnected)
             {
@@ -4617,7 +4625,7 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             string subtitle = LocalizeFormat("Lang.Tor.Profile.Subtitle", DescribeBridgeShort(profile.BridgeType));
             if (profile.LastLatencyMs >= 0)
-                subtitle += $" · {profile.LastLatencyMs} ms";
+                subtitle += $" В· {profile.LastLatencyMs} ms";
             return subtitle;
         }
 
@@ -5305,6 +5313,11 @@ namespace InvisibleGorillaXRay.Android.Views
                     return;
 
                 RefreshBuiltinTorBridgesIfSelected();
+
+                // The Tor flag may survive from an earlier Tor profile: re-evaluate it against
+                // the config that is about to start, so a normal node is not tunnelled via Tor.
+                ApplyTorStateForSelectedConfig(settingsHandler.UserSettings.GetCurrentConfigPath());
+
                 if (!TryFailoverSubscriptionBlock(epoch, out string blockedStatus))
                 {
                     failureMessage = blockedStatus;
@@ -5571,7 +5584,7 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             ApplyConnectionModeLine();
             ConnectionInfoDotControl.Background = AvailabilityPendingBrush;
-            ConnectionInfoIpText.Text = "—";
+            ConnectionInfoIpText.Text = "вЂ”";
             ConnectionInfoLocationText.Text = string.Empty;
             ConnectionInfoOrgText.Text = string.Empty;
             ConnectionInfoVerdictText.Text = Localize("Lang.OpenFlux.Status.WaitingPeer");
@@ -6231,7 +6244,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private bool ApplyBridgesFromSmartImport(List<string> bridgeLines, BridgeType bridgeType)
         {
             // Create a switchable Tor bridge profile (a server-list entry) from the pasted bridges,
-            // then select it so the app immediately routes through it — just like pasting a VLESS key.
+            // then select it so the app immediately routes through it вЂ” just like pasting a VLESS key.
             string profilePath = CreateTorBridgeProfile(bridgeType, bridgeLines);
 
             if (!string.IsNullOrWhiteSpace(profilePath))

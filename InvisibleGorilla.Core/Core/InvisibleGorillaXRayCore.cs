@@ -362,6 +362,8 @@ namespace InvisibleGorillaXRay.Core
             // and rewrite the runtime config so xray's egress (or chain entry) goes through Tor.
             TorSettings torSettings = getTorSettings?.Invoke();
             bool torEnabled = torSettings != null && torSettings.GetEnabled();
+
+
             if (torEnabled)
             {
                 DiagnosticLog.Write("Run", $"Tor enabled (mode={torSettings.GetMode()}). Starting tor daemon...");
@@ -496,8 +498,17 @@ namespace InvisibleGorillaXRay.Core
             }
 
             DiagnosticLog.Write("Run", "Waiting for server thread to complete (Join)...");
-            serverThread.Join();
-            DiagnosticLog.Write("Run", "Server thread completed.");
+
+            // A native stop that never returns used to freeze the whole app on STOP (the log
+            // simply ended here). Wait a bounded time, then finish the teardown anyway.
+            if (!serverThread.Join(TimeSpan.FromSeconds(8)))
+            {
+                DiagnosticLog.Write("Run", "Server thread did not finish in 8s; continuing with the stop.");
+            }
+            else
+            {
+                DiagnosticLog.Write("Run", "Server thread completed.");
+            }
 
             if (mode == Mode.PROXY)
             {
@@ -516,8 +527,10 @@ namespace InvisibleGorillaXRay.Core
             {
                 DiagnosticLog.Write("Run", "Stopping tor daemon...");
                 torManager.Stop();
+                DiagnosticLog.Write("Run", "Tor daemon stopped.");
             }
             currentRuntimeConfig = null;
+            DiagnosticLog.Write("Run", "Stop completed.");
 
             void SendServerStartEvent()
             {

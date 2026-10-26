@@ -193,6 +193,16 @@ namespace InvisibleGorillaXRay.Models
             EnsureSets();
             TorBridgeSet set = FindSet(setId) ?? GetActiveSet();
             List<string> copy = TorBridgeSet.CopyLines(lines);
+
+            // An empty editor must never erase saved bridges: the panel is rebuilt on every
+            // screen switch and used to wipe the WebTunnel line this way.
+            if (copy.Count == 0 && set.GetBridgeLines().Count > 0)
+            {
+                if (string.Equals(set.Id, ActiveSetId, StringComparison.Ordinal))
+                    PublishActive();
+                return;
+            }
+
             BridgeType inferred = TorBridgeSet.InferType(copy);
             set.BridgeType = inferred != BridgeType.NONE ? inferred : type;
             set.BridgeLines = copy;

@@ -440,8 +440,16 @@ namespace InvisibleGorillaXRay.Core
             }
 
             DiagnosticLog.Write("Run", "Waiting for server thread to complete (Join)...");
-            serverThread.Join();
-            DiagnosticLog.Write("Run", "Server thread completed.");
+
+            // A native stop that never returns used to freeze the whole app on STOP.
+            if (!serverThread.Join(TimeSpan.FromSeconds(8)))
+            {
+                DiagnosticLog.Write("Run", "Server thread did not finish in 8s; continuing with the stop.");
+            }
+            else
+            {
+                DiagnosticLog.Write("Run", "Server thread completed.");
+            }
 
             if (mode == Mode.PROXY)
             {
