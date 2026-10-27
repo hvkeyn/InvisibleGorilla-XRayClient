@@ -118,3 +118,6 @@ InvisibleGorilla-XRay-Windows-*.zip
 /tests/**/bin/
 /tests/**/obj/
 /publish-windows-bridges/
+
+# personal key notes (never commit)
+notes/

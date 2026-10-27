@@ -290,6 +290,13 @@ namespace InvisibleGorillaXRay.Android
             if (intent == null)
                 return;
 
+            // Diagnostic helper: adb can ask the app to copy its configs somewhere readable.
+            if (string.Equals(intent.GetStringExtra("exportConfigs"), "1", StringComparison.Ordinal))
+            {
+                ExportConfigsForDiagnostics();
+                return;
+            }
+
             try
             {
                 if (TryDispatchViewIntent(intent))
@@ -303,6 +310,41 @@ namespace InvisibleGorillaXRay.Android
             }
         }
 
+        private static void ExportConfigsForDiagnostics()
+        {
+            try
+            {
+                string source = System.IO.Path.Combine(InvisibleGorillaXRay.Values.Directory.ROOT, "Configs");
+                string target = System.IO.Path.Combine(
+                    global::Android.App.Application.Context.GetExternalFilesDir(null)?.AbsolutePath ?? "/sdcard",
+                    "export");
+
+                if (!System.IO.Directory.Exists(source))
+                    return;
+
+                if (System.IO.Directory.Exists(target))
+                    System.IO.Directory.Delete(target, true);
+
+                System.IO.Directory.CreateDirectory(target);
+
+                int copied = 0;
+                foreach (string file in System.IO.Directory.GetFiles(source, "*", System.IO.SearchOption.AllDirectories))
+                {
+                    string relative = System.IO.Path.GetRelativePath(source, file);
+                    string destination = System.IO.Path.Combine(target, relative);
+                    System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(destination) ?? target);
+                    System.IO.File.Copy(file, destination, true);
+                    copied++;
+                }
+
+                System.IO.File.WriteAllText(System.IO.Path.Combine(target, "_done.txt"), copied.ToString());
+                DiagnosticLog.Write("Export", $"Exported {copied} config file(s) to {target}");
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainActivity.ExportConfigs", ex);
+            }
+        }
         private static bool TryDispatchViewIntent(Intent intent)
         {
             if (!string.Equals(intent.Action, Intent.ActionView, StringComparison.Ordinal))
