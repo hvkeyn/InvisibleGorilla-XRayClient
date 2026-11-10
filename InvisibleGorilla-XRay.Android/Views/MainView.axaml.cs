@@ -244,6 +244,7 @@ namespace InvisibleGorillaXRay.Android.Views
             TrySetupStep("SetConnectionStateStopped", () => SetConnectionState(ConnectionState.Stopped));
             TrySetupStep("InitializeConnectionInfo", InitializeConnectionInfo);
             TrySetupStep("ClearStatus", () => SetStatus("Lang.Status.Stopped"));
+            TrySetupStep("HookNetworkMonitoring", HookNetworkMonitoring);
 
             isInitialized = true;
             DiagnosticLog.Write("MainView", "Setup completed");
@@ -3137,6 +3138,19 @@ namespace InvisibleGorillaXRay.Android.Views
             return currentIds.SetEquals(nextIds);
         }
 
+        private void HookNetworkMonitoring()
+        {
+            try
+            {
+                global::InvisibleGorillaXRay.Android.Services.AndroidVpnService.UnderlyingNetworkChanged -= OnUnderlyingNetworkChanged;
+                global::InvisibleGorillaXRay.Android.Services.AndroidVpnService.UnderlyingNetworkChanged += OnUnderlyingNetworkChanged;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.HookNetworkMonitoring", ex);
+            }
+        }
+
         private bool IsConnectionActive()
         {
             return StopActionButton.IsVisible
@@ -3145,6 +3159,45 @@ namespace InvisibleGorillaXRay.Android.Views
                 || AndroidVpnServiceController.IsStopping;
         }
 
+        /// <summary>
+        /// Android hands us a new default network when Wi-Fi drops or LTE comes back. Without
+        /// this the tunnel stayed "Running" on a dead path and every request timed out.
+        /// </summary>
+        private void OnUnderlyingNetworkChanged()
+        {
+            Dispatcher.UIThread.Post(async () =>
+            {
+                try
+                {
+                    if (!IsConnectionActive())
+                        return;
+
+                    DiagnosticLog.Write("Run", "Network changed (Wi-Fi/LTE switch); restarting the session");
+
+                    // Android needs a moment to finish moving the default network before a new
+                    // VPN interface can be established; an immediate restart returned CANT_TUNNEL.
+                    await Task.Delay(2500);
+
+                    if (!IsConnectionActive())
+                        return;
+
+                    SetStatus("Lang.Android.Status.LoadingConfig");
+                    await RestartConnectionAfterSettingsChangeAsync();
+
+                    if (!AndroidVpnServiceController.IsRunning)
+                    {
+                        DiagnosticLog.Write("Run", "Tunnel did not come back after the switch; retrying once");
+                        await Task.Delay(3000);
+                        if (IsConnectionActive() || StopActionButton.IsVisible)
+                            await RestartConnectionAfterSettingsChangeAsync();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("MainView.OnUnderlyingNetworkChanged", ex);
+                }
+            });
+        }
         private async Task RestartConnectionAfterSettingsChangeAsync()
         {
             Dispatcher.UIThread.Post(() =>

@@ -41,7 +41,9 @@ namespace InvisibleGorillaXRay.Android.Services
         private const string ExtraSessionName = "session_name";
         private const string ExtraAppRulesMode = "app_rules_mode";
         private const string ExtraAppPackages = "app_packages";
-        private const int DefaultMtu = 1500;
+        private const int FallbackMtu = 1400;
+        private const int MinTunMtu = 1200;
+        private const int MaxTunMtu = 1400;
         private const string DefaultIpv6Address = "fdfe:dcba:9876::1";
         private const int DefaultIpv6PrefixLength = 126;
         private static readonly object SyncRoot = new();
@@ -132,6 +134,13 @@ namespace InvisibleGorillaXRay.Android.Services
             }
         }
 
+        /// <summary>Raised when the underlying (non-VPN) default network changes.</summary>
+        public static event Action? UnderlyingNetworkChanged;
+
+        private ConnectivityManager? connectivityManager;
+        private ConnectivityManager.NetworkCallback? networkCallback;
+        private long lastNetworkChangeMs;
+
         public override void OnCreate()
         {
             base.OnCreate();
@@ -208,6 +217,7 @@ namespace InvisibleGorillaXRay.Android.Services
 
         public override void OnDestroy()
         {
+            StopNetworkMonitoring();
             DiagnosticLog.Write("AndroidVpnService", "Foreground VPN service destroyed");
             if (ReferenceEquals(current, this))
                 current = null;
@@ -256,9 +266,11 @@ namespace InvisibleGorillaXRay.Android.Services
                 ResetVpnCore("Restarting Android VPN");
             }
 
+            int tunMtu = ResolveTunMtu();
+
             Builder builder = new Builder(this)
                 .SetSession(sessionName)
-                .SetMtu(DefaultMtu)
+                .SetMtu(tunMtu)
                 .AddAddress(tunAddress, 32)
                 .AddRoute("0.0.0.0", 0);
 
@@ -294,7 +306,7 @@ namespace InvisibleGorillaXRay.Android.Services
 
             DiagnosticLog.Write(
                 "AndroidVpnService",
-                $"Calling Builder.Establish() (mtu={DefaultMtu}, address={tunAddress}, mode={appRulesMode}, packages={appPackages.Length})...");
+                $"Calling Builder.Establish() (mtu={tunMtu}, address={tunAddress}, mode={appRulesMode}, packages={appPackages.Length})...");
             // Must stay off the Android UI thread. Posting Establish() to the main looper
             // caused ANR when the user left the app (FocusEvent hasFocus=false waited 10s)
             // — that is the "crashed while opening 2ip.io" report.
@@ -322,6 +334,7 @@ namespace InvisibleGorillaXRay.Android.Services
                 {
                     CloseOwnedTunLocked();
                     activeTun = tunInterface;
+                    StartNetworkMonitoring();
                 }
             }
             catch (Exception ex)
@@ -690,6 +703,141 @@ namespace InvisibleGorillaXRay.Android.Services
         }
 
         /// <returns><c>true</c> when this app's own traffic is guaranteed to stay outside the TUN.</returns>
+        /// <summary>
+        /// The tunnel must not hand bigger packets to the carrier than its link MTU allows:
+        /// on LTE links here the MTU is 1300, so a fixed 1500 caused silent drops of large
+        /// responses (stalls while pages loaded, resets during speed tests).
+        /// </summary>
+        /// <summary>
+        /// Watches the real default network. Switching between Wi-Fi and LTE used to leave the
+        /// tunnel pointed at a dead path: the session looked "Running" but nothing loaded.
+        /// </summary>
+        private void StartNetworkMonitoring()
+        {
+            try
+            {
+                if (networkCallback != null)
+                    return;
+
+                connectivityManager ??= GetSystemService(ConnectivityService) as ConnectivityManager;
+                if (connectivityManager == null)
+                    return;
+
+                networkCallback = new NetworkChangeCallback(this);
+                connectivityManager.RegisterDefaultNetworkCallback(networkCallback);
+                DiagnosticLog.Write("AndroidVpnService", "Network monitoring started");
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("AndroidVpnService.StartNetworkMonitoring", ex);
+            }
+        }
+
+        private void StopNetworkMonitoring()
+        {
+            try
+            {
+                if (networkCallback != null && connectivityManager != null)
+                    connectivityManager.UnregisterNetworkCallback(networkCallback);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("AndroidVpnService.StopNetworkMonitoring", ex);
+            }
+            finally
+            {
+                networkCallback = null;
+            }
+        }
+
+        private void OnDefaultNetworkChanged()
+        {
+            long now = System.Environment.TickCount64;
+            long previous = Interlocked.Exchange(ref lastNetworkChangeMs, now);
+            if (previous != 0 && now - previous < 4000)
+                return;
+
+            DiagnosticLog.Write("AndroidVpnService", "Underlying network changed; session needs a restart");
+            try
+            {
+                UnderlyingNetworkChanged?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("AndroidVpnService.UnderlyingNetworkChanged", ex);
+            }
+        }
+
+        private sealed class NetworkChangeCallback : ConnectivityManager.NetworkCallback
+        {
+            private readonly AndroidVpnService owner;
+
+            public NetworkChangeCallback(AndroidVpnService owner)
+            {
+                this.owner = owner;
+            }
+
+            public override void OnAvailable(Network network)
+            {
+                if (owner.IsOurVpnNetwork(network))
+                    return;
+
+                owner.OnDefaultNetworkChanged();
+            }
+
+            public override void OnLost(Network network)
+            {
+                if (owner.IsOurVpnNetwork(network))
+                    return;
+
+                owner.OnDefaultNetworkChanged();
+            }
+        }
+
+        private bool IsOurVpnNetwork(Network network)
+        {
+            try
+            {
+                ConnectivityManager? manager = connectivityManager;
+                NetworkCapabilities? capabilities = manager?.GetNetworkCapabilities(network);
+                return capabilities != null && capabilities.HasTransport(TransportType.Vpn);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        private int ResolveTunMtu()
+        {
+            int linkMtu = 0;
+            try
+            {
+                ConnectivityManager? manager =
+                    GetSystemService(ConnectivityService) as ConnectivityManager;
+                Network? activeNetwork = manager?.ActiveNetwork;
+                if (activeNetwork != null)
+                {
+                    LinkProperties? properties = manager!.GetLinkProperties(activeNetwork);
+                    linkMtu = properties?.Mtu ?? 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("AndroidVpnService.ResolveTunMtu", ex);
+            }
+
+            int mtu = linkMtu > 0 ? linkMtu - 40 : FallbackMtu;
+            if (mtu < MinTunMtu)
+                mtu = MinTunMtu;
+            if (mtu > MaxTunMtu)
+                mtu = MaxTunMtu;
+
+            DiagnosticLog.Write(
+                "AndroidVpnService",
+                $"TUN MTU {mtu} (link MTU {linkMtu.ToString()})");
+
+            return mtu;
+        }
         private bool ApplyApplicationRules(Builder builder, AppRulesMode mode, IEnumerable<string> packages)
         {
             string[] packageArray = packages as string[] ?? packages.ToArray();
