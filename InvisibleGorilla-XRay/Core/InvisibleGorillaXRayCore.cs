@@ -213,7 +213,16 @@ namespace InvisibleGorillaXRay.Core
             // and rewrite the runtime config so xray's egress (or chain entry) goes through Tor.
             TorSettings torSettings = getTorSettings?.Invoke();
             bool torProfile = Services.Tor.TorProfilePaths.IsMarker(getConfig.Invoke()?.Path);
-            bool torEnabled = torProfile || (torSettings != null && torSettings.GetEnabled());
+
+            // Only the Tor profile may run through the daemon. The sticky Enabled flag used to
+            // send every later node through Tor, which surfaced as "OBFS4 did not connect" while
+            // a plain VLESS config was selected.
+            if (!torProfile && torSettings != null && torSettings.GetEnabled())
+            {
+                DiagnosticLog.Write("Run", "Tor is enabled in settings but a plain config is selected; running it directly");
+            }
+
+            bool torEnabled = torProfile;
 
             if (torProfile && torSettings != null
                 && torSettings.GetBridgeType() == BridgeType.NONE

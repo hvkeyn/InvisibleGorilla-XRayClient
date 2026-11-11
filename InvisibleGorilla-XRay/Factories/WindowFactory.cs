@@ -510,7 +510,30 @@ namespace InvisibleGorillaXRay.Factories
                     DiagnosticLog.WriteException("AutoSelect.ManualPick", ex);
                 }
 
+                // The Tor flag is sticky: after a Tor profile was used once, every later node
+                // started through the Tor daemon and failed with "OBFS4 did not connect".
+                // A plain config must run directly, so clear the flag on selection.
+                try
+                {
+                    bool torProfile = TorProfilePaths.IsMarker(path)
+                        || OpenFluxProfilePaths.IsMarker(path);
+                    UserSettings live = settingsHandler.UserSettings;
+                    if (!torProfile && live.GetTorSettings().GetEnabled())
+                    {
+                        TorSettings tor = live.GetTorSettings();
+                        tor.Enabled = false;
+                        live.Tor = tor;
+                        settingsHandler.UpdateUserSettings(live);
+                        DiagnosticLog.Write("Run", "Tor disabled because the selected config is not a Tor profile");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("WindowFactory.UpdateConfig.Tor", ex);
+                }
+
                 settingsHandler.UpdateCurrentConfigPath(path);
+                DiagnosticLog.Write("Run", $"Selected config: {path}");
                 mainWindow.UpdateUI();
 
                 if (mainWindow.IsServerRunning)

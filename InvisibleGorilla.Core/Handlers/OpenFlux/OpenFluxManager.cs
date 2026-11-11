@@ -171,6 +171,23 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
                 return Fail(urlError);
 
             string key = profile.EncryptionKey ?? "";
+            // A mismatch between the client key and the exit key looks like "the key was
+            // accepted but is wrong", so print a short fingerprint to compare in logs.
+            try
+            {
+                if (!string.IsNullOrEmpty(key))
+                {
+                    using System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create();
+                    byte[] digest = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(key));
+                    string fingerprint = System.Convert.ToHexString(digest).Substring(0, 12).ToLowerInvariant();
+                    DiagnosticLog.Write(Tag, $"Encryption key fingerprint {fingerprint} for url={OpenFluxUrl.Trim(url).Length} chars");
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException(Tag + ".KeyFingerprint", ex);
+            }
+
             string keyFile = PrepareKeyFile(key);
             if (string.IsNullOrEmpty(keyFile))
                 return Fail("key-short");
