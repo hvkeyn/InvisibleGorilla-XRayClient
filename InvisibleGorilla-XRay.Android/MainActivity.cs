@@ -313,9 +313,24 @@ namespace InvisibleGorillaXRay.Android
                 }
             }
 
-            // Diagnostic helper: start an OpenFlux session on request.
-            if (intent.GetIntExtra("startOpenFlux", 0) == 1)
-                InvisibleGorillaXRay.Android.Views.MainView.PendingStartOpenFlux = true;
+            // Diagnostic helper: make OpenFlux the selected configuration.
+            if (intent.GetIntExtra("selectOpenFlux", 0) == 1 || intent.GetIntExtra("startOpenFlux", 0) == 1)
+            {
+                try
+                {
+                    var selectHandler = new InvisibleGorillaXRay.Handlers.SettingsHandler(
+                        () => new InvisibleGorillaXRay.Android.Handlers.Settings.AndroidStartup());
+                    string marker = System.IO.Path.Combine(
+                        System.IO.Path.GetFullPath(InvisibleGorillaXRay.Values.Directory.CONFIGS),
+                        "__OpenFluxProfile__.json");
+                    selectHandler.UpdateCurrentConfigPath(marker);
+                    InvisibleGorillaXRay.Core.DiagnosticLog.Write("MainActivity", "OpenFlux selected from adb");
+                }
+                catch (Exception ex)
+                {
+                    InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("MainActivity.SelectOpenFlux", ex);
+                }
+            }
 
             // Diagnostic helper: probe every subscription node over the current network.
             if (intent.GetIntExtra("sweepMobile", 0) is int sweepDelay && sweepDelay > 0)

@@ -387,7 +387,11 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
             if (File.Exists(snapshotHtml))
                 startInfo.Environment["OPENFLUX_HTML_FILE"] = snapshotHtml;
             if (File.Exists(snapshotCookies))
+            {
                 startInfo.Environment["OPENFLUX_COOKIE_FILE"] = snapshotCookies;
+                // Newer cores take the jar as a flag; without it Yandex asks for a captcha.
+                startInfo.ArgumentList.Add("--cookie-store=" + snapshotCookies);
+            }
 
             bool throttled = throttleMode;
             startInfo.Environment["OPENFLUX_BATCH_BYTES"] = throttled ? "16384" : "32768";

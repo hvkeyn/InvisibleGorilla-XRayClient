@@ -11,7 +11,13 @@ namespace InvisibleGorillaXRay.Models
     {
         Auto,
         Vyandex,
-        Yandex
+        Yandex,
+        Telemost,
+        Avito,
+        Cupsonline,
+        Mailru,
+        Oneme,
+        Direct
     }
 
     /// <summary>
@@ -158,6 +164,18 @@ namespace InvisibleGorillaXRay.Models
                 return "vyandex";
             if (mode == OpenFluxTransportMode.Yandex)
                 return "yandex";
+            if (mode == OpenFluxTransportMode.Telemost)
+                return "telemost";
+            if (mode == OpenFluxTransportMode.Avito)
+                return "avito";
+            if (mode == OpenFluxTransportMode.Cupsonline)
+                return "cupsonline";
+            if (mode == OpenFluxTransportMode.Mailru)
+                return "mailru";
+            if (mode == OpenFluxTransportMode.Oneme)
+                return "oneme";
+            if (mode == OpenFluxTransportMode.Direct)
+                return "direct";
 
             if (!Uri.TryCreate(Trim(url), UriKind.Absolute, out Uri uri))
                 return "vyandex";
