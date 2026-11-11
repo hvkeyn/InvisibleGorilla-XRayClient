@@ -177,6 +177,8 @@ namespace InvisibleGorillaXRay.Core
                     string sanitized = raw
                         .Replace("\"splithttpSettings\"", "\"xhttpSettings\"")
                         .Replace("\"splithttp\"", "\"xhttp\"");
+                    sanitized = DpiHardening.Apply(sanitized);
+
 
                     tempPath = System.IO.Path.Combine(
                         System.IO.Path.GetTempPath(),

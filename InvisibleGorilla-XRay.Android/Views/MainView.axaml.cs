@@ -3184,12 +3184,17 @@ namespace InvisibleGorillaXRay.Android.Views
                     SetStatus("Lang.Android.Status.LoadingConfig");
                     await RestartConnectionAfterSettingsChangeAsync();
 
-                    if (!AndroidVpnServiceController.IsRunning)
+                    // The first establish after a switch often fails with CANT_TUNNEL while
+                    // Android is still releasing the old interface; two more attempts are
+                    // what actually gets the tunnel back on LTE.
+                    for (int attempt = 1; attempt <= 3 && !AndroidVpnServiceController.IsRunning; attempt++)
                     {
-                        DiagnosticLog.Write("Run", "Tunnel did not come back after the switch; retrying once");
-                        await Task.Delay(3000);
-                        if (IsConnectionActive() || StopActionButton.IsVisible)
-                            await RestartConnectionAfterSettingsChangeAsync();
+                        DiagnosticLog.Write("Run", $"Tunnel did not come back after the switch; retry {attempt}/3");
+                        await Task.Delay(2500);
+                        if (!IsConnectionActive() && !StopActionButton.IsVisible)
+                            break;
+
+                        await RestartConnectionAfterSettingsChangeAsync();
                     }
                 }
                 catch (Exception ex)
