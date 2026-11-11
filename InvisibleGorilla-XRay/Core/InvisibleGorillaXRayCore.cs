@@ -21,6 +21,9 @@ namespace InvisibleGorillaXRay.Core
 
     public class InvisibleGorillaXRayCore
     {
+        /// <summary>Bind the local listener to all interfaces so LAN clients can use it.</summary>
+        public static bool LanAccessEnabled { get; set; }
+
         private volatile bool stopRequested;
 
         private Func<Config> getConfig;
@@ -300,6 +303,9 @@ namespace InvisibleGorillaXRay.Core
                 try
                 {
                     DiagnosticLog.Write("ServerThread", "Calling XRayCoreWrapper.StartServer...");
+                    if (LanAccessEnabled)
+                        DiagnosticLog.Write("Run", $"LAN access enabled: listener binds 0.0.0.0:{proxyPort}");
+
                     XRayCoreWrapper.StartServer(
                         config,
                         proxyPort,
@@ -307,7 +313,7 @@ namespace InvisibleGorillaXRay.Core
                         logPath,
                         isSocks,
                         isUdpEnabled,
-                        false,
+                        LanAccessEnabled,
                         localProxyCredentials);
                     DiagnosticLog.Write("ServerThread", "StartServer returned (server stopped)");
                 }

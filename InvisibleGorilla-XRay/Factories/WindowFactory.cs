@@ -68,7 +68,12 @@ namespace InvisibleGorillaXRay.Factories
                 openAboutWindow: CreateAboutWindow,
                 openPolicyWindow: CreatePolicyWindow,
                 getServerDisplayText: BuildServerDisplayText,
-                onRunServer: config => core.Run(config, mainWindow.NotifyReady),
+                onRunServer: config =>
+            {
+                InvisibleGorillaXRay.Core.InvisibleGorillaXRayCore.LanAccessEnabled =
+                    settingsHandler.UserSettings.AllowLanAccess;
+                core.Run(config, mainWindow.NotifyReady);
+            },
                 onStopServer: core.Stop,
                 onCancelServer: core.Cancel,
                 onDisableMode: core.DisableMode,
