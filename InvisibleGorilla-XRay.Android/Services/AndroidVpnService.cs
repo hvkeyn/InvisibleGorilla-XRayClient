@@ -295,7 +295,8 @@ namespace InvisibleGorillaXRay.Android.Services
                 }
             }
 
-            foreach (string dnsServer in SplitDnsServers(dns))
+            string effectiveDns = udpEnabled ? dns : ResolveNoUdpDns(dns);
+            foreach (string dnsServer in SplitDnsServers(effectiveDns))
                 builder.AddDnsServer(dnsServer);
 
             ExcludeServerFromTunnel(builder, bypassServer);
@@ -857,6 +858,44 @@ namespace InvisibleGorillaXRay.Android.Services
                 return false;
             }
         }
+        /// <summary>
+        /// Resolves DNS for tunnels without UDP (OpenFlux, Tor). The app answers DNS queries
+        /// itself, using the system resolver, so the TUN must advertise a resolver that the
+        /// device can actually reach — the carrier/LAN one, not a hardcoded public IP.
+        /// </summary>
+        private string ResolveNoUdpDns(string configured)
+        {
+            try
+            {
+                ConnectivityManager? manager = GetSystemService(ConnectivityService) as ConnectivityManager;
+                Network? network = manager?.ActiveNetwork;
+                LinkProperties? properties = network == null ? null : manager?.GetLinkProperties(network);
+                if (properties != null)
+                {
+                    var servers = new System.Collections.Generic.List<string>();
+                    foreach (var address in properties.DnsServers)
+                    {
+                        string text = address?.HostAddress ?? string.Empty;
+                        if (text.Length > 0 && text.IndexOf(':') < 0)
+                            servers.Add(text);
+                    }
+
+                    if (servers.Count > 0)
+                    {
+                        string chosen = string.Join(",", servers);
+                        DiagnosticLog.Write("AndroidVpnService", $"DNS without UDP: using link resolvers {chosen}");
+                        return chosen;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("AndroidVpnService.ResolveNoUdpDns", ex);
+            }
+
+            return configured;
+        }
+
         private int ResolveTunMtu()
         {
             int linkMtu = 0;
