@@ -290,6 +290,29 @@ namespace InvisibleGorillaXRay.Android
             if (intent == null)
                 return;
 
+            // Diagnostic helper: set the OpenFlux document from adb and start the session.
+            string openFluxUrl = intent.GetStringExtra("openFluxUrl");
+            if (!string.IsNullOrWhiteSpace(openFluxUrl))
+            {
+                try
+                {
+                    var handler = new InvisibleGorillaXRay.Handlers.SettingsHandler(
+                        () => new InvisibleGorillaXRay.Android.Handlers.Settings.AndroidStartup());
+                    var settings = handler.UserSettings;
+                    var profile = settings.GetOpenFluxProfile();
+                    profile.DocUrl = openFluxUrl.Trim();
+                    profile.EncryptionKey = InvisibleGorillaXRay.Models.OpenFluxUrl.DeriveKey(profile.DocUrl);
+                    settings.OpenFlux = profile;
+                    handler.UpdateUserSettings(settings);
+                    InvisibleGorillaXRay.Core.DiagnosticLog.Write("MainActivity",
+                        $"OpenFlux document set from adb; key fingerprint {profile.EncryptionKey.Substring(0, Math.Min(12, profile.EncryptionKey.Length))}");
+                }
+                catch (Exception ex)
+                {
+                    InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("MainActivity.OpenFluxUrl", ex);
+                }
+            }
+
             // Diagnostic helper: probe every subscription node over the current network.
             if (intent.GetIntExtra("sweepMobile", 0) is int sweepDelay && sweepDelay > 0)
             {
