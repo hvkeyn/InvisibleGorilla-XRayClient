@@ -43,6 +43,12 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
         private StreamWriter logWriter;
         private volatile bool sessionStop;
         private volatile bool restartFlag;
+
+        // The Volga/Yandex relay answers 429 when the client pushes too many requests;
+        // shrink the batches first, restart the sidecar only if it keeps happening.
+        private volatile bool throttleMode;
+        private int throttleHits;
+        private long throttleWindowStartMs;
         private int boundSocksPort;
         private string lastUrl = "";
         private string lastExitIp = "";
@@ -244,6 +250,9 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
         {
             sessionStop = false;
             restartFlag = false;
+            throttleMode = false;
+            throttleHits = 0;
+            throttleWindowStartMs = 0;
         }
 
         public void WaitSession()
@@ -351,9 +360,12 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
             if (File.Exists(snapshotCookies))
                 startInfo.Environment["OPENFLUX_COOKIE_FILE"] = snapshotCookies;
 
-            startInfo.Environment["OPENFLUX_BATCH_BYTES"] = "32768";
-            startInfo.Environment["OPENFLUX_BATCH_COUNT"] = "96";
-            startInfo.Environment["OPENFLUX_BATCH_LINGER_MS"] = "4";
+            bool throttled = throttleMode;
+            startInfo.Environment["OPENFLUX_BATCH_BYTES"] = throttled ? "16384" : "32768";
+            startInfo.Environment["OPENFLUX_BATCH_COUNT"] = throttled ? "24" : "96";
+            startInfo.Environment["OPENFLUX_BATCH_LINGER_MS"] = throttled ? "12" : "4";
+            if (throttled)
+                DiagnosticLog.Write(Tag, "Throttle mode: smaller batches after relay 429 responses");
 
             var started = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
             started.OutputDataReceived += (_, e) => HandleProcessLine(e.Data, logPath);
@@ -406,10 +418,41 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
                 return;
             }
 
+            if (line.IndexOf("status 429", StringComparison.OrdinalIgnoreCase) >= 0
+                || line.IndexOf("429 Too Many Requests", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                NoteThrottle();
+                return;
+            }
+
             if (line.IndexOf("officeActionData.balancer_url missing", StringComparison.OrdinalIgnoreCase) >= 0
                 || line.IndexOf("balancer_url missing", StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 SetStatus(OpenFluxClientStatus.Error, "transport");
+            }
+        }
+
+        private void NoteThrottle()
+        {
+            long now = System.Environment.TickCount64;
+            if (throttleWindowStartMs == 0 || now - throttleWindowStartMs > 60000)
+            {
+                throttleWindowStartMs = now;
+                throttleHits = 0;
+            }
+
+            throttleHits++;
+
+            if (!throttleMode && throttleHits >= 2)
+            {
+                throttleMode = true;
+                DiagnosticLog.Write(Tag, "Relay is throttling (429); switching to smaller batches");
+            }
+            else if (throttleHits >= 8 && !restartFlag)
+            {
+                DiagnosticLog.Write(Tag, "Relay still throttling after 8 hits; recycling the session");
+                restartFlag = true;
+                StopProcess(waitExitMs: 2000);
             }
         }
 

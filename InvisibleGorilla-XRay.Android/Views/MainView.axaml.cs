@@ -5093,6 +5093,69 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private static readonly HashSet<string> unusableConfigs = new(StringComparer.OrdinalIgnoreCase);
 
+        // Nodes that actually carried traffic over a cellular link. Carriers here block many
+        // entry servers, so on mobile we prefer what is known to work instead of the lowest RTT.
+        private static readonly HashSet<string> mobileOkConfigs = new(StringComparer.OrdinalIgnoreCase);
+
+        private static string MobileOkListPath => System.IO.Path.Combine(
+            System.IO.Path.GetFullPath(InvisibleGorillaXRay.Values.Directory.CONFIGS), ".mobile-ok");
+
+        private static bool IsMobileNetworkNow()
+        {
+            try
+            {
+                global::Android.Net.ConnectivityManager? manager =
+                    global::Android.App.Application.Context.GetSystemService(
+                        global::Android.Content.Context.ConnectivityService)
+                    as global::Android.Net.ConnectivityManager;
+                global::Android.Net.Network? network = manager?.ActiveNetwork;
+                global::Android.Net.NetworkCapabilities? capabilities =
+                    manager?.GetNetworkCapabilities(network);
+                return capabilities != null
+                    && capabilities.HasTransport(global::Android.Net.TransportType.Cellular);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void MarkMobileOk(string path)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(path) || !mobileOkConfigs.Add(path))
+                    return;
+
+                System.IO.File.AppendAllText(MobileOkListPath, path + Environment.NewLine);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.MarkMobileOk", ex);
+            }
+        }
+
+        private static bool IsMobileOk(string path)
+        {
+            try
+            {
+                if (mobileOkConfigs.Count == 0 && System.IO.File.Exists(MobileOkListPath))
+                {
+                    foreach (string line in System.IO.File.ReadAllLines(MobileOkListPath))
+                    {
+                        string trimmed = line.Trim();
+                        if (trimmed.Length > 0)
+                            mobileOkConfigs.Add(trimmed);
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return mobileOkConfigs.Contains(path ?? string.Empty);
+        }
+
         private static string UnusableListPath => System.IO.Path.Combine(
             System.IO.Path.GetFullPath(Values.Directory.CONFIGS), ".unusable");
 
@@ -5212,11 +5275,16 @@ namespace InvisibleGorillaXRay.Android.Views
             if (!fresh)
                 subscriptionProbeUtc = DateTime.UtcNow;
 
+            bool mobile = IsMobileNetworkNow();
+            bool anyMobileOk = mobile && configs.Any(config => IsMobileOk(config.Path));
+
             int best = -1;
             int bestLatency = int.MaxValue;
             for (int index = 0; index < latencies.Length; index++)
             {
                 if (SubscriptionServerEndpoint.IsProviderNotice(configs[index].Name))
+                    continue;
+                if (anyMobileOk && !IsMobileOk(configs[index].Path))
                     continue;
                 if (latencies[index] < 0 || latencies[index] >= bestLatency)
                     continue;
@@ -5520,6 +5588,10 @@ namespace InvisibleGorillaXRay.Android.Views
                             {
                                 SetConnectionState(ConnectionState.Running);
                                 SetStatus("Lang.Android.Status.RunningTunnel");
+
+                                string runningPath = settingsHandler.UserSettings.GetCurrentConfigPath();
+                                if (IsMobileNetworkNow() && !string.IsNullOrWhiteSpace(runningPath))
+                                    MarkMobileOk(runningPath);
                             });
                         });
                         break;
