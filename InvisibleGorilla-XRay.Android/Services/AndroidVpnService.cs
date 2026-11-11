@@ -725,6 +725,7 @@ namespace InvisibleGorillaXRay.Android.Services
 
                 networkCallback = new NetworkChangeCallback(this);
                 connectivityManager.RegisterDefaultNetworkCallback(networkCallback);
+                UpdateNetworkProfile(connectivityManager, connectivityManager.ActiveNetwork);
                 DiagnosticLog.Write("AndroidVpnService", "Network monitoring started");
             }
             catch (Exception ex)
@@ -750,8 +751,31 @@ namespace InvisibleGorillaXRay.Android.Services
             }
         }
 
+        /// <summary>Tells the core whether the current link is cellular (mux + hello splitting).</summary>
+        private void UpdateNetworkProfile(ConnectivityManager? manager, Network? network)
+        {
+            try
+            {
+                bool mobile = false;
+                if (manager != null && network != null)
+                {
+                    NetworkCapabilities? capabilities = manager.GetNetworkCapabilities(network);
+                    mobile = capabilities != null && capabilities.HasTransport(TransportType.Cellular);
+                }
+
+                DpiHardening.MobileNetwork = mobile;
+                DiagnosticLog.Write("AndroidVpnService", $"Network profile: {(mobile ? "mobile" : "wifi/other")}");
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("AndroidVpnService.UpdateNetworkProfile", ex);
+            }
+        }
+
         private void OnDefaultNetworkChanged()
         {
+            UpdateNetworkProfile(connectivityManager, connectivityManager?.ActiveNetwork);
+
             long now = System.Environment.TickCount64;
             long previous = Interlocked.Exchange(ref lastNetworkChangeMs, now);
             if (previous != 0 && now - previous < 4000)

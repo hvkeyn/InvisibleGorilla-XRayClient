@@ -5,16 +5,35 @@ using Newtonsoft.Json.Linq;
 namespace InvisibleGorillaXRay.Core
 {
     /// <summary>
-    /// Normalises the "fragment" mask in stream settings. Subscription configs often carry the
-    /// legacy string form ("length": "100-200") which current xray rejects with
-    /// "LengthMin can't be 0", so the whole node looked unsupported. The core wants numeric
-    /// ranges, so rewrite them before the native loader sees the file.
+    /// Prepares an outbound for hostile mobile networks.
+    ///
+    /// Two things break a subscription config there:
+    ///  * the legacy fragment mask uses string ranges ("100-200") and the current core rejects
+    ///    the whole config with "LengthMin can't be 0";
+    ///  * every TLS connection is a separate fingerprint, and carriers throttle or reset flows
+    ///    with many handshakes, which is what mux with a fixed concurrency fixes.
     /// </summary>
     public static class DpiHardening
     {
+        private const string FragmentPackets = "tlshello";
+        private const int FragmentLengthFrom = 100;
+        private const int FragmentLengthTo = 200;
+        private const int FragmentIntervalFrom = 10;
+        private const int FragmentIntervalTo = 20;
+        private const int MuxConcurrency = 8;
+
+        private static volatile bool mobileNetwork;
+
+        /// <summary>Set by the platform layer; mobile networks get mux and hello splitting.</summary>
+        public static bool MobileNetwork
+        {
+            get => mobileNetwork;
+            set => mobileNetwork = value;
+        }
+
         public static string Apply(string json)
         {
-            if (string.IsNullOrWhiteSpace(json) || json.IndexOf("\"fragment\"", StringComparison.Ordinal) < 0)
+            if (string.IsNullOrWhiteSpace(json))
                 return json;
 
             try
@@ -29,20 +48,14 @@ namespace InvisibleGorillaXRay.Core
                     if (item is not JObject outbound)
                         continue;
 
-                    // The mask can live in stream settings (sockopt.fragment) or, for the freedom
-                    // outbound used as a detour, in settings.fragment. Both take the same ranges.
-                    if (outbound["streamSettings"] is JObject stream
-                        && stream["sockopt"] is JObject sockopt
-                        && sockopt["fragment"] is JObject streamFragment)
-                    {
-                        changed |= NormalizeFragment(streamFragment);
-                    }
+                    string protocol = outbound.Value<string>("protocol") ?? "";
+                    if (protocol.Length == 0 || protocol == "freedom" || protocol == "blackhole" || protocol == "dns")
+                        continue;
 
-                    if (outbound["settings"] is JObject settings
-                        && settings["fragment"] is JObject settingsFragment)
-                    {
-                        changed |= NormalizeFragment(settingsFragment);
-                    }
+                    changed |= NormalizeMasks(outbound);
+
+                    if (mobileNetwork)
+                        changed |= ApplyMobileProfile(outbound);
                 }
 
                 return changed ? root.ToString(Newtonsoft.Json.Formatting.None) : json;
@@ -54,6 +67,84 @@ namespace InvisibleGorillaXRay.Core
             }
         }
 
+        private static bool NormalizeMasks(JObject outbound)
+        {
+            bool changed = false;
+
+            if (outbound["streamSettings"] is JObject stream
+                && stream["sockopt"] is JObject sockopt
+                && sockopt["fragment"] is JObject streamFragment)
+            {
+                changed |= NormalizeFragment(streamFragment);
+            }
+
+            if (outbound["settings"] is JObject settings && settings["fragment"] is JObject settingsFragment)
+                changed |= NormalizeFragment(settingsFragment);
+
+            // The newer "finalmask" block carries arrays of strings ("lengths": ["10-20"]) that
+            // this core cannot build ("LengthMin can't be 0"), which rejected the whole node.
+            // Drop it: the plain sockopt.fragment mask covers the same purpose and is accepted.
+            if (outbound["streamSettings"] is JObject streamSettings2
+                && streamSettings2["finalmask"] != null)
+            {
+                streamSettings2.Remove("finalmask");
+                changed = true;
+            }
+
+            return changed;
+        }
+
+        private static bool ApplyMobileProfile(JObject outbound)
+        {
+            bool changed = false;
+
+            // One TLS connection for the whole session: carriers throttle by handshake count.
+            if (outbound["mux"] is not JObject mux)
+            {
+                outbound["mux"] = new JObject
+                {
+                    ["enabled"] = true,
+                    ["concurrency"] = MuxConcurrency
+                };
+                changed = true;
+            }
+            else if (mux.Value<bool?>("enabled") != true)
+            {
+                mux["enabled"] = true;
+                mux["concurrency"] = MuxConcurrency;
+                changed = true;
+            }
+
+            if (outbound["streamSettings"] is not JObject stream)
+                return changed;
+
+            string network = stream.Value<string>("network") ?? "tcp";
+            string security = stream.Value<string>("security") ?? "none";
+            if (!string.Equals(network, "tcp", StringComparison.OrdinalIgnoreCase))
+                return changed;
+            if (!string.Equals(security, "tls", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(security, "reality", StringComparison.OrdinalIgnoreCase))
+                return changed;
+
+            if (stream["sockopt"] is not JObject sockopt)
+            {
+                sockopt = new JObject();
+                stream["sockopt"] = sockopt;
+            }
+
+            if (sockopt["fragment"] != null)
+                return changed;
+
+            sockopt["fragment"] = new JObject
+            {
+                ["packets"] = FragmentPackets,
+                ["length"] = new JObject { ["from"] = FragmentLengthFrom, ["to"] = FragmentLengthTo },
+                ["interval"] = new JObject { ["from"] = FragmentIntervalFrom, ["to"] = FragmentIntervalTo }
+            };
+
+            return true;
+        }
+
         private static bool NormalizeFragment(JObject fragment)
         {
             bool changed = NormalizeRange(fragment, "length");
@@ -61,6 +152,7 @@ namespace InvisibleGorillaXRay.Core
             changed |= NormalizeRange(fragment, "maxSplit");
             return changed;
         }
+
         private static bool NormalizeRange(JObject fragment, string name)
         {
             JToken value = fragment[name];
@@ -81,8 +173,7 @@ namespace InvisibleGorillaXRay.Core
                 return true;
             }
 
-            string text = value.ToString();
-            if (!TryParseRange(text, out int start, out int end))
+            if (!TryParseRange(value.ToString(), out int start, out int end))
                 return false;
 
             fragment[name] = new JObject { ["from"] = start, ["to"] = end };
@@ -112,7 +203,7 @@ namespace InvisibleGorillaXRay.Core
             if (parts.Length == 0)
                 return false;
 
-            if (!int.TryParse(parts[0].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out start))
+            if (!int.TryParse(parts[0].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out start) || start <= 0)
                 return false;
 
             if (parts.Length > 1)
@@ -121,7 +212,7 @@ namespace InvisibleGorillaXRay.Core
             if (end <= 0)
                 end = start;
 
-            return start > 0 && end >= start;
+            return end >= start;
         }
     }
 }

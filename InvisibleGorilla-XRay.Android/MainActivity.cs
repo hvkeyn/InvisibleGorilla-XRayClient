@@ -327,16 +327,31 @@ namespace InvisibleGorillaXRay.Android
 
                 System.IO.Directory.CreateDirectory(target);
 
+                // ASCII names only: adb cannot open the Cyrillic and "|"-laden file names that
+                // subscription nodes use, and the index keeps the mapping.
+                // adb cannot read /sdcard/Android/data, so publish through MediaStore into
+                // Download/InvisibleGorilla-XRay/config-export/ with ASCII names.
                 int copied = 0;
+                var index = new System.Text.StringBuilder();
+                global::Android.Content.Context context = global::Android.App.Application.Context;
                 foreach (string file in System.IO.Directory.GetFiles(source, "*", System.IO.SearchOption.AllDirectories))
                 {
-                    string relative = System.IO.Path.GetRelativePath(source, file);
-                    string destination = System.IO.Path.Combine(target, relative);
-                    System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(destination) ?? target);
-                    System.IO.File.Copy(file, destination, true);
+                    // The Goida cache holds hundreds of thousands of nodes; skip it.
+                    if (file.IndexOf("Goida", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                        continue;
+
                     copied++;
+                    string name = "config-export/node-" + copied.ToString("D4") + ".json";
+                    string text;
+                    try { text = System.IO.File.ReadAllText(file); }
+                    catch { continue; }
+
+                    InvisibleGorillaXRay.Android.Services.AndroidLogShareService.SaveTextToDownloads(context, name, text);
+                    index.AppendLine("node-" + copied.ToString("D4") + ".json\t" + System.IO.Path.GetRelativePath(source, file));
                 }
 
+                InvisibleGorillaXRay.Android.Services.AndroidLogShareService.SaveTextToDownloads(
+                    context, "config-export/index.txt", index.ToString());
                 System.IO.File.WriteAllText(System.IO.Path.Combine(target, "_done.txt"), copied.ToString());
                 DiagnosticLog.Write("Export", $"Exported {copied} config file(s) to {target}");
             }

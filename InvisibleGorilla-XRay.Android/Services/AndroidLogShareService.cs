@@ -157,6 +157,12 @@ namespace InvisibleGorillaXRay.Android.Services
             return SaveToAppExternalFiles(context, snapshotName, payload);
         }
 
+        /// <summary>Writes any text into Download/InvisibleGorilla-XRay so adb can read it.</summary>
+        internal static SaveResult SaveTextToDownloads(Context context, string fileName, string text)
+        {
+            return TrySaveToMediaStoreDownloads(context, fileName, Encoding.UTF8.GetBytes(text ?? string.Empty));
+        }
+
         private static SaveResult TrySaveToMediaStoreDownloads(Context context, string fileName, byte[] payload)
         {
             try
