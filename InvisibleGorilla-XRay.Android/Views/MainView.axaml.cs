@@ -137,6 +137,13 @@ namespace InvisibleGorillaXRay.Android.Views
         private bool homeTunMissingLatched;
         private bool homeFaultPending;
         private string homeFaultLoggedReason = string.Empty;
+
+        // A tunnel that stays "Running" while every probe fails is a dead path (the carrier
+        // dropped the flow). Count it and restart the session, but never more than twice per
+        // ten minutes so a genuinely blocked node does not spin.
+        private int tunnelProbeFailures;
+        private long lastTunnelRecoveryMs;
+        private int tunnelRecoveriesInWindow;
         private DateTime homeFaultLoggedUtc = DateTime.MinValue;
         private int heroWifiPulseTick;
         private bool heroWifiPulseHooked;
@@ -3652,6 +3659,38 @@ namespace InvisibleGorillaXRay.Android.Views
             }
         }
 
+        private void NoteTunnelProbeFailure()
+        {
+            tunnelProbeFailures++;
+            if (tunnelProbeFailures < 3)
+                return;
+
+            long now = System.Environment.TickCount64;
+            if (lastTunnelRecoveryMs != 0 && now - lastTunnelRecoveryMs > 600000)
+                tunnelRecoveriesInWindow = 0;
+
+            if (tunnelRecoveriesInWindow >= 2)
+                return;
+
+            tunnelProbeFailures = 0;
+            tunnelRecoveriesInWindow++;
+            lastTunnelRecoveryMs = now;
+            DiagnosticLog.Write("Run", "Tunnel probes keep failing on a live interface; restarting the session");
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    if (IsConnectionActive())
+                        _ = RestartConnectionAfterSettingsChangeAsync();
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("MainView.NoteTunnelProbeFailure", ex);
+                }
+            });
+        }
+
         private void NoteHomeFault(string reasonKey)
         {
             string reason = Localize(reasonKey);
@@ -4226,6 +4265,7 @@ namespace InvisibleGorillaXRay.Android.Views
 
                 if (!tunnelInfo.Ok)
                 {
+                    NoteTunnelProbeFailure();
                     Dispatcher.UIThread.Post(() =>
                     {
                         if (StillCurrent())
@@ -4233,6 +4273,8 @@ namespace InvisibleGorillaXRay.Android.Views
                     });
                     return;
                 }
+
+                tunnelProbeFailures = 0;
 
                 ConnectionInfo directInfo = await connectionInfoService
                     .LookupAsync(null, token)

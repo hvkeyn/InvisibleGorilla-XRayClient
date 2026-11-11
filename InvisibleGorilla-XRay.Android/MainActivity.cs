@@ -290,6 +290,13 @@ namespace InvisibleGorillaXRay.Android
             if (intent == null)
                 return;
 
+            // Diagnostic helper: probe every subscription node over the current network.
+            if (intent.GetIntExtra("sweepMobile", 0) is int sweepDelay && sweepDelay > 0)
+            {
+                RunMobileSweep(sweepDelay);
+                return;
+            }
+
             // Diagnostic helper: adb can ask the app to copy its configs somewhere readable.
             if (string.Equals(intent.GetStringExtra("exportConfigs"), "1", StringComparison.Ordinal))
             {
@@ -310,6 +317,57 @@ namespace InvisibleGorillaXRay.Android
             }
         }
 
+        private static void RunMobileSweep(int delaySeconds)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(delaySeconds)).ConfigureAwait(false);
+
+                    string root = System.IO.Path.Combine(InvisibleGorillaXRay.Values.Directory.ROOT, "Configs");
+                    if (!System.IO.Directory.Exists(root))
+                        return;
+
+                    var configs = new System.Collections.Generic.List<string>();
+                    foreach (string file in System.IO.Directory.GetFiles(root, "*.json", System.IO.SearchOption.AllDirectories))
+                    {
+                        if (file.IndexOf("Goida", StringComparison.OrdinalIgnoreCase) >= 0)
+                            continue;
+                        if (new System.IO.FileInfo(file).Length < 20)
+                            continue;
+                        configs.Add(file);
+                    }
+
+                    if (configs.Count == 0)
+                        return;
+
+                    DiagnosticLog.Write("Sweep", $"Probing {configs.Count} node(s) over the current network");
+                    int[] latencies = InvisibleGorillaXRay.Services.SubscriptionServerEndpoint.ProbeFiles(configs, 2000);
+
+                    var report = new System.Text.StringBuilder();
+                    report.AppendLine("node\tms");
+                    int alive = 0;
+                    for (int i = 0; i < configs.Count && i < latencies.Length; i++)
+                    {
+                        bool ok = latencies[i] >= 0;
+                        if (ok)
+                            alive++;
+                        report.AppendLine(System.IO.Path.GetFileName(configs[i]) + "\t" + latencies[i]);
+                    }
+
+                    string summary = $"Sweep done: {alive}/{configs.Count} reachable";
+                    DiagnosticLog.Write("Sweep", summary);
+                    global::Android.Content.Context context = global::Android.App.Application.Context;
+                    InvisibleGorillaXRay.Android.Services.AndroidLogShareService.SaveTextToDownloads(
+                        context, "sweep-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".txt", summary + "\n" + report);
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("MainActivity.RunMobileSweep", ex);
+                }
+            });
+        }
         private static void ExportConfigsForDiagnostics()
         {
             try
