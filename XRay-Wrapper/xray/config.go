@@ -287,15 +287,23 @@ func overrideLog(logLevel clog.Severity, logPath *C.char) *serial.TypedMessage {
 	})
 }
 
-func overrideInbound(port net.Port, isSocks bool, isUdpEnabled bool, auth *localSocksAuth) []*core.InboundHandlerConfig {
+func overrideInbound(port net.Port, isSocks bool, isUdpEnabled bool, auth *localSocksAuth, listenAll bool) []*core.InboundHandlerConfig {
 	if isSocks == false {
-		return overrideInboundToHttp(port)
+		return overrideInboundToHttp(port, listenAll)
 	} else {
-		return overrideInboundToSocks(port, isUdpEnabled, auth)
+		return overrideInboundToSocks(port, isUdpEnabled, auth, listenAll)
 	}
 }
 
-func overrideInboundToHttp(port net.Port) []*core.InboundHandlerConfig {
+// listenAddress returns 0.0.0.0 when LAN clients may use this listener.
+func listenAddress(listenAll bool) []byte {
+	if listenAll {
+		return []byte{0, 0, 0, 0}
+	}
+
+	return []byte{127, 0, 0, 1}
+}
+func overrideInboundToHttp(port net.Port, listenAll bool) []*core.InboundHandlerConfig {
 	return []*core.InboundHandlerConfig{
 		{
 			ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
@@ -306,7 +314,7 @@ func overrideInboundToHttp(port net.Port) []*core.InboundHandlerConfig {
 				},
 				Listen: &net.IPOrDomain{
 					Address: &net.IPOrDomain_Ip{
-						Ip: []byte{127, 0, 0, 1},
+						Ip: listenAddress(listenAll),
 					},
 				},
 			}),
@@ -316,7 +324,7 @@ func overrideInboundToHttp(port net.Port) []*core.InboundHandlerConfig {
 	}
 }
 
-func overrideInboundToSocks(port net.Port, isUdpEnabled bool, auth *localSocksAuth) []*core.InboundHandlerConfig {
+func overrideInboundToSocks(port net.Port, isUdpEnabled bool, auth *localSocksAuth, listenAll bool) []*core.InboundHandlerConfig {
 	serverConfig := &socks.ServerConfig{
 		UdpEnabled: isUdpEnabled,
 	}
@@ -335,7 +343,7 @@ func overrideInboundToSocks(port net.Port, isUdpEnabled bool, auth *localSocksAu
 				},
 				Listen: &net.IPOrDomain{
 					Address: &net.IPOrDomain_Ip{
-						Ip: []byte{127, 0, 0, 1},
+						Ip: listenAddress(listenAll),
 					},
 				},
 			}),

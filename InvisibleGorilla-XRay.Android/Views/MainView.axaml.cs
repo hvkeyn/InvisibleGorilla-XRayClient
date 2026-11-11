@@ -5687,6 +5687,9 @@ namespace InvisibleGorillaXRay.Android.Views
 
                 // The Tor flag may survive from an earlier Tor profile: re-evaluate it against
                 // the config that is about to start, so a normal node is not tunnelled via Tor.
+                InvisibleGorillaXRay.Core.InvisibleGorillaXRayCore.LanAccessEnabled =
+                    settingsHandler.UserSettings.AllowLanAccess;
+
                 string startingConfigPath = settingsHandler.UserSettings.GetCurrentConfigPath();
                 if (Dispatcher.UIThread.CheckAccess())
                     ApplyTorStateForSelectedConfig(startingConfigPath);

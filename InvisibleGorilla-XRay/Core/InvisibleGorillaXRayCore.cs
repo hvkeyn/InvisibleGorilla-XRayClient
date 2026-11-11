@@ -307,6 +307,7 @@ namespace InvisibleGorillaXRay.Core
                         logPath,
                         isSocks,
                         isUdpEnabled,
+                        false,
                         localProxyCredentials);
                     DiagnosticLog.Write("ServerThread", "StartServer returned (server stopped)");
                 }

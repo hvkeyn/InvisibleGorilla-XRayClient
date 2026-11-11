@@ -59,6 +59,9 @@ namespace InvisibleGorillaXRay.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(0)]
         public int ServerScope;
 
+        // Let other devices on the same Wi-Fi use this listener as a proxy.
+        public bool AllowLanAccess;
+
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(10801)]
         public int ProxyPort;
 
@@ -208,7 +211,6 @@ namespace InvisibleGorillaXRay.Models
 
         public string GetLanguage() => Language;
 
-        public string GetCurrentConfigPath() => CurrentConfigPath;
 
         public Mode GetMode() => Mode;
 
@@ -229,6 +231,9 @@ namespace InvisibleGorillaXRay.Models
         public bool GetAutoUpdateEnabled() => IsAutoUpdate;
 
         public bool GetAutoSelectBest() => IsAutoSelectBest;
+
+        public string GetCurrentConfigPath() => CurrentConfigPath;
+
 
         public int GetServerScope() => ServerScope;
 

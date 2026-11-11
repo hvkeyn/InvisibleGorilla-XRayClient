@@ -47,6 +47,9 @@ namespace InvisibleGorillaXRay.Models
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(0)]
         public int ServerScope;
 
+        // Let other devices on the same Wi-Fi use this listener as a proxy.
+        public bool AllowLanAccess;
+
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate), DefaultValue(false)]
         public bool IsRunningAtStartup;
 

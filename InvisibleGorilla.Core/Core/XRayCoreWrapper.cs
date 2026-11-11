@@ -142,6 +142,7 @@ namespace InvisibleGorillaXRay.Core
             string logPath,
             bool isSocks,
             bool isUdpEnabled,
+            bool listenAll,
             LocalProxyCredentials? localProxyCredentials = null)
         {
             LocalProxyCredentials credentials = localProxyCredentials ?? LocalProxyCredentials.None;
@@ -154,7 +155,7 @@ namespace InvisibleGorillaXRay.Core
             try
             {
                 DiagnosticLog.Write("XRayWrapper", "Calling native StartServer...");
-                StartServerNative(config, port, logLevel.ToString(), logPathPtr, isSocks, isUdpEnabled, usernamePtr, passwordPtr);
+                StartServerNative(config, port, logLevel.ToString(), logPathPtr, isSocks, isUdpEnabled, usernamePtr, passwordPtr, listenAll);
                 DiagnosticLog.Write("XRayWrapper", "Native StartServer returned normally");
             }
             catch (Exception ex)
@@ -178,7 +179,8 @@ namespace InvisibleGorillaXRay.Core
                 [MarshalAs(UnmanagedType.I1)] bool isSocks,
                 [MarshalAs(UnmanagedType.I1)] bool isUdpEnabled,
                 IntPtr usernamePtr,
-                IntPtr passwordPtr);
+                IntPtr passwordPtr,
+                [MarshalAs(UnmanagedType.I1)] bool listenAll);
         }
 
         private static int serverStopInFlight;

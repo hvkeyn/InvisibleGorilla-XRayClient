@@ -90,7 +90,7 @@ func safeNew(configObj *core.Config, logPath *C.char, debugInfo string) (server 
 }
 
 //export StartServer
-func StartServer(config *C.char, port int, logLevel *C.char, logPath *C.char, isSocks bool, isUdpEnabled bool, username *C.char, password *C.char) {
+func StartServer(config *C.char, port int, logLevel *C.char, logPath *C.char, isSocks bool, isUdpEnabled bool, username *C.char, password *C.char, listenAll bool) {
 	serverStopMutex.Lock()
 	serverLifecycleActive = true
 	serverStopRequested = false
@@ -103,7 +103,8 @@ func StartServer(config *C.char, port int, logLevel *C.char, logPath *C.char, is
 		net.Port(port),
 		isSocks,
 		isUdpEnabled,
-		newLocalSocksAuth(C.GoString(username), C.GoString(password)))
+		newLocalSocksAuth(C.GoString(username), C.GoString(password)),
+		listenAll)
 
 	if logSeverity != clog.Severity_Unknown {
 		log := overrideLog(logSeverity, logPath)
@@ -198,7 +199,7 @@ func StopServer() {
 //export TestConnection
 func TestConnection(config *C.char, port int) int {
 	configObj := convertJsonToObject(config)
-	configObj.Inbound = overrideInbound(net.Port(port), false, false, nil)
+	configObj.Inbound = overrideInbound(net.Port(port), false, false, nil, false)
 
 	for _, app := range configObj.App {
 		if app != nil {
