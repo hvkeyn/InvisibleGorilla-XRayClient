@@ -5077,10 +5077,16 @@ namespace InvisibleGorillaXRay.Android.Views
                 return false;
 
             subscriptionFailoverTried.Add(path);
+            bool mobileNow = IsMobileNetworkNow();
+            bool preferForeignSni = mobileNow
+                && configs.Any(config => !IsRussianSni(ReadNodeSni(config.Path)));
+
             Config next = null;
             foreach (Config candidate in configs)
             {
                 if (subscriptionFailoverTried.Contains(candidate.Path))
+                    continue;
+                if (preferForeignSni && IsRussianSni(ReadNodeSni(candidate.Path)))
                     continue;
                 if (SubscriptionServerEndpoint.IsProviderNotice(candidate.Name))
                     continue;
@@ -5186,6 +5192,50 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private static string MobileOkListPath => System.IO.Path.Combine(
             System.IO.Path.GetFullPath(InvisibleGorillaXRay.Values.Directory.CONFIGS), ".mobile-ok");
+
+        /// <summary>
+        /// Reads the camouflage name from a node config. On this carrier the TLS hello for
+        /// Russian SNIs is reset on mobile data while foreign ones pass, so the name decides
+        /// whether a node can work over LTE at all.
+        /// </summary>
+        private static string ReadNodeSni(string path)
+        {
+            try
+            {
+                if (!System.IO.File.Exists(path))
+                    return string.Empty;
+
+                string text = System.IO.File.ReadAllText(path);
+                var match = System.Text.RegularExpressions.Regex.Match(
+                    text, "\"serverName\"\\s*:\\s*\"([^\"]+)\"");
+                return match.Success ? match.Groups[1].Value.Trim().ToLowerInvariant() : string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private static bool IsRussianSni(string sni)
+        {
+            if (string.IsNullOrWhiteSpace(sni))
+                return false;
+
+            if (sni.EndsWith(".ru", StringComparison.Ordinal) || sni.EndsWith(".su", StringComparison.Ordinal))
+                return true;
+
+            foreach (string marker in new[]
+            {
+                "yandex", "vk.com", "vk.ru", "mail.ru", "max.ru", "avito", "sber", "tinkoff",
+                "x5.ru", "ozon", "wildberries", "gosuslugi", "kinopoisk", "dzen", "ok.ru"
+            })
+            {
+                if (sni.Contains(marker))
+                    return true;
+            }
+
+            return false;
+        }
 
         private static bool IsMobileNetworkNow()
         {
@@ -5365,6 +5415,11 @@ namespace InvisibleGorillaXRay.Android.Views
             bool mobile = IsMobileNetworkNow();
             bool anyMobileOk = mobile && configs.Any(config => IsMobileOk(config.Path));
 
+            // On LTE the hello for a Russian SNI is dropped, so prefer nodes that camouflage
+            // as a foreign site; keep the full list as a fallback when none is available.
+            bool anyForeignSni = mobile
+                && configs.Any(config => !IsRussianSni(ReadNodeSni(config.Path)));
+
             int best = -1;
             int bestLatency = int.MaxValue;
             for (int index = 0; index < latencies.Length; index++)
@@ -5372,6 +5427,8 @@ namespace InvisibleGorillaXRay.Android.Views
                 if (SubscriptionServerEndpoint.IsProviderNotice(configs[index].Name))
                     continue;
                 if (anyMobileOk && !IsMobileOk(configs[index].Path))
+                    continue;
+                if (anyForeignSni && IsRussianSni(ReadNodeSni(configs[index].Path)))
                     continue;
                 if (latencies[index] < 0 || latencies[index] >= bestLatency)
                     continue;
