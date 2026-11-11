@@ -127,6 +127,11 @@ namespace InvisibleGorillaXRay.Android.Views
         private DispatcherTimer? heroWifiPulseTimer;
         private DispatcherTimer? homeTrafficTimer;
         private bool homeTrafficHooked;
+        // OpenFlux over Volga can answer 429 and drop to a few KB/s while the tunnel still
+        // looks healthy; track the session so a throttled transport falls back to a real node.
+        private int openFluxSlowSamples;
+        private long openFluxSessionStartMs;
+
         private const int HomeSpeedSlotCount = 24;
         private readonly long[] homeSpeedSamples = new long[HomeSpeedSlotCount];
         private readonly bool[] homeSpeedFaults = new bool[HomeSpeedSlotCount];
@@ -3652,10 +3657,50 @@ namespace InvisibleGorillaXRay.Android.Views
                 bool fault = homeFaultPending;
                 homeFaultPending = false;
                 PushHomeSpeedSample(bytesPerSec, fault);
+                NoteOpenFluxThroughput(bytesPerSec);
             }
             catch (Exception ex)
             {
                 DiagnosticLog.WriteException("MainView.HomeTraffic", ex);
+            }
+        }
+
+        private void NoteOpenFluxThroughput(long bytesPerSec)
+        {
+            try
+            {
+                if (!IsOpenFluxProfileActive())
+                {
+                    openFluxSlowSamples = 0;
+                    openFluxSessionStartMs = 0;
+                    return;
+                }
+
+                if (openFluxSessionStartMs == 0)
+                    openFluxSessionStartMs = System.Environment.TickCount64;
+
+                // Give the transport 30 seconds to settle before judging it.
+                if (System.Environment.TickCount64 - openFluxSessionStartMs < 30000)
+                    return;
+
+                if (bytesPerSec >= 20000)
+                {
+                    openFluxSlowSamples = 0;
+                    return;
+                }
+
+                openFluxSlowSamples++;
+                if (openFluxSlowSamples < 6)
+                    return;
+
+                openFluxSlowSamples = 0;
+                DiagnosticLog.Write("OpenFlux", "Transport stays below 20 KB/s; the relay is throttling this session");
+                SetStatus("OpenFlux: transport is throttled (429), slow session");
+                NoteHomeFault("Lang.Home.Glitch.Probe");
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.NoteOpenFluxThroughput", ex);
             }
         }
 

@@ -140,6 +140,9 @@ namespace InvisibleGorillaXRay.Android.Services
         private ConnectivityManager? connectivityManager;
         private ConnectivityManager.NetworkCallback? networkCallback;
         private long lastNetworkChangeMs;
+        private long monitoringStartedMs;
+        private int lastNetworkTransport = -1;
+        private int lastReactedTransport = -1;
 
         public override void OnCreate()
         {
@@ -723,6 +726,7 @@ namespace InvisibleGorillaXRay.Android.Services
                 if (connectivityManager == null)
                     return;
 
+                monitoringStartedMs = System.Environment.TickCount64;
                 networkCallback = new NetworkChangeCallback(this);
                 connectivityManager.RegisterDefaultNetworkCallback(networkCallback);
                 UpdateNetworkProfile(connectivityManager, connectivityManager.ActiveNetwork);
@@ -757,13 +761,19 @@ namespace InvisibleGorillaXRay.Android.Services
             try
             {
                 bool mobile = false;
+                NetworkCapabilities? capabilities = null;
                 if (manager != null && network != null)
                 {
-                    NetworkCapabilities? capabilities = manager.GetNetworkCapabilities(network);
+                    capabilities = manager.GetNetworkCapabilities(network);
                     mobile = capabilities != null && capabilities.HasTransport(TransportType.Cellular);
                 }
 
                 DpiHardening.MobileNetwork = mobile;
+                lastNetworkTransport = capabilities == null
+                    ? -1
+                    : capabilities.HasTransport(TransportType.Cellular) ? 1
+                    : capabilities.HasTransport(TransportType.Wifi) ? 2
+                    : 0;
                 DiagnosticLog.Write("AndroidVpnService", $"Network profile: {(mobile ? "mobile" : "wifi/other")}");
             }
             catch (Exception ex)
@@ -777,9 +787,25 @@ namespace InvisibleGorillaXRay.Android.Services
             UpdateNetworkProfile(connectivityManager, connectivityManager?.ActiveNetwork);
 
             long now = System.Environment.TickCount64;
-            long previous = Interlocked.Exchange(ref lastNetworkChangeMs, now);
-            if (previous != 0 && now - previous < 4000)
+
+            // The callback also fires when our own TUN appears and right after startup, which
+            // used to restart a healthy session for no reason. Only react to a real transport
+            // change (Wi-Fi <-> cellular) and never within the first seconds of monitoring.
+            if (monitoringStartedMs != 0 && now - monitoringStartedMs < 8000)
                 return;
+
+            int transport = lastNetworkTransport;
+            if (transport != 1 && transport != 2)
+                return;
+
+            if (lastReactedTransport == transport)
+                return;
+
+            long previous = Interlocked.Exchange(ref lastNetworkChangeMs, now);
+            if (previous != 0 && now - previous < 8000)
+                return;
+
+            lastReactedTransport = transport;
 
             DiagnosticLog.Write("AndroidVpnService", "Underlying network changed; session needs a restart");
             try
