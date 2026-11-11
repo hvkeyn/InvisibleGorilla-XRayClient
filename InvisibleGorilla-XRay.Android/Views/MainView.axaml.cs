@@ -130,6 +130,7 @@ namespace InvisibleGorillaXRay.Android.Views
         // OpenFlux over Volga can answer 429 and drop to a few KB/s while the tunnel still
         // looks healthy; track the session so a throttled transport falls back to a real node.
         private int openFluxSlowSamples;
+        private bool openFluxFallbackTried;
         private long openFluxSessionStartMs;
 
         private const int HomeSpeedSlotCount = 24;
@@ -3697,6 +3698,31 @@ namespace InvisibleGorillaXRay.Android.Views
                 DiagnosticLog.Write("OpenFlux", "Transport stays below 20 KB/s; the relay is throttling this session");
                 SetStatus("OpenFlux: transport is throttled (429), slow session");
                 NoteHomeFault("Lang.Home.Glitch.Probe");
+
+                // A throttled transport is worse than no transport: switch back to the last
+                // working node so the user keeps a usable tunnel instead of a dead session.
+                if (!openFluxFallbackTried)
+                {
+                    string fallback = ReadLastNode();
+                    if (!string.IsNullOrWhiteSpace(fallback))
+                    {
+                        openFluxFallbackTried = true;
+                        DiagnosticLog.Write("OpenFlux", $"Falling back to {System.IO.Path.GetFileName(fallback)}");
+                        _ = Dispatcher.UIThread.InvokeAsync(async () =>
+                        {
+                            try
+                            {
+                                settingsHandler.UpdateCurrentConfigPath(fallback);
+                                UpdateCurrentConfigSummary();
+                                await RestartConnectionAfterSettingsChangeAsync();
+                            }
+                            catch (Exception ex)
+                            {
+                                DiagnosticLog.WriteException("MainView.OpenFluxFallback", ex);
+                            }
+                        });
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -5190,6 +5216,40 @@ namespace InvisibleGorillaXRay.Android.Views
         // entry servers, so on mobile we prefer what is known to work instead of the lowest RTT.
         private static readonly HashSet<string> mobileOkConfigs = new(StringComparer.OrdinalIgnoreCase);
 
+        private static string LastNodePath => System.IO.Path.Combine(
+            System.IO.Path.GetFullPath(InvisibleGorillaXRay.Values.Directory.CONFIGS), ".last-node");
+
+        private static void RememberLastNode(string path)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(path) || OpenFluxProfilePaths.IsMarker(path) || TorProfilePaths.IsMarker(path))
+                    return;
+
+                System.IO.File.WriteAllText(LastNodePath, path);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.RememberLastNode", ex);
+            }
+        }
+
+        private static string ReadLastNode()
+        {
+            try
+            {
+                if (!System.IO.File.Exists(LastNodePath))
+                    return string.Empty;
+
+                string path = System.IO.File.ReadAllText(LastNodePath).Trim();
+                return HasConfigPayload(path) ? path : string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
         private static string MobileOkListPath => System.IO.Path.Combine(
             System.IO.Path.GetFullPath(InvisibleGorillaXRay.Values.Directory.CONFIGS), ".mobile-ok");
 
@@ -5734,6 +5794,8 @@ namespace InvisibleGorillaXRay.Android.Views
                                 SetStatus("Lang.Android.Status.RunningTunnel");
 
                                 string runningPath = settingsHandler.UserSettings.GetCurrentConfigPath();
+                                if (!string.IsNullOrWhiteSpace(runningPath))
+                                    RememberLastNode(runningPath);
                                 if (IsMobileNetworkNow() && !string.IsNullOrWhiteSpace(runningPath))
                                     MarkMobileOk(runningPath);
                             });

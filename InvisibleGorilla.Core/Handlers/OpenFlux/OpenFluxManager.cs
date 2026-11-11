@@ -170,7 +170,19 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
             if (!OpenFluxUrl.TryValidate(url, out string urlError))
                 return Fail(urlError);
 
+            // An empty key used to start the sidecar without --encryption-key-file while the
+            // exit still enforced its key: the session connected and then rejected all payload,
+            // which looked like "the key is accepted but wrong locally".
             string key = profile.EncryptionKey ?? "";
+            if (string.IsNullOrWhiteSpace(key) && !string.IsNullOrWhiteSpace(profile.DocUrl))
+            {
+                key = OpenFluxUrl.DeriveKey(profile.DocUrl);
+                profile.EncryptionKey = key;
+                DiagnosticLog.Write(Tag, "Encryption key was missing; derived it from the document URL");
+            }
+
+            if (string.IsNullOrWhiteSpace(key))
+                DiagnosticLog.Write(Tag, "WARNING: starting without an encryption key; the exit will reject payloads");
             // A mismatch between the client key and the exit key looks like "the key was
             // accepted but is wrong", so print a short fingerprint to compare in logs.
             try
