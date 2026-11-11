@@ -258,6 +258,7 @@ namespace InvisibleGorillaXRay.Android.Views
             TrySetupStep("InitializeConnectionInfo", InitializeConnectionInfo);
             TrySetupStep("ClearStatus", () => SetStatus("Lang.Status.Stopped"));
             TrySetupStep("HookNetworkMonitoring", HookNetworkMonitoring);
+        TrySetupStep("TryRunPendingAdbStart", TryRunPendingAdbStart);
 
             isInitialized = true;
             DiagnosticLog.Write("MainView", "Setup completed");
@@ -3151,6 +3152,32 @@ namespace InvisibleGorillaXRay.Android.Views
             return currentIds.SetEquals(nextIds);
         }
 
+        // Set from MainActivity when adb passes startOpenFlux=1, so a throttled OpenFlux
+        // session can be exercised without walking the UI.
+        internal static bool PendingStartOpenFlux;
+
+        private void TryRunPendingAdbStart()
+        {
+            try
+            {
+                if (!PendingStartOpenFlux)
+                    return;
+
+                PendingStartOpenFlux = false;
+                string marker = System.IO.Path.Combine(
+                    System.IO.Path.GetFullPath(InvisibleGorillaXRay.Values.Directory.CONFIGS),
+                    "__OpenFluxProfile__.json");
+                DiagnosticLog.Write("MainView", $"adb start: selecting {marker}");
+                settingsHandler.UpdateCurrentConfigPath(marker);
+                UpdateCurrentConfigSummary();
+                OnRunClick(null, new Avalonia.Interactivity.RoutedEventArgs());
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.TryRunPendingAdbStart", ex);
+            }
+        }
+
         private void HookNetworkMonitoring()
         {
             try
@@ -3681,7 +3708,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     openFluxSessionStartMs = System.Environment.TickCount64;
 
                 // Give the transport 30 seconds to settle before judging it.
-                if (System.Environment.TickCount64 - openFluxSessionStartMs < 30000)
+                if (System.Environment.TickCount64 - openFluxSessionStartMs < 12000)
                     return;
 
                 if (bytesPerSec >= 20000)
@@ -3691,7 +3718,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 }
 
                 openFluxSlowSamples++;
-                if (openFluxSlowSamples < 6)
+                if (openFluxSlowSamples < 3)
                     return;
 
                 openFluxSlowSamples = 0;
@@ -5242,12 +5269,35 @@ namespace InvisibleGorillaXRay.Android.Views
                     return string.Empty;
 
                 string path = System.IO.File.ReadAllText(LastNodePath).Trim();
-                return HasConfigPayload(path) ? path : string.Empty;
+                if (HasConfigPayload(path))
+                    return path;
             }
             catch
             {
-                return string.Empty;
             }
+
+            // Nothing remembered yet: take any usable plain config so a throttled
+            // OpenFlux session still has somewhere to fall back to.
+            try
+            {
+                string root = System.IO.Path.GetFullPath(InvisibleGorillaXRay.Values.Directory.CONFIGS);
+                if (System.IO.Directory.Exists(root))
+                {
+                    foreach (string file in System.IO.Directory.GetFiles(root, "*.json"))
+                    {
+                        string name = System.IO.Path.GetFileName(file);
+                        if (name.StartsWith("__", StringComparison.Ordinal))
+                            continue;
+                        if (HasConfigPayload(file))
+                            return file;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return string.Empty;
         }
 
         private static string MobileOkListPath => System.IO.Path.Combine(

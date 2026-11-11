@@ -313,6 +313,10 @@ namespace InvisibleGorillaXRay.Android
                 }
             }
 
+            // Diagnostic helper: start an OpenFlux session on request.
+            if (intent.GetIntExtra("startOpenFlux", 0) == 1)
+                InvisibleGorillaXRay.Android.Views.MainView.PendingStartOpenFlux = true;
+
             // Diagnostic helper: probe every subscription node over the current network.
             if (intent.GetIntExtra("sweepMobile", 0) is int sweepDelay && sweepDelay > 0)
             {
