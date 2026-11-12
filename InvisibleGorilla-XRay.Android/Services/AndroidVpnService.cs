@@ -896,6 +896,9 @@ namespace InvisibleGorillaXRay.Android.Services
             return configured;
         }
 
+        // Used when the link MTU is unknown: big enough for Wi-Fi, small enough for LTE 1300.
+        private const int SafeFallbackMtu = 1260;
+
         private int ResolveTunMtu()
         {
             int linkMtu = 0;
@@ -915,7 +918,10 @@ namespace InvisibleGorillaXRay.Android.Services
                 DiagnosticLog.WriteException("AndroidVpnService.ResolveTunMtu", ex);
             }
 
-            int mtu = linkMtu > 0 ? linkMtu - 40 : FallbackMtu;
+            // On cellular the link MTU is 1300 and Android sometimes reports 0 while the VPN
+            // is being established. Falling back to 1400 then was larger than the carrier path
+            // and large responses were dropped, so the fallback stays below that.
+            int mtu = linkMtu > 0 ? linkMtu - 40 : SafeFallbackMtu;
             if (mtu < MinTunMtu)
                 mtu = MinTunMtu;
             if (mtu > MaxTunMtu)
