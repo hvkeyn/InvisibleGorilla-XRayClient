@@ -290,29 +290,21 @@ namespace InvisibleGorillaXRay.Android.Services
                 // Android 17 rejects some /32 TUN addresses ("Cannot set address"), so widen
                 // the prefix on the later attempts instead of failing the session.
                 int addressPrefix = attempt == 2 ? 30 : 32;
-                bool minimal = attempt == 1;
+                // Ladder: full (blocking + app rules) -> app rules without blocking ->
+                // minimal. Blocking is what Android 17 refuses on some builds; the app lists
+                // must survive, so they are dropped only on the last attempt.
+                bool useBlocking = attempt == 0;
+                bool useAppRules = attempt < 2;
+                bool minimal = !useAppRules;
                 Builder builder = new Builder(this)
                     .SetSession(sessionName)
                     .SetMtu(tunMtu)
                     .AddAddress(tunAddress, addressPrefix)
                     .AddRoute("0.0.0.0", 0);
 
-                if (minimal)
-                {
-                    // First attempt stays bare: blocking, DNS and per-app rules are added only
-                    // if the system refuses this one, so a stack that dislikes them still works.
-                    DiagnosticLog.Write("AndroidVpnService", "Building a minimal TUN (blocking and app rules off, DNS on)");
-                    try
-                    {
-                        builder.AddDisallowedApplication(PackageName!);
-                    }
-                    catch (Exception ex)
-                    {
-                        DiagnosticLog.WriteException("AndroidVpnService.MinimalExcludeOwn", ex);
-                    }
-                }
+                DiagnosticLog.Write("AndroidVpnService", $"Building TUN: blocking={useBlocking}, appRules={useAppRules}");
 
-                if (!minimal && Build.VERSION.SdkInt >= BuildVersionCodes.Q)
+                if (useBlocking && Build.VERSION.SdkInt >= BuildVersionCodes.Q)
                 {
                     builder.SetBlocking(true);
                     try { builder.AllowFamily(2); } catch { }
@@ -334,16 +326,29 @@ namespace InvisibleGorillaXRay.Android.Services
                 foreach (string dnsServer in SplitDnsServers(effectiveDns))
                     builder.AddDnsServer(dnsServer);
 
-                if (!minimal)
-                {
+                if (useAppRules)
                     ExcludeServerFromTunnel(builder, bypassServer);
 
-                    if (enableIpv6)
-                        TryEnableIpv6(builder);
-                    else
-                        DiagnosticLog.Write("AndroidVpnService", "IPv6 TUN routes skipped");
+                if (useAppRules && enableIpv6)
+                    TryEnableIpv6(builder);
+                else if (!enableIpv6)
+                    DiagnosticLog.Write("AndroidVpnService", "IPv6 TUN routes skipped");
 
+                if (useAppRules)
+                {
                     ownProcessExcluded = ApplyApplicationRules(builder, appRulesMode, appPackages);
+                }
+                else
+                {
+                    DiagnosticLog.Write("AndroidVpnService", "App rules skipped on the last attempt");
+                    try
+                    {
+                        builder.AddDisallowedApplication(PackageName!);
+                    }
+                    catch (Exception ex)
+                    {
+                        DiagnosticLog.WriteException("AndroidVpnService.ExcludeOwn", ex);
+                    }
                 }
 
                 DiagnosticLog.Write(
