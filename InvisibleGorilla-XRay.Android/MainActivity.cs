@@ -313,6 +313,46 @@ namespace InvisibleGorillaXRay.Android
                 }
             }
 
+            // Diagnostic helper: start the session without touching the screen.
+            if (intent.GetIntExtra("runNow", 0) == 1)
+                InvisibleGorillaXRay.Android.Views.MainView.PendingRun = true;
+
+            // Diagnostic helper: select the first plain config so a fresh install can be tested.
+            if (intent.GetIntExtra("useFirstConfig", 0) == 1)
+            {
+                try
+                {
+                    var pickHandler = new InvisibleGorillaXRay.Handlers.SettingsHandler(
+                        () => new InvisibleGorillaXRay.Android.Handlers.Settings.AndroidStartup());
+                    string configs = System.IO.Path.GetFullPath(InvisibleGorillaXRay.Values.Directory.CONFIGS);
+                    string chosen = string.Empty;
+                    if (System.IO.Directory.Exists(configs))
+                    {
+                        foreach (string file in System.IO.Directory.GetFiles(configs, "*.json"))
+                        {
+                            string name = System.IO.Path.GetFileName(file);
+                            if (name.StartsWith("__", StringComparison.Ordinal))
+                                continue;
+                            if (new System.IO.FileInfo(file).Length > 20)
+                            {
+                                chosen = file;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (chosen.Length > 0)
+                    {
+                        InvisibleGorillaXRay.Android.Views.MainView.PendingConfigPath = chosen;
+                        InvisibleGorillaXRay.Core.DiagnosticLog.Write("MainActivity", $"Config selected from adb: {System.IO.Path.GetFileName(chosen)}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("MainActivity.UseFirstConfig", ex);
+                }
+            }
+
             // Diagnostic helper: make OpenFlux the selected configuration.
             if (intent.GetIntExtra("selectOpenFlux", 0) == 1 || intent.GetIntExtra("startOpenFlux", 0) == 1)
             {

@@ -259,6 +259,7 @@ namespace InvisibleGorillaXRay.Android.Views
             TrySetupStep("ClearStatus", () => SetStatus("Lang.Status.Stopped"));
             TrySetupStep("HookNetworkMonitoring", HookNetworkMonitoring);
         TrySetupStep("TryRunPendingAdbStart", TryRunPendingAdbStart);
+        TrySetupStep("StartAdbRunPoller", StartAdbRunPoller);
 
             isInitialized = true;
             DiagnosticLog.Write("MainView", "Setup completed");
@@ -3156,6 +3157,48 @@ namespace InvisibleGorillaXRay.Android.Views
         // session can be exercised without walking the UI.
         internal static bool PendingStartOpenFlux;
 
+        // Absolute config path requested over adb; honoured by the next RUN so a running
+        // instance can switch without walking the list.
+        internal static string? PendingConfigPath;
+
+        // Set from adb (runNow=1) and consumed by a UI timer so a session can be started
+        // without tapping the button.
+        internal static bool PendingRun;
+
+        private Avalonia.Threading.DispatcherTimer? adbRunPoller;
+
+        private void StartAdbRunPoller()
+        {
+            try
+            {
+                adbRunPoller = new Avalonia.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(500)
+                };
+                adbRunPoller.Tick += (_, _) =>
+                {
+                    if (!PendingRun)
+                        return;
+
+                    PendingRun = false;
+                    try
+                    {
+                        DiagnosticLog.Write("MainView", "adb run requested");
+                        OnRunClick(null, new Avalonia.Interactivity.RoutedEventArgs());
+                    }
+                    catch (Exception ex)
+                    {
+                        DiagnosticLog.WriteException("MainView.AdbRun", ex);
+                    }
+                };
+                adbRunPoller.Start();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.StartAdbRunPoller", ex);
+            }
+        }
+
         private void TryRunPendingAdbStart()
         {
             try
@@ -5261,6 +5304,31 @@ namespace InvisibleGorillaXRay.Android.Views
             }
         }
 
+        private static string FindFirstUsableConfig()
+        {
+            try
+            {
+                string root = System.IO.Path.GetFullPath(InvisibleGorillaXRay.Values.Directory.CONFIGS);
+                if (!System.IO.Directory.Exists(root))
+                    return string.Empty;
+
+                foreach (string file in System.IO.Directory.GetFiles(root, "*.json"))
+                {
+                    string name = System.IO.Path.GetFileName(file);
+                    if (name.StartsWith("__", StringComparison.Ordinal))
+                        continue;
+                    if (HasConfigPayload(file))
+                        return file;
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.FindFirstUsableConfig", ex);
+            }
+
+            return string.Empty;
+        }
+
         private static string ReadLastNode()
         {
             try
@@ -5741,6 +5809,36 @@ namespace InvisibleGorillaXRay.Android.Views
                     settingsHandler.UserSettings.AllowLanAccess;
 
                 string startingConfigPath = settingsHandler.UserSettings.GetCurrentConfigPath();
+                // A fresh install (or a wiped profile) can point at the OpenFlux/Tor marker
+                // that does not exist yet; RUN then failed with "configuration is invalid".
+                if (string.IsNullOrWhiteSpace(startingConfigPath)
+                    || !System.IO.File.Exists(startingConfigPath)
+                    || (new System.IO.FileInfo(startingConfigPath).Length <= 2
+                        && !OpenFluxProfilePaths.IsMarker(startingConfigPath)
+                        && !InvisibleGorillaXRay.Services.Tor.TorProfilePaths.IsMarker(startingConfigPath)))
+                {
+                    string recovered = FindFirstUsableConfig();
+                    if (!string.IsNullOrWhiteSpace(recovered))
+                    {
+                        DiagnosticLog.Write("MainView", $"Current config missing; falling back to {System.IO.Path.GetFileName(recovered)}");
+                        settingsHandler.UpdateCurrentConfigPath(recovered);
+                        UpdateCurrentConfigSummary();
+                        startingConfigPath = recovered;
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(PendingConfigPath))
+                {
+                    string requested = PendingConfigPath!;
+                    PendingConfigPath = null;
+                    if (System.IO.File.Exists(requested))
+                    {
+                        DiagnosticLog.Write("MainView", $"adb selected {System.IO.Path.GetFileName(requested)}");
+                        settingsHandler.UpdateCurrentConfigPath(requested);
+                        UpdateCurrentConfigSummary();
+                        startingConfigPath = requested;
+                    }
+                }
                 if (Dispatcher.UIThread.CheckAccess())
                     ApplyTorStateForSelectedConfig(startingConfigPath);
                 else

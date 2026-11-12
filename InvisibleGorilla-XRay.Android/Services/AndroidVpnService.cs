@@ -271,59 +271,100 @@ namespace InvisibleGorillaXRay.Android.Services
 
             int tunMtu = ResolveTunMtu();
 
-            Builder builder = new Builder(this)
-                .SetSession(sessionName)
-                .SetMtu(tunMtu)
-                .AddAddress(tunAddress, 32)
-                .AddRoute("0.0.0.0", 0);
-
-            if (Build.VERSION.SdkInt >= BuildVersionCodes.Q)
+            // A Builder that failed once cannot be reused ("Cannot set address"), and a TUN
+            // address still held by a previous session is the usual cause. Build a fresh
+            // builder per attempt with a new address.
+            bool ownProcessExcluded = false;
+            ParcelFileDescriptor? tunInterface = null;
+            for (int attempt = 0; attempt < 3 && tunInterface == null; attempt++)
             {
-                builder.SetBlocking(true);
-                try { builder.AllowFamily(2); } catch { }
-                if (httpProxyPort > 0)
+                if (attempt > 0)
                 {
+                    tunAddress = $"10.0.{Random.Shared.Next(237, 251)}.{Random.Shared.Next(2, 250)}";
+                    lock (SyncRoot)
+                    {
+                        ResetVpnCore("Retrying the TUN with a new address");
+                    }
+                }
+
+                // Android 17 rejects some /32 TUN addresses ("Cannot set address"), so widen
+                // the prefix on the later attempts instead of failing the session.
+                int addressPrefix = attempt == 2 ? 30 : 32;
+                bool minimal = attempt == 1;
+                Builder builder = new Builder(this)
+                    .SetSession(sessionName)
+                    .SetMtu(tunMtu)
+                    .AddAddress(tunAddress, addressPrefix)
+                    .AddRoute("0.0.0.0", 0);
+
+                if (minimal)
+                {
+                    // First attempt stays bare: blocking, DNS and per-app rules are added only
+                    // if the system refuses this one, so a stack that dislikes them still works.
+                    DiagnosticLog.Write("AndroidVpnService", "Building a minimal TUN (blocking and app rules off, DNS on)");
                     try
                     {
-                        builder.SetHttpProxy(ProxyInfo.BuildDirectProxy(tunAddress, httpProxyPort));
-                        DiagnosticLog.Write("AndroidVpnService", $"VPN HTTP proxy {tunAddress}:{httpProxyPort}");
+                        builder.AddDisallowedApplication(PackageName!);
                     }
                     catch (Exception ex)
                     {
-                        DiagnosticLog.WriteException("AndroidVpnService.SetHttpProxy", ex);
+                        DiagnosticLog.WriteException("AndroidVpnService.MinimalExcludeOwn", ex);
                     }
                 }
-            }
 
-            string effectiveDns = udpEnabled ? dns : ResolveNoUdpDns(dns);
-            foreach (string dnsServer in SplitDnsServers(effectiveDns))
-                builder.AddDnsServer(dnsServer);
+                if (!minimal && Build.VERSION.SdkInt >= BuildVersionCodes.Q)
+                {
+                    builder.SetBlocking(true);
+                    try { builder.AllowFamily(2); } catch { }
+                    if (httpProxyPort > 0)
+                    {
+                        try
+                        {
+                            builder.SetHttpProxy(ProxyInfo.BuildDirectProxy(tunAddress, httpProxyPort));
+                            DiagnosticLog.Write("AndroidVpnService", $"VPN HTTP proxy {tunAddress}:{httpProxyPort}");
+                        }
+                        catch (Exception ex)
+                        {
+                            DiagnosticLog.WriteException("AndroidVpnService.SetHttpProxy", ex);
+                        }
+                    }
+                }
 
-            ExcludeServerFromTunnel(builder, bypassServer);
+                string effectiveDns = udpEnabled ? dns : ResolveNoUdpDns(dns);
+                foreach (string dnsServer in SplitDnsServers(effectiveDns))
+                    builder.AddDnsServer(dnsServer);
 
-            if (enableIpv6)
-                TryEnableIpv6(builder);
-            else
-                DiagnosticLog.Write("AndroidVpnService", "IPv6 TUN routes skipped");
+                if (!minimal)
+                {
+                    ExcludeServerFromTunnel(builder, bypassServer);
 
-            bool ownProcessExcluded = ApplyApplicationRules(builder, appRulesMode, appPackages);
+                    if (enableIpv6)
+                        TryEnableIpv6(builder);
+                    else
+                        DiagnosticLog.Write("AndroidVpnService", "IPv6 TUN routes skipped");
 
-            DiagnosticLog.Write(
-                "AndroidVpnService",
-                $"Calling Builder.Establish() (mtu={tunMtu}, address={tunAddress}, mode={appRulesMode}, packages={appPackages.Length})...");
-            // Must stay off the Android UI thread. Posting Establish() to the main looper
-            // caused ANR when the user left the app (FocusEvent hasFocus=false waited 10s)
-            // — that is the "crashed while opening 2ip.io" report.
-            ParcelFileDescriptor? tunInterface = builder.Establish();
-            if (tunInterface == null)
-            {
-                Thread.Sleep(400);
-                tunInterface = builder.Establish();
+                    ownProcessExcluded = ApplyApplicationRules(builder, appRulesMode, appPackages);
+                }
+
+                DiagnosticLog.Write(
+                    "AndroidVpnService",
+                    $"Calling Builder.Establish() (mtu={tunMtu}, address={tunAddress}/{addressPrefix}, attempt={attempt + 1}, mode={appRulesMode}, packages={appPackages.Length})...");
+
+                try
+                {
+                    tunInterface = builder.Establish();
+                }
+                catch (Java.Lang.IllegalArgumentException addressError)
+                {
+                    DiagnosticLog.Write("AndroidVpnService", $"Establish failed: {addressError.Message}");
+                }
+
+                if (tunInterface == null)
+                    Thread.Sleep(500);
             }
             if (tunInterface == null)
                 throw new InvalidOperationException("Android VPN interface could not be established (Builder.Establish returned null). "
-                    + "Verify the VPN consent dialog was accepted and that no other always-on VPN is owning the tunnel.");
-            DiagnosticLog.Write("AndroidVpnService", "Builder.Establish() returned a TUN file descriptor");
+                    + "Verify the VPN consent dialog was accepted and that no other always-on VPN is owning the tunnel.");            DiagnosticLog.Write("AndroidVpnService", "Builder.Establish() returned a TUN file descriptor");
 
             // Keep the original descriptor in Java. Android removes the tun
             // interface only when that descriptor is closed. The Go side gets
