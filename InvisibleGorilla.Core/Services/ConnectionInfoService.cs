@@ -213,6 +213,10 @@ namespace InvisibleGorillaXRay.Services
             }
             catch (Exception ex)
             {
+                // The widget showed "Unknown" with no clue why; record the failed endpoint.
+                InvisibleGorillaXRay.Core.DiagnosticLog.Write(
+                    "ConnectionInfo",
+                    $"probe failed ({(proxy == null ? "direct" : "tunnel")}): {ShortError(ex)}");
                 return new ConnectionInfo { Ok = false, Error = ShortError(ex) };
             }
         }

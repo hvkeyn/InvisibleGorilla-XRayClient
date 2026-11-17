@@ -3337,6 +3337,12 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void UpdateCurrentConfigSummary()
         {
+            if (!Dispatcher.UIThread.CheckAccess())
+            {
+                Dispatcher.UIThread.Post(UpdateCurrentConfigSummary);
+                return;
+            }
+
             RepairCurrentConfigIfEmpty();
 
             Config? currentConfig = configHandler.GetCurrentConfig();
@@ -3450,6 +3456,12 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void SetStatus(string message)
         {
+            if (!Dispatcher.UIThread.CheckAccess())
+            {
+                Dispatcher.UIThread.Post(() => SetStatus(message));
+                return;
+            }
+
             string normalizedMessage = NormalizeStatusMessage(message);
             SetStatusPanel(HomeStatusPanelContainer, HomeStatusText, normalizedMessage);
             SetStatusPanel(ServersStatusPanelContainer, ServersStatusText, normalizedMessage);
@@ -3592,12 +3604,24 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void SetRunningState(bool isRunning)
         {
+            if (!Dispatcher.UIThread.CheckAccess())
+            {
+                Dispatcher.UIThread.Post(() => SetRunningState(isRunning));
+                return;
+            }
+
             RunActionButton.IsVisible = !isRunning;
             StopActionButton.IsVisible = isRunning;
         }
 
         private void SetConnectionState(ConnectionState state)
         {
+            if (!Dispatcher.UIThread.CheckAccess())
+            {
+                Dispatcher.UIThread.Post(() => SetConnectionState(state));
+                return;
+            }
+
             try
             {
                 ApplyConnectionState(state);
@@ -4675,6 +4699,20 @@ namespace InvisibleGorillaXRay.Android.Views
 
             try
             {
+                // The OpenFlux marker is only a valid pick once a document URL has been
+                // applied; otherwise the app showed "Selected config: OpenFlux" and then
+                // failed to load it.
+                if (OpenFluxProfilePaths.IsMarker(path)
+                    && string.IsNullOrWhiteSpace(settingsHandler.UserSettings.GetOpenFluxProfile().DocUrl))
+                {
+                    string fallback = FindFirstUsableConfig();
+                    DiagnosticLog.Write("MainView", "OpenFlux has no document; keeping a plain config");
+                    if (string.IsNullOrWhiteSpace(fallback) || string.Equals(fallback, path, StringComparison.OrdinalIgnoreCase))
+                        return false;
+
+                    path = fallback;
+                }
+
                 Config? selectedConfig = null;
 
                 if (GoidaProfilePaths.IsMarker(path))

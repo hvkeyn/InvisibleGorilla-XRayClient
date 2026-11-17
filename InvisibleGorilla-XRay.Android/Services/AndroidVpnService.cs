@@ -294,6 +294,10 @@ namespace InvisibleGorillaXRay.Android.Services
                 // minimal. Blocking is what Android 17 refuses on some builds; the app lists
                 // must survive, so they are dropped only on the last attempt.
                 bool useBlocking = attempt == 0;
+                // IPv6 and the server-exclusion route are dropped on the second attempt so the
+                // app lists (the feature users rely on) can be tested on their own.
+                bool useIpv6 = attempt == 0;
+                bool useExclude = attempt == 0;
                 bool useAppRules = attempt < 2;
                 bool minimal = !useAppRules;
                 Builder builder = new Builder(this)
@@ -302,7 +306,7 @@ namespace InvisibleGorillaXRay.Android.Services
                     .AddAddress(tunAddress, addressPrefix)
                     .AddRoute("0.0.0.0", 0);
 
-                DiagnosticLog.Write("AndroidVpnService", $"Building TUN: blocking={useBlocking}, appRules={useAppRules}");
+                DiagnosticLog.Write("AndroidVpnService", $"Building TUN: blocking={useBlocking}, appRules={useAppRules}, ipv6={useIpv6}, exclude={useExclude}");
 
                 if (useBlocking && Build.VERSION.SdkInt >= BuildVersionCodes.Q)
                 {
@@ -326,13 +330,13 @@ namespace InvisibleGorillaXRay.Android.Services
                 foreach (string dnsServer in SplitDnsServers(effectiveDns))
                     builder.AddDnsServer(dnsServer);
 
-                if (useAppRules)
+                if (useExclude)
                     ExcludeServerFromTunnel(builder, bypassServer);
 
-                if (useAppRules && enableIpv6)
+                if (useIpv6 && enableIpv6)
                     TryEnableIpv6(builder);
-                else if (!enableIpv6)
-                    DiagnosticLog.Write("AndroidVpnService", "IPv6 TUN routes skipped");
+                else
+                    DiagnosticLog.Write("AndroidVpnService", $"IPv6 TUN routes skipped (useIpv6={useIpv6}, enabled={enableIpv6})");
 
                 if (useAppRules)
                 {
