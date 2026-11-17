@@ -1663,6 +1663,7 @@ namespace InvisibleGorillaXRay.Android.Views
                         return;
 
                     toggle.IsChecked = !(toggle.IsChecked ?? false);
+                    PersistAppRulesFromEditor();
                 };
 
                 AppRulesItemsHost.Children.Add(card);
@@ -2092,6 +2093,7 @@ namespace InvisibleGorillaXRay.Android.Views
                         return;
 
                     toggle.IsChecked = !(toggle.IsChecked ?? false);
+                    PersistAppRulesFromEditor();
                 };
 
                 AppPickerItemsHost.Children.Add(card);
@@ -2146,6 +2148,86 @@ namespace InvisibleGorillaXRay.Android.Views
                    && sourceControl?.FindAncestorOfType<CheckBox>() == null
                    && sourceControl is not Button
                    && sourceControl?.FindAncestorOfType<Button>() == null;
+        }
+
+        /// <summary>
+        /// Saves the current app-list selection immediately, without closing the editor or
+        /// restarting the tunnel. Toggles used to live only in the UI until "Save" was pressed,
+        /// so RUN applied an empty list ("packages count=0").
+        /// </summary>
+        private void PersistAppRulesFromEditor()
+        {
+            try
+            {
+                CaptureActiveAppRulesEditorTemplateState();
+
+                UserSettings current = settingsHandler.UserSettings;
+                List<AppRuleTemplate> templates = workingAppRuleTemplates
+                    .Select(template => template.Clone())
+                    .Where(template => !string.IsNullOrWhiteSpace(template.Id))
+                    .ToList();
+
+                HashSet<string> validTemplateIds = templates
+                    .Select(template => template.Id)
+                    .Append(AppRuleTemplate.DefaultTemplateId)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                string normalizedCurrentConfigPath = string.IsNullOrWhiteSpace(appRulesBindingOverride)
+                    ? current.ResolveAppRuleBindingKey()
+                    : current.ResolveAppRuleBindingKey(appRulesBindingOverride);
+                bool bindingIsGroup = !string.IsNullOrWhiteSpace(normalizedCurrentConfigPath)
+                    && System.IO.Directory.Exists(normalizedCurrentConfigPath)
+                    && System.IO.File.Exists(System.IO.Path.Combine(normalizedCurrentConfigPath, "info.dat"));
+                List<AppRuleTemplateBinding> bindings = workingAppRuleBindings
+                    .Select(binding => binding.Clone())
+                    .Where(binding => !BindingMatchesAppRuleTarget(binding.ConfigPath, normalizedCurrentConfigPath, bindingIsGroup))
+                    .Where(binding => validTemplateIds.Contains(binding.TemplateId))
+                    .ToList();
+
+                if (!string.IsNullOrWhiteSpace(normalizedCurrentConfigPath))
+                {
+                    bindings.Add(new AppRuleTemplateBinding(
+                        configPath: normalizedCurrentConfigPath,
+                        templateId: activeAppRulesTemplateId));
+                }
+
+                AppRuleTemplate activeTemplate = GetActiveAppRulesTemplate();
+
+                settingsHandler.UpdateUserSettings(new UserSettings
+                {
+                    Language = current.GetLanguage(),
+                    Mode = current.GetMode(),
+                    Protocol = current.GetProtocol(),
+                    LogLevel = current.GetLogLevel(),
+                    IsSystemProxyUse = false,
+                    IsUdpEnable = current.GetUdpEnabled(),
+                    BlockQuic = current.GetBlockQuic(),
+                    IsAutoSelectBest = current.GetAutoSelectBest(),
+                    IsRunningAtStartup = current.GetRunningAtStartupEnabled(),
+                    IsStartHidden = current.GetStartHiddenEnabled(),
+                    IsAutoConnect = current.GetAutoConnectEnabled(),
+                    IsSendingAnalytics = current.GetSendingAnalyticsEnabled(),
+                    ProxyPort = current.GetProxyPort(),
+                    TunPort = current.GetTunPort(),
+                    TestPort = current.GetTestPort(),
+                    TunIp = current.GetTunIp(),
+                    Dns = current.GetDns(),
+                    LogPath = current.GetLogPath(),
+                    AppRulesMode = workingDefaultAppRuleTemplate.Mode,
+                    AppRules = workingDefaultAppRuleTemplate.AppRules.Select(rule => rule.Clone()).ToList(),
+                    AppRuleTemplates = templates,
+                    AppRuleTemplateBindings = bindings,
+                    Tor = current.GetTorSettings()
+                });
+
+                DiagnosticLog.Write(
+                    "[AppRules] auto-saved selection: " +
+                    $"mode={activeTemplate.Mode}, apps={activeTemplate.AppRules.Count(rule => rule.Enabled)}, template={activeAppRulesTemplateId}");
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.PersistAppRulesFromEditor", ex);
+            }
         }
 
         private void CaptureActiveAppRulesEditorTemplateState()
@@ -5769,8 +5851,28 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void OnRunClick(object? sender, RoutedEventArgs e)
         {
+            // Everything below must start on the UI thread: the worker posts back here and
+            // the app lists are read from the live templates.
+            if (!Dispatcher.UIThread.CheckAccess())
+            {
+                Dispatcher.UIThread.Post(() => OnRunClick(sender, e));
+                return;
+            }
+
             if (!TrySaveSettings(showSuccessMessage: false))
                 return;
+
+            // Selections made in the app picker must reach the tunnel even if the user did
+            // not press Save: only capture when the picker actually holds toggle state.
+            try
+            {
+                if (appRuleToggles.Count > 0)
+                    PersistAppRulesFromEditor();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.Run.PersistAppRules", ex);
+            }
 
             int epoch = Interlocked.Increment(ref connectionEpoch);
             ShowSection(NavigationSection.Home);
@@ -5849,11 +5951,16 @@ namespace InvisibleGorillaXRay.Android.Views
                 string startingConfigPath = settingsHandler.UserSettings.GetCurrentConfigPath();
                 // A fresh install (or a wiped profile) can point at the OpenFlux/Tor marker
                 // that does not exist yet; RUN then failed with "configuration is invalid".
-                if (string.IsNullOrWhiteSpace(startingConfigPath)
-                    || !System.IO.File.Exists(startingConfigPath)
-                    || (new System.IO.FileInfo(startingConfigPath).Length <= 2
-                        && !OpenFluxProfilePaths.IsMarker(startingConfigPath)
-                        && !InvisibleGorillaXRay.Services.Tor.TorProfilePaths.IsMarker(startingConfigPath)))
+                // Virtual profiles (OpenFlux/Tor) have no file on disk, so the missing-file
+                // check must not replace them: that is why picking OpenFlux silently started
+                // the previously selected VLESS node.
+                bool virtualProfile = OpenFluxProfilePaths.IsMarker(startingConfigPath)
+                    || InvisibleGorillaXRay.Services.Tor.TorProfilePaths.IsMarker(startingConfigPath);
+
+                if (!virtualProfile
+                    && (string.IsNullOrWhiteSpace(startingConfigPath)
+                        || !System.IO.File.Exists(startingConfigPath)
+                        || new System.IO.FileInfo(startingConfigPath).Length <= 2))
                 {
                     string recovered = FindFirstUsableConfig();
                     if (!string.IsNullOrWhiteSpace(recovered))
@@ -5869,7 +5976,9 @@ namespace InvisibleGorillaXRay.Android.Views
                 {
                     string requested = PendingConfigPath!;
                     PendingConfigPath = null;
-                    if (System.IO.File.Exists(requested))
+                    if (System.IO.File.Exists(requested)
+                        || OpenFluxProfilePaths.IsMarker(requested)
+                        || InvisibleGorillaXRay.Services.Tor.TorProfilePaths.IsMarker(requested))
                     {
                         DiagnosticLog.Write("MainView", $"adb selected {System.IO.Path.GetFileName(requested)}");
                         settingsHandler.UpdateCurrentConfigPath(requested);

@@ -364,6 +364,8 @@ namespace InvisibleGorillaXRay.Android
                         System.IO.Path.GetFullPath(InvisibleGorillaXRay.Values.Directory.CONFIGS),
                         "__OpenFluxProfile__.json");
                     selectHandler.UpdateCurrentConfigPath(marker);
+                    // The view keeps its own settings instance, so ask it to switch on the next run.
+                    InvisibleGorillaXRay.Android.Views.MainView.PendingConfigPath = marker;
                     InvisibleGorillaXRay.Core.DiagnosticLog.Write("MainActivity", "OpenFlux selected from adb");
                 }
                 catch (Exception ex)

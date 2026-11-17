@@ -438,8 +438,13 @@ namespace InvisibleGorillaXRay.Handlers.OpenFlux
                 return;
             }
 
-            if (line.IndexOf("yandex captcha", StringComparison.OrdinalIgnoreCase) >= 0)
+            // The carrier now reports "captcha required" / "captcha solve: ... 403"; the old
+            // match only knew "yandex captcha", so a stuck session looked healthy.
+            if (line.IndexOf("yandex captcha", StringComparison.OrdinalIgnoreCase) >= 0
+                || line.IndexOf("captcha required", StringComparison.OrdinalIgnoreCase) >= 0
+                || line.IndexOf("captcha solve", StringComparison.OrdinalIgnoreCase) >= 0)
             {
+                DiagnosticLog.Write(Tag, "The carrier wants a captcha; open the document in a browser to refresh cookies");
                 SetStatus(OpenFluxClientStatus.Error, "captcha");
                 return;
             }
