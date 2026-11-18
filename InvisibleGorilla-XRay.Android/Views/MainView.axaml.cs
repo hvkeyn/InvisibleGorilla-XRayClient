@@ -1842,6 +1842,17 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void CloseAppPicker()
         {
+            // Leaving the picker is a commit point: toggles used to be dropped here.
+            try
+            {
+                if (appRuleToggles.Count > 0)
+                    PersistAppRulesFromEditor();
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.CloseAppPicker.Persist", ex);
+            }
+
             AppPickerOverlay.IsVisible = false;
         }
 

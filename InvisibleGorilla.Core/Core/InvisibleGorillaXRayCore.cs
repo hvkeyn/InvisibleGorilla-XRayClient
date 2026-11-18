@@ -403,6 +403,15 @@ namespace InvisibleGorillaXRay.Core
             DiagnosticLog.Write("Run", $"localSocksAuth={(localProxyCredentials.HasValue ? "enabled" : "disabled")}");
             DiagnosticLog.Write("Run", $"config length={config?.Length ?? 0}, first 200 chars: {(config?.Length > 200 ? config.Substring(0, 200) : config)}");
 
+            // A previous core may still own the proxy port (fast STOP -> RUN). Reuse of that
+            // socket is what produced "connected, traffic counters move, nothing loads".
+            if (IsPortListening(proxyPort))
+            {
+                DiagnosticLog.Write("Run", $"Port {proxyPort} is still busy; forcing the previous core down");
+                try { XRayCoreWrapper.StopServer(); } catch (Exception ex) { DiagnosticLog.WriteException("Run.ForceStop", ex); }
+                WaitForPortClosed(proxyPort, maxWaitMs: 6000);
+            }
+
             SendServerStartEvent();
 
             bool serverStarted = false;
@@ -597,6 +606,46 @@ namespace InvisibleGorillaXRay.Core
             return loaded;
         }
 
+        private static bool IsPortListening(int port)
+        {
+            try
+            {
+                using TcpClient client = new TcpClient(AddressFamily.InterNetwork);
+                client.Connect(IPAddress.Loopback, port);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Waits until nothing listens on the local proxy port. A quick STOP/RUN used to attach
+        /// the new TUN to a socket the old core still owned, which looked like "connected, data
+        /// flows, nothing loads".
+        /// </summary>
+        private static bool WaitForPortClosed(int port, int maxWaitMs)
+        {
+            int elapsed = 0;
+            const int interval = 100;
+
+            while (elapsed < maxWaitMs)
+            {
+                if (!IsPortListening(port))
+                {
+                    DiagnosticLog.Write("WaitForPort", $"Port {port} closed after {elapsed}ms");
+                    return true;
+                }
+
+                Thread.Sleep(interval);
+                elapsed += interval;
+            }
+
+            DiagnosticLog.Write("WaitForPort", $"Port {port} is still listening after {maxWaitMs}ms");
+            return false;
+        }
+
         private static bool WaitForPortActive(int port, int maxWaitMs)
         {
             int elapsed = 0;
@@ -643,6 +692,12 @@ namespace InvisibleGorillaXRay.Core
             catch (Exception ex) { DiagnosticLog.WriteException("Stop.Tor", ex); }
             try { XRayCoreWrapper.StopServer(); }
             catch (Exception ex) { DiagnosticLog.WriteException("Stop.Server", ex); }
+            try
+            {
+                if (!OperatingSystem.IsAndroid())
+                    WaitForPortClosed(getProxyPort.Invoke(), maxWaitMs: 6000);
+            }
+            catch (Exception ex) { DiagnosticLog.WriteException("Stop.WaitPort", ex); }
             DiagnosticLog.Write("Stop", $"Stop sequence issued in {Environment.TickCount64 - stopStartedMs}ms");
             try { AnalyticsService.SendEvent(new StoppedEvent()); }
             catch { }

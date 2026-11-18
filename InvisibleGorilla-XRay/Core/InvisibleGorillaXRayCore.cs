@@ -293,6 +293,13 @@ namespace InvisibleGorillaXRay.Core
             DiagnosticLog.Write("Run", $"localSocksAuth={(localProxyCredentials.HasValue ? "enabled" : "disabled")}");
             DiagnosticLog.Write("Run", $"config length={config?.Length ?? 0}, first 200 chars: {(config?.Length > 200 ? config.Substring(0, 200) : config)}");
 
+            if (IsPortListening(proxyPort))
+            {
+                DiagnosticLog.Write("Run", $"Port {proxyPort} is still busy; forcing the previous core down");
+                try { XRayCoreWrapper.StopServer(); } catch (Exception ex) { DiagnosticLog.WriteException("Run.ForceStop", ex); }
+                WaitForPortClosed(proxyPort, maxWaitMs: 6000);
+            }
+
             SendServerStartEvent();
 
             bool serverStarted = false;
@@ -698,6 +705,41 @@ namespace InvisibleGorillaXRay.Core
 
         private const string OpenFluxYandexBypass =
             "disk.yandex.ru;volga.yandex.ru;push.yandex.ru;office-online.disk.yandex.net;passport.yandex.ru;yandex.ru;yandex.net";
+
+        private static bool IsPortListening(int port)
+        {
+            try
+            {
+                using TcpClient client = new TcpClient(AddressFamily.InterNetwork);
+                client.Connect(IPAddress.Loopback, port);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool WaitForPortClosed(int port, int maxWaitMs)
+        {
+            int elapsed = 0;
+            const int interval = 100;
+
+            while (elapsed < maxWaitMs)
+            {
+                if (!IsPortListening(port))
+                {
+                    DiagnosticLog.Write("WaitForPort", $"Port {port} closed after {elapsed}ms");
+                    return true;
+                }
+
+                Thread.Sleep(interval);
+                elapsed += interval;
+            }
+
+            DiagnosticLog.Write("WaitForPort", $"Port {port} is still listening after {maxWaitMs}ms");
+            return false;
+        }
 
         private static bool WaitForPortActive(int port, int maxWaitMs)
         {

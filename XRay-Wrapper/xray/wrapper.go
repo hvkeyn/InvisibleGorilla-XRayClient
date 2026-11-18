@@ -269,6 +269,9 @@ func clearServerStopState() {
 	serverStopChannel = nil
 	serverLifecycleActive = false
 	serverStopRequested = false
+	// Drop the instance so the UI stops reading traffic counters from a closed core
+	// ("exchange is happening" while nothing actually flows).
+	activeInstance = nil
 	serverStopMutex.Unlock()
 }
 
