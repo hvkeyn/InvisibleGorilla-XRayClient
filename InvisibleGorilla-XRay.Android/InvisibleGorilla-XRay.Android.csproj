@@ -20,9 +20,9 @@
 
     <ApplicationTitle>Invisible Gorilla XRay</ApplicationTitle>
 
-    <ApplicationVersion>183</ApplicationVersion>
+    <ApplicationVersion>186</ApplicationVersion>
 
-    <ApplicationDisplayVersion>3.8.14</ApplicationDisplayVersion>
+    <ApplicationDisplayVersion>3.8.17</ApplicationDisplayVersion>
 
     <AndroidPackageFormats>apk</AndroidPackageFormats>
 

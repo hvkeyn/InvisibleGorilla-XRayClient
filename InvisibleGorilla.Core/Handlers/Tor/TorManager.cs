@@ -109,13 +109,23 @@ namespace InvisibleGorillaXRay.Handlers.Tor
                 try { File.WriteAllText(logFile, string.Empty); } catch { }
 
                 List<string> bridges = settings.GetBridgeLines();
+                // Direct Tor is blocked on most Russian carriers; a profile without bridges
+                // used to start "NONE" and fail at 10%. Fall back to Snowflake, which needs
+                // no bridge lines (same default the desktop client uses).
+                BridgeType requestedType = settings.GetBridgeType();
+                if (requestedType == BridgeType.NONE && (bridges == null || bridges.Count == 0))
+                {
+                    requestedType = BridgeType.SNOWFLAKE;
+                    DiagnosticLog.Write(Tag, "No bridges configured; defaulting to Snowflake");
+                }
+
                 string torrc = TorrcBuilder.Build(
                     socksPort, controlPort, dataDir, cookieFile, logFile,
-                    settings.GetBridgeType(), bridges, settings.GetExitCountry());
+                    requestedType, bridges, settings.GetExitCountry());
                 File.WriteAllText(torrcPath, torrc);
 
                 string exit = settings.GetExitCountry();
-                DiagnosticLog.Write(Tag, $"Starting tor (socks={socksPort}, control={controlPort}, bridgeType={settings.GetBridgeType()}, exit={(string.IsNullOrEmpty(exit) ? "any" : exit)})");
+                DiagnosticLog.Write(Tag, $"Starting tor (socks={socksPort}, control={controlPort}, bridgeType={requestedType}, exit={(string.IsNullOrEmpty(exit) ? "any" : exit)})");
 
                 if (!StartProcess(torrcPath))
                     return new Status(Code.ERROR, SubCode.CANT_CONNECT, "Failed to launch the tor process.");

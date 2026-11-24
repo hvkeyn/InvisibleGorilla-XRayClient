@@ -313,6 +313,17 @@ namespace InvisibleGorillaXRay.Android
                 }
             }
 
+            // Diagnostic helper: select the Tor or Goida profile (virtual markers).
+            if (intent.GetIntExtra("selectTor", 0) == 1 || intent.GetIntExtra("selectGoida", 0) == 1)
+            {
+                bool tor = intent.GetIntExtra("selectTor", 0) == 1;
+                string markerName = tor ? "__TorBridges__.json" : "__GoidaProfile__.json";
+                string markerPath = System.IO.Path.Combine(
+                    System.IO.Path.GetFullPath(InvisibleGorillaXRay.Values.Directory.CONFIGS), markerName);
+                InvisibleGorillaXRay.Android.Views.MainView.PendingConfigPath = markerPath;
+                InvisibleGorillaXRay.Core.DiagnosticLog.Write("MainActivity", $"select profile -> {markerName}");
+            }
+
             // Diagnostic helper: import a batch of links (base64 of the '|'-joined list, so the
             // shell never sees a pipe or an ampersand).
             string batchB64 = intent.GetStringExtra("importLinksB64");
@@ -360,7 +371,10 @@ namespace InvisibleGorillaXRay.Android
             {
                 try
                 {
-                    string[] keep = { "WhiteBlade-YC", "WhiteBlade-RU", "WhiteBlade-FRA", "WhiteBlade-DE", "WhiteBlade-DE-iOS" };
+                    string keepExtra = intent.GetStringExtra("keepConfigs");
+                    string[] keep = string.IsNullOrWhiteSpace(keepExtra)
+                        ? new[] { "WhiteBlade-YC", "WhiteBlade-RU", "WhiteBlade-FRA", "WhiteBlade-DE", "WhiteBlade-DE-iOS" }
+                        : keepExtra.Split('|', StringSplitOptions.RemoveEmptyEntries);
                     string configsDir = System.IO.Path.GetFullPath(InvisibleGorillaXRay.Values.Directory.CONFIGS);
                     int removed = 0;
                     if (System.IO.Directory.Exists(configsDir))
