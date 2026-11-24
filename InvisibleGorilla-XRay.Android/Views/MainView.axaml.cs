@@ -3379,7 +3379,46 @@ namespace InvisibleGorillaXRay.Android.Views
                 }
             });
         }
+        // A restart must be single-flight: a network-change event or a failed probe during the
+        // restart used to trigger another restart, which looked like connect/disconnect loops.
+        private static int restartInFlight;
+        private static long restartCompletedMs;
+
+        private static bool TryBeginRestart()
+        {
+            if (Interlocked.CompareExchange(ref restartInFlight, 1, 0) != 0)
+                return false;
+
+            long now = System.Environment.TickCount64;
+            if (restartCompletedMs != 0 && now - restartCompletedMs < 8000)
+            {
+                Interlocked.Exchange(ref restartInFlight, 0);
+                return false;
+            }
+
+            return true;
+        }
+
         private async Task RestartConnectionAfterSettingsChangeAsync()
+        {
+            if (!TryBeginRestart())
+            {
+                DiagnosticLog.Write("Restart", "Restart already in flight or just finished; skipping");
+                return;
+            }
+
+            try
+            {
+                await RestartConnectionCoreAsync();
+            }
+            finally
+            {
+                restartCompletedMs = System.Environment.TickCount64;
+                Interlocked.Exchange(ref restartInFlight, 0);
+            }
+        }
+
+        private async Task RestartConnectionCoreAsync()
         {
             Dispatcher.UIThread.Post(() =>
             {

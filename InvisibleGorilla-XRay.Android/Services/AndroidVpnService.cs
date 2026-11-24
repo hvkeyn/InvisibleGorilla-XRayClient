@@ -144,6 +144,11 @@ namespace InvisibleGorillaXRay.Android.Services
         private int lastNetworkTransport = -1;
         private int lastReactedTransport = -1;
 
+        // The physical (non-VPN) default network. The VPN must be bound to it, otherwise
+        // Android keeps the tunnel on the network that was default at establish time and
+        // stops passing traffic after a Wi-Fi -> LTE switch.
+        private Network? lastUnderlyingNetwork;
+
         public override void OnCreate()
         {
             base.OnCreate();
@@ -269,6 +274,9 @@ namespace InvisibleGorillaXRay.Android.Services
                 ResetVpnCore("Restarting Android VPN");
             }
 
+            // Remember the physical network before the VPN exists, so the TUN can be bound to it.
+            TrackUnderlyingNetwork(connectivityManager?.ActiveNetwork);
+
             int tunMtu = ResolveTunMtu();
 
             // A Builder that failed once cannot be reused ("Cannot set address"), and a TUN
@@ -305,6 +313,8 @@ namespace InvisibleGorillaXRay.Android.Services
                     .SetMtu(tunMtu)
                     .AddAddress(tunAddress, addressPrefix)
                     .AddRoute("0.0.0.0", 0);
+
+                BindUnderlyingNetwork(builder);
 
                 DiagnosticLog.Write("AndroidVpnService", $"Building TUN: blocking={useBlocking}, appRules={useAppRules}, ipv6={useIpv6}, exclude={useExclude}");
 
@@ -833,9 +843,107 @@ namespace InvisibleGorillaXRay.Android.Services
             }
         }
 
+        /// <summary>
+        /// Tells Android which physical network carries the tunnel. Without this the VPN stays
+        /// pinned to the network that was default when it was established (usually Wi-Fi), so
+        /// after a switch to LTE the tunnel is up but nothing leaves the device.
+        /// </summary>
+        private void BindUnderlyingNetwork(Builder builder)
+        {
+            try
+            {
+                if (Build.VERSION.SdkInt < BuildVersionCodes.LollipopMr1)
+                    return;
+
+                Network? underlying = ResolveUnderlyingNetwork();
+                if (underlying == null)
+                {
+                    DiagnosticLog.Write("AndroidVpnService", "No physical network found; the TUN stays unbound");
+                    return;
+                }
+
+                builder.SetUnderlyingNetworks(new[] { underlying });
+                lastUnderlyingNetwork = underlying;
+                DiagnosticLog.Write("AndroidVpnService", $"TUN bound to the underlying network (transport={lastNetworkTransport})");
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("AndroidVpnService.BindUnderlyingNetwork", ex);
+            }
+        }
+
+        /// <summary>
+        /// Finds the physical network that should carry the tunnel: the active one when it is
+        /// not our VPN, otherwise any connected non-VPN network with internet capability.
+        /// </summary>
+        private Network? ResolveUnderlyingNetwork()
+        {
+            try
+            {
+                ConnectivityManager? manager = connectivityManager;
+                if (manager == null)
+                    return lastUnderlyingNetwork;
+
+                for (int attempt = 0; attempt < 10; attempt++)
+                {
+                    Network? active = manager.ActiveNetwork;
+                    if (active != null && !IsOurVpnNetwork(active))
+                        return active;
+
+                    if (lastUnderlyingNetwork != null)
+                        return lastUnderlyingNetwork;
+
+                    try
+                    {
+                        foreach (Network candidate in manager.GetAllNetworks())
+                        {
+                            NetworkCapabilities? capabilities = manager.GetNetworkCapabilities(candidate);
+                            if (capabilities == null || !capabilities.HasCapability(NetCapability.Internet))
+                                continue;
+                            if (capabilities.HasTransport(TransportType.Vpn))
+                                continue;
+
+                            return candidate;
+                        }
+                    }
+                    catch (Exception inner)
+                    {
+                        DiagnosticLog.WriteException("AndroidVpnService.ResolveUnderlyingNetwork.Scan", inner);
+                    }
+
+                    Thread.Sleep(200);
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("AndroidVpnService.ResolveUnderlyingNetwork", ex);
+            }
+
+            return lastUnderlyingNetwork;
+        }
+
+        private void TrackUnderlyingNetwork(Network? network)
+        {
+            try
+            {
+                if (network == null || connectivityManager == null)
+                    return;
+
+                NetworkCapabilities? capabilities = connectivityManager.GetNetworkCapabilities(network);
+                if (capabilities == null || capabilities.HasTransport(TransportType.Vpn))
+                    return;
+
+                lastUnderlyingNetwork = network;
+                UpdateNetworkProfile(connectivityManager, network);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("AndroidVpnService.TrackUnderlyingNetwork", ex);
+            }
+        }
+
         private void OnDefaultNetworkChanged()
         {
-            UpdateNetworkProfile(connectivityManager, connectivityManager?.ActiveNetwork);
 
             long now = System.Environment.TickCount64;
 
@@ -883,6 +991,7 @@ namespace InvisibleGorillaXRay.Android.Services
                 if (owner.IsOurVpnNetwork(network))
                     return;
 
+                owner.TrackUnderlyingNetwork(network);
                 owner.OnDefaultNetworkChanged();
             }
 
@@ -892,6 +1001,14 @@ namespace InvisibleGorillaXRay.Android.Services
                     return;
 
                 owner.OnDefaultNetworkChanged();
+            }
+
+            public override void OnCapabilitiesChanged(Network network, NetworkCapabilities capabilities)
+            {
+                if (owner.IsOurVpnNetwork(network))
+                    return;
+
+                owner.TrackUnderlyingNetwork(network);
             }
         }
 
