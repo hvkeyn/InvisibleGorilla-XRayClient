@@ -43,8 +43,10 @@ namespace InvisibleGorillaXRay.Android.Services
             if (global::Android.Net.VpnService.Prepare(context) != null)
                 return CreateError("Android VPN permission has not been granted.");
 
+            // Clear any leftover VPN before establishing a new one (see ForceStop).
+            ForceStop("reset before start");
             Stop();
-            for (int i = 0; i < 25; i++)
+            for (int i = 0; i < 75; i++)
             {
                 if (!IsRunning && !IsStopping)
                     break;
@@ -94,6 +96,44 @@ namespace InvisibleGorillaXRay.Android.Services
             }
 
             return completion.Task.Result;
+        }
+
+        /// <summary>
+        /// Stops the service even when our bookkeeping says it is not running. A VPN left
+        /// behind by a killed process made every later Establish() fail until the phone was
+        /// rebooted.
+        /// </summary>
+        public static void ForceStop(string reason)
+        {
+            try
+            {
+                Context? context = global::Android.App.Application.Context;
+                if (context != null)
+                {
+                    AndroidVpnService.StopFromClient(reason);
+                    try
+                    {
+                        context.StopService(new Intent(context, typeof(AndroidVpnService)));
+                    }
+                    catch (Exception ex)
+                    {
+                        InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("AndroidVpnServiceController.StopService", ex);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("AndroidVpnServiceController.ForceStop", ex);
+            }
+            finally
+            {
+                lock (SyncRoot)
+                {
+                    isRunning = false;
+                    isStopping = false;
+                    pendingStart = null;
+                }
+            }
         }
 
         public static void Stop()

@@ -313,6 +313,133 @@ namespace InvisibleGorillaXRay.Android
                 }
             }
 
+            // Diagnostic helper: import a batch of links (base64 of the '|'-joined list, so the
+            // shell never sees a pipe or an ampersand).
+            string batchB64 = intent.GetStringExtra("importLinksB64");
+            if (!string.IsNullOrWhiteSpace(batchB64))
+            {
+                try
+                {
+                    byte[] rawLinks = Convert.FromBase64String(batchB64.Trim());
+                    intent.PutExtra("importLinks", System.Text.Encoding.UTF8.GetString(rawLinks));
+                }
+                catch (Exception decodeError)
+                {
+                    InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("MainActivity.ImportLinksB64", decodeError);
+                }
+            }
+
+            // Diagnostic helper: import a batch of links separated by '|'.
+            string batchLinks = intent.GetStringExtra("importLinks");
+            if (!string.IsNullOrWhiteSpace(batchLinks))
+            {
+                _ = Task.Run(async () =>
+                {
+                    int ok = 0;
+                    foreach (string link in batchLinks.Split('|', StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        try
+                        {
+                            if (InvisibleGorillaXRay.Android.Handlers.DeepLinks.AndroidDeepLinkDispatcher.DispatchExternalValue(link.Trim()))
+                                ok++;
+                        }
+                        catch (Exception linkError)
+                        {
+                            InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("MainActivity.ImportLinks", linkError);
+                        }
+
+                        await Task.Delay(2500).ConfigureAwait(false);
+                    }
+
+                    InvisibleGorillaXRay.Core.DiagnosticLog.Write("MainActivity", $"importLinks dispatched {ok}");
+                });
+            }
+
+            // Diagnostic helper: drop configs that are not in the kept WhiteBlade set.
+            if (intent.GetIntExtra("pruneConfigs", 0) == 1)
+            {
+                try
+                {
+                    string[] keep = { "WhiteBlade-YC", "WhiteBlade-RU", "WhiteBlade-FRA", "WhiteBlade-DE", "WhiteBlade-DE-iOS" };
+                    string configsDir = System.IO.Path.GetFullPath(InvisibleGorillaXRay.Values.Directory.CONFIGS);
+                    int removed = 0;
+                    if (System.IO.Directory.Exists(configsDir))
+                    {
+                        foreach (string file in System.IO.Directory.GetFiles(configsDir, "*.json"))
+                        {
+                            string name = System.IO.Path.GetFileNameWithoutExtension(file);
+                            if (name.StartsWith("__", StringComparison.Ordinal))
+                                continue;
+
+                            bool keepFile = false;
+                            foreach (string allowed in keep)
+                            {
+                                if (string.Equals(name, allowed, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    keepFile = true;
+                                    break;
+                                }
+                            }
+
+                            if (keepFile)
+                                continue;
+
+                            try
+                            {
+                                System.IO.File.Delete(file);
+                                removed++;
+                            }
+                            catch (Exception deleteError)
+                            {
+                                InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("MainActivity.PruneConfigs.Delete", deleteError);
+                            }
+                        }
+                    }
+
+                    InvisibleGorillaXRay.Core.DiagnosticLog.Write("MainActivity", $"pruneConfigs removed {removed} file(s)");
+                }
+                catch (Exception ex)
+                {
+                    InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("MainActivity.PruneConfigs", ex);
+                }
+            }
+
+            // Diagnostic helper: pick a config by file-name fragment (adb testing).
+            string configHint = intent.GetStringExtra("useConfig");
+            if (!string.IsNullOrWhiteSpace(configHint))
+            {
+                try
+                {
+                    string configsDir = System.IO.Path.GetFullPath(InvisibleGorillaXRay.Values.Directory.CONFIGS);
+                    string match = string.Empty;
+                    if (System.IO.Directory.Exists(configsDir))
+                    {
+                        foreach (string file in System.IO.Directory.GetFiles(configsDir, "*.json"))
+                        {
+                            if (System.IO.Path.GetFileName(file).IndexOf(configHint, StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                match = file;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (match.Length > 0)
+                    {
+                        InvisibleGorillaXRay.Android.Views.MainView.PendingConfigPath = match;
+                        InvisibleGorillaXRay.Core.DiagnosticLog.Write("MainActivity", $"useConfig -> {System.IO.Path.GetFileName(match)}");
+                    }
+                    else
+                    {
+                        InvisibleGorillaXRay.Core.DiagnosticLog.Write("MainActivity", $"useConfig: no match for '{configHint}'");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("MainActivity.UseConfig", ex);
+                }
+            }
+
             // Diagnostic helper: start the session without touching the screen.
             if (intent.GetIntExtra("runNow", 0) == 1)
                 InvisibleGorillaXRay.Android.Views.MainView.PendingRun = true;

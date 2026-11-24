@@ -54,7 +54,20 @@ namespace InvisibleGorillaXRay.Android.Handlers.Tunnels
 
             ApplyQuicPolicy();
 
-            Status startStatus = AndroidVpnServiceController.Start(new AndroidVpnStartOptions
+            Status startStatus = StartOnce();
+            if (startStatus.Code == Code.ERROR)
+            {
+                // A VPN the system still holds from a dead process refuses every establish
+                // ("Cannot set address"); drop it and try the whole start once more.
+                DiagnosticLog.Write("AndroidTunnel", $"VPN start failed ({startStatus.Content}); retrying after a forced stop");
+                AndroidVpnServiceController.ForceStop("retry after failed start");
+                System.Threading.Thread.Sleep(2500);
+                startStatus = StartOnce();
+            }
+
+            return startStatus;
+
+            Status StartOnce() => AndroidVpnServiceController.Start(new AndroidVpnStartOptions
             {
                 ProxyPort = proxyPort,
                 HttpProxyPort = 0,
