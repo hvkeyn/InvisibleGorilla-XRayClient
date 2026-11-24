@@ -418,6 +418,30 @@ namespace InvisibleGorillaXRay.Android
                 }
             }
 
+            // Diagnostic helper: probe every config exactly like the list does.
+            if (intent.GetIntExtra("probeList", 0) == 1)
+            {
+                _ = Task.Run(() =>
+                {
+                    try
+                    {
+                        string dir = System.IO.Path.GetFullPath(InvisibleGorillaXRay.Values.Directory.CONFIGS);
+                        foreach (string file in System.IO.Directory.GetFiles(dir, "*.json"))
+                        {
+                            string name = System.IO.Path.GetFileName(file);
+                            if (name.StartsWith("__", StringComparison.Ordinal))
+                                continue;
+                            int ms = InvisibleGorillaXRay.Services.SubscriptionServerEndpoint.ProbeFile(file);
+                            InvisibleGorillaXRay.Core.DiagnosticLog.Write("ProbeList", $"{name} -> {ms}");
+                        }
+                    }
+                    catch (Exception probeError)
+                    {
+                        InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("MainActivity.ProbeList", probeError);
+                    }
+                });
+            }
+
             // Diagnostic helper: pick a config by file-name fragment (adb testing).
             string configHint = intent.GetStringExtra("useConfig");
             if (!string.IsNullOrWhiteSpace(configHint))

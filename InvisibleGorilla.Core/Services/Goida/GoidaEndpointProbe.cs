@@ -23,7 +23,17 @@ namespace InvisibleGorillaXRay.Services.Goida
                 using TcpClient client = new();
                 IAsyncResult connect = client.BeginConnect(host, port, null, null);
                 if (!connect.AsyncWaitHandle.WaitOne(timeoutMs))
-                    return Availability.TIMEOUT;
+                {
+                    // One retry: on mobile the first attempt often dies in the radio wakeup.
+                    using TcpClient retry = new();
+                    IAsyncResult second = retry.BeginConnect(host, port, null, null);
+                    if (!second.AsyncWaitHandle.WaitOne(timeoutMs))
+                        return Availability.TIMEOUT;
+
+                    retry.EndConnect(second);
+                    watch.Stop();
+                    return (int)Math.Min(watch.ElapsedMilliseconds, int.MaxValue);
+                }
 
                 client.EndConnect(connect);
                 watch.Stop();

@@ -177,7 +177,13 @@ namespace InvisibleGorillaXRay.Services
                 if (string.IsNullOrWhiteSpace(endpoint))
                     return Availability.ERROR;
 
-                return GoidaEndpointProbe.ProbeTcp(endpoint, timeoutMs);
+                // Cellular links need longer than the old 1.2 s: the radio wakes up, the first
+                // SYN waits for RRC and the list showed timeouts for every node on LTE.
+                int effectiveTimeout = timeoutMs;
+                if (OperatingSystem.IsAndroid() && effectiveTimeout < 2500)
+                    effectiveTimeout = 3000;
+
+                return GoidaEndpointProbe.ProbeTcp(endpoint, effectiveTimeout);
             }
             catch
             {
