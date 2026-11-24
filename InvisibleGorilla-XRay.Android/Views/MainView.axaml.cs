@@ -4681,7 +4681,9 @@ namespace InvisibleGorillaXRay.Android.Views
                     ? AvailabilityErrorBrush
                     : AvailabilityPendingBrush;
 
-            ConnectionInfoIpText.Text = info.Ip;
+            ConnectionInfoIpText.Text = info.LatencyMs > 0
+                ? $"{info.Ip} \u00B7 {info.LatencyMs} \u043C\u0441"
+                : info.Ip;
             // The app font has no flag glyphs, so an emoji flag renders as a box.
             // The ISO code is readable on every device.
             string flag = string.IsNullOrWhiteSpace(info.CountryCode)
@@ -4703,10 +4705,14 @@ namespace InvisibleGorillaXRay.Android.Views
             }
             else if (tunnelOk)
             {
-                ConnectionInfoVerdictText.Text = isConnectionInfoTor
+                ConnectionInfoVerdictText.Text = (isConnectionInfoTor
                     ? Localize("Lang.ConnectionInfo.ProtectedTor")
-                    : Localize("Lang.ConnectionInfo.Protected");
+                    : Localize("Lang.ConnectionInfo.Protected"))
+                    + (info.LatencyMs > 0 ? $" \u00B7 {info.LatencyMs} \u043C\u0441" : string.Empty);
                 consecutiveTunnelFailures = 0;
+
+                // Keep the link latency fresh while the tunnel is up.
+                ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(30));
             }
             else
             {

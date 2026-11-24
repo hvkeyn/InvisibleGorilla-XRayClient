@@ -18,6 +18,9 @@ namespace InvisibleGorillaXRay.Services
         public string Org { get; init; } = string.Empty;
         public string Error { get; init; } = string.Empty;
 
+        /// <summary>Round-trip time of the successful probe, shown as the link latency.</summary>
+        public int LatencyMs { get; init; }
+
         public string FlagEmoji => CountryDisplay.GetFlagEmoji(CountryCode);
 
         public string FlagImageUrl =>
@@ -90,10 +93,24 @@ namespace InvisibleGorillaXRay.Services
                     if (token.IsCancellationRequested)
                         return ipOnlyFallback ?? lastFailure;
 
+                    long started = System.Environment.TickCount64;
                     ConnectionInfo result = await TryLookupAsync(endpoint, proxy, timeoutSeconds, token)
                         .ConfigureAwait(false);
                     if (result.Ok)
                     {
+                        int elapsed = (int)(System.Environment.TickCount64 - started);
+                        result = new ConnectionInfo
+                        {
+                            Ok = result.Ok,
+                            Ip = result.Ip,
+                            City = result.City,
+                            Region = result.Region,
+                            CountryCode = result.CountryCode,
+                            CountryName = result.CountryName,
+                            Org = result.Org,
+                            Error = result.Error,
+                            LatencyMs = elapsed
+                        };
                         // A bare IP (no geo/provider) is better than nothing, but keep probing
                         // the remaining endpoints so the widget can show full location data.
                         if (HasGeo(result))
