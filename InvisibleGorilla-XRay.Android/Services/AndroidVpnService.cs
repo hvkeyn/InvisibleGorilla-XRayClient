@@ -139,6 +139,7 @@ namespace InvisibleGorillaXRay.Android.Services
 
         private ConnectivityManager? connectivityManager;
         private ConnectivityManager.NetworkCallback? networkCallback;
+        private NetworkChangeCallback? physicalNetworkCallback;
         private long lastNetworkChangeMs;
         private long monitoringStartedMs;
         private int lastNetworkTransport = -1;
@@ -148,6 +149,8 @@ namespace InvisibleGorillaXRay.Android.Services
         // Android keeps the tunnel on the network that was default at establish time and
         // stops passing traffic after a Wi-Fi -> LTE switch.
         private Network? lastUnderlyingNetwork;
+        // Transport the TUN was last bound to; a new network of the same type must not restart.
+        private int boundTransport = -1;
 
         public override void OnCreate()
         {
@@ -275,6 +278,7 @@ namespace InvisibleGorillaXRay.Android.Services
             }
 
             // Remember the physical network before the VPN exists, so the TUN can be bound to it.
+            connectivityManager ??= GetSystemService(ConnectivityService) as ConnectivityManager;
             TrackUnderlyingNetwork(connectivityManager?.ActiveNetwork);
 
             int tunMtu = ResolveTunMtu();
@@ -790,6 +794,24 @@ namespace InvisibleGorillaXRay.Android.Services
                 monitoringStartedMs = System.Environment.TickCount64;
                 networkCallback = new NetworkChangeCallback(this);
                 connectivityManager.RegisterDefaultNetworkCallback(networkCallback);
+
+                // The default-network callback keeps reporting our own VPN once it is up, so a
+                // Wi-Fi -> LTE switch is invisible to it. A separate request for non-VPN
+                // networks is what actually sees the physical link change.
+                try
+                {
+                    NetworkRequest request = new NetworkRequest.Builder()
+                        .AddCapability(NetCapability.Internet)
+                        .AddCapability(NetCapability.NotVpn)
+                        .Build();
+                    physicalNetworkCallback = new NetworkChangeCallback(this);
+                    connectivityManager.RegisterNetworkCallback(request, physicalNetworkCallback);
+                    DiagnosticLog.Write("AndroidVpnService", "Physical network monitoring started");
+                }
+                catch (Exception physicalError)
+                {
+                    DiagnosticLog.WriteException("AndroidVpnService.StartPhysicalNetworkMonitoring", physicalError);
+                }
                 UpdateNetworkProfile(connectivityManager, connectivityManager.ActiveNetwork);
                 DiagnosticLog.Write("AndroidVpnService", "Network monitoring started");
             }
@@ -805,6 +827,10 @@ namespace InvisibleGorillaXRay.Android.Services
             {
                 if (networkCallback != null && connectivityManager != null)
                     connectivityManager.UnregisterNetworkCallback(networkCallback);
+
+                if (physicalNetworkCallback != null && connectivityManager != null)
+                    connectivityManager.UnregisterNetworkCallback(physicalNetworkCallback);
+                physicalNetworkCallback = null;
             }
             catch (Exception ex)
             {
@@ -864,6 +890,7 @@ namespace InvisibleGorillaXRay.Android.Services
 
                 builder.SetUnderlyingNetworks(new[] { underlying });
                 lastUnderlyingNetwork = underlying;
+                boundTransport = lastNetworkTransport;
                 DiagnosticLog.Write("AndroidVpnService", $"TUN bound to the underlying network (transport={lastNetworkTransport})");
             }
             catch (Exception ex)
@@ -880,9 +907,12 @@ namespace InvisibleGorillaXRay.Android.Services
         {
             try
             {
-                ConnectivityManager? manager = connectivityManager;
+                ConnectivityManager? manager = connectivityManager
+                    ?? GetSystemService(ConnectivityService) as ConnectivityManager;
                 if (manager == null)
                     return lastUnderlyingNetwork;
+
+                connectivityManager ??= manager;
 
                 for (int attempt = 0; attempt < 10; attempt++)
                 {
@@ -933,8 +963,46 @@ namespace InvisibleGorillaXRay.Android.Services
                 if (capabilities == null || capabilities.HasTransport(TransportType.Vpn))
                     return;
 
+                bool changed = lastUnderlyingNetwork == null || !lastUnderlyingNetwork.Equals(network);
                 lastUnderlyingNetwork = network;
                 UpdateNetworkProfile(connectivityManager, network);
+
+                if (!changed)
+                    return;
+
+                // The first tracked network is the one the TUN will be bound to: no restart.
+                if (boundTransport == -1)
+                {
+                    boundTransport = lastNetworkTransport;
+                    return;
+                }
+
+                // Only a real transport change (Wi-Fi <-> cellular) needs a session restart; a
+                // re-announced Wi-Fi network used to restart the VPN right after startup.
+                if (boundTransport == lastNetworkTransport)
+                    return;
+
+                lastReactedTransport = lastNetworkTransport;
+                DiagnosticLog.Write(
+                    "AndroidVpnService",
+                    $"Underlying network switched (transport={lastNetworkTransport}); restarting the session");
+
+                long now = System.Environment.TickCount64;
+                if (monitoringStartedMs != 0 && now - monitoringStartedMs < 8000)
+                    return;
+
+                long previous = Interlocked.Exchange(ref lastNetworkChangeMs, now);
+                if (previous != 0 && now - previous < 8000)
+                    return;
+
+                try
+                {
+                    UnderlyingNetworkChanged?.Invoke();
+                }
+                catch (Exception ex)
+                {
+                    DiagnosticLog.WriteException("AndroidVpnService.TrackUnderlyingNetwork.Restart", ex);
+                }
             }
             catch (Exception ex)
             {
@@ -953,28 +1021,8 @@ namespace InvisibleGorillaXRay.Android.Services
             if (monitoringStartedMs != 0 && now - monitoringStartedMs < 8000)
                 return;
 
-            int transport = lastNetworkTransport;
-            if (transport != 1 && transport != 2)
-                return;
+            // Restart decisions are made in TrackUnderlyingNetwork when the network object changes.
 
-            if (lastReactedTransport == transport)
-                return;
-
-            long previous = Interlocked.Exchange(ref lastNetworkChangeMs, now);
-            if (previous != 0 && now - previous < 8000)
-                return;
-
-            lastReactedTransport = transport;
-
-            DiagnosticLog.Write("AndroidVpnService", "Underlying network changed; session needs a restart");
-            try
-            {
-                UnderlyingNetworkChanged?.Invoke();
-            }
-            catch (Exception ex)
-            {
-                DiagnosticLog.WriteException("AndroidVpnService.UnderlyingNetworkChanged", ex);
-            }
         }
 
         private sealed class NetworkChangeCallback : ConnectivityManager.NetworkCallback

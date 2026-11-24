@@ -428,12 +428,31 @@ namespace InvisibleGorillaXRay.Android
                     string match = string.Empty;
                     if (System.IO.Directory.Exists(configsDir))
                     {
-                        foreach (string file in System.IO.Directory.GetFiles(configsDir, "*.json"))
+                        string[] files = System.IO.Directory.GetFiles(configsDir, "*.json");
+
+                        // Exact file-name match first, otherwise "WhiteBlade-CDN" would pick
+                        // "WhiteBlade-CDN-IP".
+                        foreach (string file in files)
                         {
-                            if (System.IO.Path.GetFileName(file).IndexOf(configHint, StringComparison.OrdinalIgnoreCase) >= 0)
+                            if (string.Equals(
+                                    System.IO.Path.GetFileNameWithoutExtension(file),
+                                    configHint,
+                                    StringComparison.OrdinalIgnoreCase))
                             {
                                 match = file;
                                 break;
+                            }
+                        }
+
+                        if (match.Length == 0)
+                        {
+                            foreach (string file in files)
+                            {
+                                if (System.IO.Path.GetFileName(file).IndexOf(configHint, StringComparison.OrdinalIgnoreCase) >= 0)
+                                {
+                                    match = file;
+                                    break;
+                                }
                             }
                         }
                     }
