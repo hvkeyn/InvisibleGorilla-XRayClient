@@ -884,7 +884,19 @@ namespace InvisibleGorillaXRay.Android.Services
                 Network? underlying = ResolveUnderlyingNetwork();
                 if (underlying == null)
                 {
-                    DiagnosticLog.Write("AndroidVpnService", "No physical network found; the TUN stays unbound");
+                    // Do not pin the tunnel to a half-ready network: without a validated one,
+                    // leaving the underlying networks unset lets Android follow its default
+                    // network instead of freezing the VPN on an unusable link.
+                    try
+                    {
+                        builder.SetUnderlyingNetworks(null);
+                    }
+                    catch (Exception resetError)
+                    {
+                        DiagnosticLog.WriteException("AndroidVpnService.BindUnderlyingNetwork.Reset", resetError);
+                    }
+
+                    DiagnosticLog.Write("AndroidVpnService", "No usable physical network; the TUN follows the system default");
                     return;
                 }
 
@@ -925,16 +937,35 @@ namespace InvisibleGorillaXRay.Android.Services
 
                     try
                     {
+                        int seen = 0;
                         foreach (Network candidate in manager.GetAllNetworks())
                         {
+                            seen++;
                             NetworkCapabilities? capabilities = manager.GetNetworkCapabilities(candidate);
-                            if (capabilities == null || !capabilities.HasCapability(NetCapability.Internet))
+                            string transports = capabilities == null
+                                ? "null"
+                                : $"wifi={capabilities.HasTransport(TransportType.Wifi)},cell={capabilities.HasTransport(TransportType.Cellular)},vpn={capabilities.HasTransport(TransportType.Vpn)},inet={capabilities.HasCapability(NetCapability.Internet)}";
+                            DiagnosticLog.Write("AndroidVpnService", $"Underlying scan: network {candidate} {transports}");
+
+                            // Do not require NET_CAPABILITY_INTERNET: right after Wi-Fi goes away
+                            // the cellular network is not validated yet and reports inet=False,
+                            // which left the tunnel unbound and killed all traffic on LTE.
+                            if (capabilities == null)
                                 continue;
                             if (capabilities.HasTransport(TransportType.Vpn))
                                 continue;
+                            if (!capabilities.HasTransport(TransportType.Wifi)
+                                && !capabilities.HasTransport(TransportType.Cellular)
+                                && !capabilities.HasTransport(TransportType.Ethernet))
+                                continue;
+                            if (!capabilities.HasCapability(NetCapability.Internet))
+                                continue;
 
+                            DiagnosticLog.Write("AndroidVpnService", $"Binding TUN to network {candidate} (validated={capabilities.HasCapability(NetCapability.Internet)})");
                             return candidate;
                         }
+
+                        DiagnosticLog.Write("AndroidVpnService", $"Underlying scan: {seen} network(s), none usable");
                     }
                     catch (Exception inner)
                     {
