@@ -459,6 +459,27 @@ namespace InvisibleGorillaXRay.Android.Views
         private TextBox CaptchaInput => GetRequiredControl<TextBox>("CaptchaTextBox");
         private Button SubmitCaptchaActionButton => GetRequiredControl<Button>("SubmitCaptchaButton");
         private TextBox TorStatusText => GetRequiredControl<TextBox>("TorStatusTextBlock");
+        /// <summary>
+        /// Tor status is updated from Moat/captcha network continuations, which run off the UI
+        /// thread; Avalonia throws there (and the process can die). Always marshal.
+        /// </summary>
+        private void SetTorStatus(string text)
+        {
+            if (!Dispatcher.UIThread.CheckAccess())
+            {
+                Dispatcher.UIThread.Post(() => SetTorStatus(text));
+                return;
+            }
+
+            try
+            {
+                SetTorStatus(text);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.SetTorStatus", ex);
+            }
+        }
 
         private static readonly Dictionary<TorMode, string> TorModeOptions = new()
         {
@@ -970,9 +991,9 @@ namespace InvisibleGorillaXRay.Android.Views
                 isApplyingTorUi = false;
             }
 
-            TorStatusText.Text = torManager.IsAvailable
+            SetTorStatus(torManager.IsAvailable
                 ? Localize("Lang.Tor.Status.Ready")
-                : Localize("Lang.Tor.Status.Unavailable");
+                : Localize("Lang.Tor.Status.Unavailable"));
         }
 
         /// <summary>
@@ -1213,8 +1234,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 GetSelectedKey(BridgeTypeOptions, BridgeTypeSelector.SelectedIndex, BridgeType.OBFS4),
                 new List<string>());
             BindActiveSetToEditor();
-            if (TorStatusText != null)
-                TorStatusText.Text = Localize("Lang.Tor.Status.SetAdded");
+            SetTorStatus(Localize("Lang.Tor.Status.SetAdded"));
             PersistTorEditor();
         }
 
@@ -1277,8 +1297,7 @@ namespace InvisibleGorillaXRay.Android.Views
             if (existing.Count > 0 && TorrcBuilder.InferBridgeType(existing) == type)
             {
                 PersistTorEditor();
-                if (TorStatusText != null)
-                    TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.MethodSelected", type);
+                SetTorStatus(LocalizeFormat("Lang.Tor.Status.MethodSelected", type));
                 return;
             }
 
@@ -1318,7 +1337,7 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private async Task LoadWebTunnelAndSwitchAsync()
         {
-            TorStatusText.Text = Localize("Lang.Tor.Status.AskingTor");
+            SetTorStatus(Localize("Lang.Tor.Status.AskingTor"));
             try
             {
                 MoatResult result = await new MoatClient().GetCircumventionSettingsAsync(null, "webtunnel");
@@ -1368,8 +1387,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private void SwitchTorLive(string status)
         {
             PersistTorEditor();
-            if (TorStatusText != null)
-                TorStatusText.Text = status;
+            SetTorStatus(status);
 
             if (!IsCurrentConfigTor() || string.IsNullOrWhiteSpace(BridgesInput?.Text))
                 return;
@@ -1408,7 +1426,7 @@ namespace InvisibleGorillaXRay.Android.Views
         {
             Button? button = sender as Button;
             if (button != null) button.IsEnabled = false;
-            TorStatusText.Text = Localize("Lang.Tor.Status.AskingTor");
+            SetTorStatus(Localize("Lang.Tor.Status.AskingTor"));
 
             try
             {
@@ -1476,13 +1494,13 @@ namespace InvisibleGorillaXRay.Android.Views
         private void OnBridgesEmailClick(object? sender, RoutedEventArgs e)
         {
             OpenExternalUrl(BridgeRequestLinks.BuildEmailUrl("obfs4"));
-            TorStatusText.Text = Localize("Lang.Tor.Status.RequestSent");
+            SetTorStatus(Localize("Lang.Tor.Status.RequestSent"));
         }
 
         private void OnBridgesTelegramClick(object? sender, RoutedEventArgs e)
         {
             OpenExternalUrl(BridgeRequestLinks.TelegramBot);
-            TorStatusText.Text = Localize("Lang.Tor.Status.RequestSent");
+            SetTorStatus(Localize("Lang.Tor.Status.RequestSent"));
         }
 
         private static BridgeType MapTransportToBridgeType(string? transport)
@@ -1513,7 +1531,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private async void OnFetchMoatClick(object? sender, RoutedEventArgs e)
         {
             FetchMoatActionButton.IsEnabled = false;
-            TorStatusText.Text = Localize("Lang.Tor.Status.FetchingCaptcha");
+            SetTorStatus(Localize("Lang.Tor.Status.FetchingCaptcha"));
 
             try
             {
@@ -1531,7 +1549,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     catch { }
                     CaptchaHost.IsVisible = true;
                     CaptchaInput.Text = string.Empty;
-                    TorStatusText.Text = Localize("Lang.Tor.Status.CaptchaReady");
+                    SetTorStatus(Localize("Lang.Tor.Status.CaptchaReady"));
                 }
                 else
                 {
@@ -1554,7 +1572,7 @@ namespace InvisibleGorillaXRay.Android.Views
                 return;
 
             SubmitCaptchaActionButton.IsEnabled = false;
-            TorStatusText.Text = Localize("Lang.Tor.Status.SubmittingCaptcha");
+            SetTorStatus(Localize("Lang.Tor.Status.SubmittingCaptcha"));
 
             try
             {
@@ -1572,12 +1590,12 @@ namespace InvisibleGorillaXRay.Android.Views
                 }
                 else
                 {
-                    TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.MoatFail", result.Error);
+                    SetTorStatus(LocalizeFormat("Lang.Tor.Status.MoatFail", result.Error));
                 }
             }
             catch (Exception ex)
             {
-                TorStatusText.Text = LocalizeFormat("Lang.Tor.Status.MoatFail", ex.Message);
+                SetTorStatus(LocalizeFormat("Lang.Tor.Status.MoatFail", ex.Message));
             }
             finally
             {
@@ -5178,8 +5196,7 @@ namespace InvisibleGorillaXRay.Android.Views
         private void SetTorCheckStatus(string text)
         {
             SetStatus(text);
-            if (TorStatusText != null)
-                TorStatusText.Text = text;
+            SetTorStatus(text);
         }
 
         private bool TrySelectConfigByName(string name)
