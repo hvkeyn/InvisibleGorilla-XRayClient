@@ -473,7 +473,7 @@ namespace InvisibleGorillaXRay.Android.Views
 
             try
             {
-                SetTorStatus(text);
+                TorStatusText.Text = text;
             }
             catch (Exception ex)
             {
