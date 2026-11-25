@@ -148,6 +148,8 @@ namespace InvisibleGorillaXRay.Android.Views
         // dropped the flow). Count it and restart the session, but never more than twice per
         // ten minutes so a genuinely blocked node does not spin.
         private int tunnelProbeFailures;
+        private long sessionStartedMs;
+        private bool earlyRecoveryDone;
         private long lastTunnelRecoveryMs;
         private int tunnelRecoveriesInWindow;
         private DateTime homeFaultLoggedUtc = DateTime.MinValue;
@@ -3774,6 +3776,12 @@ namespace InvisibleGorillaXRay.Android.Views
 
             try
             {
+                if (state == ConnectionState.Running)
+                {
+                    sessionStartedMs = System.Environment.TickCount64;
+                    earlyRecoveryDone = false;
+                }
+
                 ApplyConnectionState(state);
             }
             catch (Exception ex)
@@ -3976,6 +3984,30 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void NoteTunnelProbeFailure()
         {
+            // The first session after a switch or after a mobile-network handover often comes up
+            // with a stale route: probes fail while the interface is reported healthy. Retry the
+            // session once right away instead of waiting for three failures.
+            long sinceStart = sessionStartedMs == 0 ? long.MaxValue : System.Environment.TickCount64 - sessionStartedMs;
+            if (!earlyRecoveryDone && tunnelProbeFailures >= 1 && sinceStart < 25000 && IsConnectionActive())
+            {
+                earlyRecoveryDone = true;
+                tunnelProbeFailures = 0;
+                DiagnosticLog.Write("Run", "Tunnel probe failed right after start; restarting once");
+                Dispatcher.UIThread.Post(() =>
+                {
+                    try
+                    {
+                        if (IsConnectionActive())
+                            _ = RestartConnectionAfterSettingsChangeAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        DiagnosticLog.WriteException("MainView.NoteTunnelProbeFailure.Early", ex);
+                    }
+                });
+                return;
+            }
+
             tunnelProbeFailures++;
             if (tunnelProbeFailures < 3)
                 return;
