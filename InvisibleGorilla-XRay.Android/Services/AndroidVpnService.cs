@@ -932,8 +932,12 @@ namespace InvisibleGorillaXRay.Android.Services
                     if (active != null && !IsOurVpnNetwork(active))
                         return active;
 
-                    if (lastUnderlyingNetwork != null)
+                    if (lastUnderlyingNetwork != null && IsNetworkUsable(manager, lastUnderlyingNetwork))
                         return lastUnderlyingNetwork;
+
+                    // The cached network may already be gone (Wi-Fi switched off); a stale object
+                    // used to be bound as the tunnel's underlying network and killed all traffic.
+                    lastUnderlyingNetwork = null;
 
                     try
                     {
@@ -1041,6 +1045,42 @@ namespace InvisibleGorillaXRay.Android.Services
             }
         }
 
+        private bool IsNetworkUsable(ConnectivityManager manager, Network network)
+        {
+            try
+            {
+                NetworkCapabilities? capabilities = manager.GetNetworkCapabilities(network);
+                if (capabilities == null)
+                    return false;
+                if (capabilities.HasTransport(TransportType.Vpn))
+                    return false;
+
+                return capabilities.HasTransport(TransportType.Wifi)
+                    || capabilities.HasTransport(TransportType.Cellular)
+                    || capabilities.HasTransport(TransportType.Ethernet);
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("AndroidVpnService.IsNetworkUsable", ex);
+                return false;
+            }
+        }
+
+        private void OnNetworkLost(Network network)
+        {
+            try
+            {
+                if (lastUnderlyingNetwork != null && lastUnderlyingNetwork.Equals(network))
+                {
+                    lastUnderlyingNetwork = null;
+                    DiagnosticLog.Write("AndroidVpnService", "Underlying network went away; cache cleared");
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("AndroidVpnService.OnNetworkLost", ex);
+            }
+        }
         private void OnDefaultNetworkChanged()
         {
 
@@ -1079,6 +1119,7 @@ namespace InvisibleGorillaXRay.Android.Services
                 if (owner.IsOurVpnNetwork(network))
                     return;
 
+                owner.OnNetworkLost(network);
                 owner.OnDefaultNetworkChanged();
             }
 

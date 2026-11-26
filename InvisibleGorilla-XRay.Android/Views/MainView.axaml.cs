@@ -148,6 +148,8 @@ namespace InvisibleGorillaXRay.Android.Views
         // dropped the flow). Count it and restart the session, but never more than twice per
         // ten minutes so a genuinely blocked node does not spin.
         private int tunnelProbeFailures;
+        private int generalFailoverSteps;
+        private readonly HashSet<string> generalFailoverTried = new(StringComparer.OrdinalIgnoreCase);
         private long sessionStartedMs;
         private bool earlyRecoveryDone;
         private long lastTunnelRecoveryMs;
@@ -3984,32 +3986,13 @@ namespace InvisibleGorillaXRay.Android.Views
 
         private void NoteTunnelProbeFailure()
         {
-            // The first session after a switch or after a mobile-network handover often comes up
-            // with a stale route: probes fail while the interface is reported healthy. Retry the
-            // session once right away instead of waiting for three failures.
-            long sinceStart = sessionStartedMs == 0 ? long.MaxValue : System.Environment.TickCount64 - sessionStartedMs;
-            if (!earlyRecoveryDone && tunnelProbeFailures >= 1 && sinceStart < 25000 && IsConnectionActive())
-            {
-                earlyRecoveryDone = true;
-                tunnelProbeFailures = 0;
-                DiagnosticLog.Write("Run", "Tunnel probe failed right after start; restarting once");
-                Dispatcher.UIThread.Post(() =>
-                {
-                    try
-                    {
-                        if (IsConnectionActive())
-                            _ = RestartConnectionAfterSettingsChangeAsync();
-                    }
-                    catch (Exception ex)
-                    {
-                        DiagnosticLog.WriteException("MainView.NoteTunnelProbeFailure.Early", ex);
-                    }
-                });
-                return;
-            }
-
             tunnelProbeFailures++;
             if (tunnelProbeFailures < 3)
+                return;
+
+            // On mobile a node can come up but carry nothing; move to the next local config
+            // instead of restarting the same dead one.
+            if (TryFailoverToNextGeneralConfig())
                 return;
 
             long now = System.Environment.TickCount64;
@@ -4038,6 +4021,56 @@ namespace InvisibleGorillaXRay.Android.Views
             });
         }
 
+        private bool TryFailoverToNextGeneralConfig()
+        {
+            try
+            {
+                if (generalFailoverSteps >= 3)
+                    return false;
+
+                if (IsOpenFluxProfileActive()
+                    || IsCurrentConfigTor()
+                    || GoidaProfilePaths.IsMarker(settingsHandler.UserSettings.GetCurrentConfigPath()))
+                    return false;
+
+                List<Config> configs = configHandler.GetAllGeneralConfigs();
+                if (configs.Count < 2)
+                    return false;
+
+                string current = settingsHandler.UserSettings.GetCurrentConfigPath();
+                generalFailoverTried.Add(current);
+
+                Config? next = configs.FirstOrDefault(config =>
+                    !generalFailoverTried.Contains(config.Path) && System.IO.File.Exists(config.Path));
+                if (next == null)
+                    return false;
+
+                generalFailoverSteps++;
+                generalFailoverTried.Add(next.Path);
+                tunnelProbeFailures = 0;
+                DiagnosticLog.Write("Failover", $"Repeated probe failures; switching to {next.Name}");
+
+                Dispatcher.UIThread.Post(() =>
+                {
+                    try
+                    {
+                        PendingConfigPath = next.Path;
+                        OnRunClick(null, new RoutedEventArgs());
+                    }
+                    catch (Exception ex)
+                    {
+                        DiagnosticLog.WriteException("MainView.TryFailoverToNextGeneralConfig", ex);
+                    }
+                });
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.WriteException("MainView.TryFailoverToNextGeneralConfig", ex);
+                return false;
+            }
+        }
         private void NoteHomeFault(string reasonKey)
         {
             string reason = Localize(reasonKey);
@@ -4760,6 +4793,8 @@ namespace InvisibleGorillaXRay.Android.Views
                     : Localize("Lang.ConnectionInfo.Protected"))
                     + (info.LatencyMs > 0 ? $" \u00B7 {info.LatencyMs} \u043C\u0441" : string.Empty);
                 consecutiveTunnelFailures = 0;
+                generalFailoverSteps = 0;
+                generalFailoverTried.Clear();
 
                 // Keep the link latency fresh while the tunnel is up.
                 ScheduleConnectionInfoRefresh(TimeSpan.FromSeconds(30));
