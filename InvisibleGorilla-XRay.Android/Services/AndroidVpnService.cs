@@ -143,6 +143,7 @@ namespace InvisibleGorillaXRay.Android.Services
         private long lastNetworkChangeMs;
         private long monitoringStartedMs;
         private int lastNetworkTransport = -1;
+        private bool lastLoggedMobile;
         private int lastReactedTransport = -1;
 
         // The physical (non-VPN) default network. The VPN must be bound to it, otherwise
@@ -856,12 +857,20 @@ namespace InvisibleGorillaXRay.Android.Services
                 }
 
                 DpiHardening.MobileNetwork = mobile;
-                lastNetworkTransport = capabilities == null
+                int transport = capabilities == null
                     ? -1
                     : capabilities.HasTransport(TransportType.Cellular) ? 1
                     : capabilities.HasTransport(TransportType.Wifi) ? 2
                     : 0;
-                DiagnosticLog.Write("AndroidVpnService", $"Network profile: {(mobile ? "mobile" : "wifi/other")}");
+
+                // The active network is our own VPN while it is up, so its capabilities say
+                // nothing about the carrier. Only log real changes to keep the journal readable.
+                if (transport != lastNetworkTransport || mobile != lastLoggedMobile)
+                {
+                    lastNetworkTransport = transport;
+                    lastLoggedMobile = mobile;
+                    DiagnosticLog.Write("AndroidVpnService", $"Network profile: {(mobile ? "mobile" : "wifi/other")} (transport={transport})");
+                }
             }
             catch (Exception ex)
             {

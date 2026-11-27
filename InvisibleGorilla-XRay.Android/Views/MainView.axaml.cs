@@ -3367,7 +3367,7 @@ namespace InvisibleGorillaXRay.Android.Views
             {
                 try
                 {
-                    if (!IsConnectionActive())
+                    if (!IsConnectionActive() || !AndroidVpnServiceController.IsRunning)
                         return;
 
                     DiagnosticLog.Write("Run", "Network changed (Wi-Fi/LTE switch); restarting the session");
@@ -3376,7 +3376,7 @@ namespace InvisibleGorillaXRay.Android.Views
                     // VPN interface can be established; an immediate restart returned CANT_TUNNEL.
                     await Task.Delay(2500);
 
-                    if (!IsConnectionActive())
+                    if (!IsConnectionActive() || !AndroidVpnServiceController.IsRunning)
                         return;
 
                     SetStatus("Lang.Android.Status.LoadingConfig");
