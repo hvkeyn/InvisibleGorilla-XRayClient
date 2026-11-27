@@ -418,6 +418,40 @@ namespace InvisibleGorillaXRay.Android
                 }
             }
 
+            // Diagnostic helper: copy the core log of the current config to Downloads.
+            if (intent.GetIntExtra("dumpCoreLog", 0) == 1)
+            {
+                _ = Task.Run(() =>
+                {
+                    try
+                    {
+                        string logsDir = System.IO.Path.GetFullPath(InvisibleGorillaXRay.Values.Directory.LOGS);
+                        if (!System.IO.Directory.Exists(logsDir))
+                            return;
+
+                        System.IO.FileInfo? newest = null;
+                        foreach (System.IO.FileInfo candidate in new System.IO.DirectoryInfo(logsDir).GetFiles("*.json"))
+                        {
+                            if (newest == null || candidate.LastWriteTimeUtc > newest.LastWriteTimeUtc)
+                                newest = candidate;
+                        }
+
+                        if (newest == null)
+                            return;
+
+                        string target = System.IO.Path.Combine(
+                            InvisibleGorillaXRay.Values.Directory.ROOT,
+                            "core-log-dump.txt");
+                        System.IO.File.Copy(newest.FullName, target, true);
+                        InvisibleGorillaXRay.Core.DiagnosticLog.Write("CoreLogDump", $"Copied {newest.Name} ({newest.Length} bytes)");
+                    }
+                    catch (Exception dumpError)
+                    {
+                        InvisibleGorillaXRay.Core.DiagnosticLog.WriteException("MainActivity.DumpCoreLog", dumpError);
+                    }
+                });
+            }
+
             // Diagnostic helper: probe every config exactly like the list does.
             if (intent.GetIntExtra("probeList", 0) == 1)
             {
