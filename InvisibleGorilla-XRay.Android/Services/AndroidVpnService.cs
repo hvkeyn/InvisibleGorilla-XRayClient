@@ -853,6 +853,12 @@ namespace InvisibleGorillaXRay.Android.Services
                 if (manager != null && network != null)
                 {
                     capabilities = manager.GetNetworkCapabilities(network);
+
+                    // Our own VPN reports the "vpn" transport; it says nothing about the carrier
+                    // and must not overwrite the profile with a wifi/other guess.
+                    if (capabilities != null && capabilities.HasTransport(TransportType.Vpn))
+                        return;
+
                     mobile = capabilities != null && capabilities.HasTransport(TransportType.Cellular);
                 }
 
